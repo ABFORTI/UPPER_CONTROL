@@ -4,6 +4,10 @@ namespace App\Providers;
 
 use Illuminate\Support\Facades\Vite;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Facades\Auth;
+use Spatie\Activitylog\ActivityLogger;
+use Spatie\Activitylog\Models\Activity;
+
 
 
 class AppServiceProvider extends ServiceProvider
@@ -33,6 +37,21 @@ class AppServiceProvider extends ServiceProvider
                     'roles' => $u->getRoleNames()->toArray(),
                 ]
             ];
+        });
+
+        // Agrega IP, UA y centro en cada actividad (si hay usuario)
+        app(ActivityLogger::class)->tap(function (Activity $activity) {
+            $u = Auth::user();
+            if ($u) {
+                $activity->causer_id = $u->getKey();
+                $activity->causer_type = get_class($u);
+                $activity->properties = collect($activity->properties)
+                    ->merge([
+                        'centro_trabajo_id' => $u->centro_trabajo_id,
+                        'ip'  => request()->ip(),
+                        'ua'  => substr((string)request()->userAgent(), 0, 255),
+                    ]);
+            }
         });
     }
 

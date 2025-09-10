@@ -7,11 +7,13 @@ use Spatie\Permission\Traits\HasRoles;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Spatie\Activitylog\Traits\LogsActivity;
+use Spatie\Activitylog\LogOptions;
 
 class User extends Authenticatable
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasFactory, Notifiable, HasRoles;
+    use HasFactory, Notifiable, HasRoles, LogsActivity;
 
     /**
      * The attributes that are mass assignable.
@@ -22,6 +24,10 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
+        'phone',
+        'centro_trabajo_id',
+        'activo',
+        // ...otros campos relevantes...
     ];
 
     /**
@@ -51,6 +57,15 @@ class User extends Authenticatable
     public function centro()
     {
         return $this->belongsTo(\App\Models\CentroTrabajo::class,'centro_trabajo_id');
+    }
+
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()
+            ->useLogName('users')
+            ->logOnly(['name','email','phone','centro_trabajo_id','activo'])
+            ->logOnlyDirty()
+            ->dontSubmitEmptyLogs();
     }
 
 }

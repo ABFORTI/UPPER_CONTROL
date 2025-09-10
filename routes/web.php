@@ -15,6 +15,14 @@ use App\Http\Controllers\{
     EvidenciaController
 };
 
+use App\Http\Controllers\Admin\{
+    UserController as AdminUserController,
+    ActivityController,
+    ImpersonateController,
+    CentroController,
+    BackupController
+};
+
 // Home -> Dashboard (el dashboard está protegido con 'auth')
 Route::get('/', fn () => redirect()->route('dashboard'))->name('home');
 
@@ -134,6 +142,43 @@ Route::middleware('auth')->group(function () {
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 });
+
+/* ==========
+ |  ADMINISTRACIÓN
+ * ========== */
+Route::middleware(['auth','role:admin'])->prefix('admin')->name('admin.')->group(function () {
+    Route::get('/users',               [AdminUserController::class,'index'])->name('users.index');
+    Route::get('/users/create',        [AdminUserController::class,'create'])->name('users.create');
+    Route::post('/users',              [AdminUserController::class,'store'])->name('users.store');
+    Route::get('/users/{user}/edit',   [AdminUserController::class,'edit'])->name('users.edit');
+    Route::patch('/users/{user}',      [AdminUserController::class,'update'])->name('users.update');
+    Route::post('/users/{user}/toggle', [AdminUserController::class,'toggleActive'])->name('users.toggle');
+    Route::post('/users/{user}/reset-password', [AdminUserController::class,'resetPassword'])->name('users.reset');
+    Route::get('/activity', [ActivityController::class,'index'])->name('activity.index');
+    Route::get('/activity/export', [ActivityController::class,'export'])->name('activity.export');
+
+    Route::get('/centros',            [CentroController::class,'index'])->name('centros.index');
+    Route::get('/centros/create',     [CentroController::class,'create'])->name('centros.create');
+    Route::post('/centros',           [CentroController::class,'store'])->name('centros.store');
+    Route::get('/centros/{centro}/edit', [CentroController::class,'edit'])->name('centros.edit');
+    Route::patch('/centros/{centro}', [CentroController::class,'update'])->name('centros.update');
+    Route::post('/centros/{centro}/toggle', [CentroController::class,'toggle'])->name('centros.toggle');
+
+    // Backups
+    Route::get('/backups',        [BackupController::class,'index'])->name('backups.index');
+    Route::get('/backups/download', [BackupController::class,'download'])->name('backups.download');
+    Route::post('/backups/run',   [BackupController::class,'run'])->name('backups.run'); // manual
+});
+
+// Arranque de impersonación (solo admin)
+Route::middleware(['auth','role:admin'])->prefix('admin')->name('admin.')->group(function () {
+    Route::post('/users/{user}/impersonate', [ImpersonateController::class,'start'])->name('users.impersonate');
+});
+
+// Salir de impersonación (cualquier usuario autenticado que esté impersonando)
+Route::post('/admin/impersonate/leave', [ImpersonateController::class,'leave'])
+    ->middleware('auth')
+    ->name('admin.impersonate.leave');
 
 // Auth (login/registro de Breeze)
 require __DIR__.'/auth.php';

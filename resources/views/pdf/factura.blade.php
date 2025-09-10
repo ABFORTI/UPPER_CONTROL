@@ -1,55 +1,51 @@
-<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <style>
-    body{ font-family: DejaVu Sans, sans-serif; font-size:12px; }
-    .title{ font-size:18px; font-weight:bold; margin-bottom:6px }
-    .muted{ color:#555 }
-    table{ width:100%; border-collapse: collapse; margin-top:10px }
-    th,td{ border:1px solid #ddd; padding:6px; text-align:left }
-    th{ background:#f5f5f5 }
-    .right{ text-align:right }
-  </style>
-</head>
-<body>
-  <table style="border:none">
-    <tr style="border:none">
-      <td style="border:none">
-        <div class="title">Factura</div>
-        <div class="muted">#{{ $factura->id }}</div>
-      </td>
-      <td style="border:none; text-align:right">
-        @if(!empty($empresa['logo']) && file_exists($empresa['logo']))
-          <img src="{{ $empresa['logo'] }}" height="48">
-        @endif
-        <div>{{ $empresa['nombre'] }}</div>
-      </td>
+@php $f = $factura; $o = $f->orden; @endphp
+<!DOCTYPE html><html><head><meta charset="utf-8">
+<style>
+  *{ font-family: DejaVu Sans, sans-serif; } body{ font-size:12px; }
+  .row{ display:flex; justify-content:space-between; align-items:center; }
+  .mb8{ margin-bottom:8px; } .mb16{ margin-bottom:16px; } .badge{ padding:3px 6px; border:1px solid #999; border-radius:3px; }
+  table{ width:100%; border-collapse:collapse; } th,td{ border:1px solid #ddd; padding:6px; } th{ background:#f3f3f3; text-align:left; }
+  .right{ text-align:right; } .footer{ position:fixed; left:0; right:0; bottom:10px; text-align:center; font-size:10px; color:#888; }
+</style>
+</head><body>
+
+<div class="row mb16">
+  <img src="{{ public_path('img/logo.png') }}" alt="Logo" style="height:40px">
+  <div style="text-align:right">
+    <div><strong>Factura #{{ $f->id }}</strong></div>
+    <div class="badge">{{ strtoupper($f->estatus) }}</div>
+    <div class="small">{{ $f->created_at->format('Y-m-d H:i') }}</div>
+  </div>
+</div>
+
+<div class="mb8"><strong>OT:</strong> #{{ $o->id }} — {{ $o->servicio->nombre ?? '—' }}</div>
+<div class="mb8"><strong>Centro:</strong> {{ $o->centro->nombre ?? '—' }}</div>
+<div class="mb16"><strong>Folio externo:</strong> {{ $f->folio ?? '—' }}</div>
+
+<table class="mb16">
+  <thead>
+    <tr>
+      <th>Concepto</th><th class="right">Cantidad</th><th class="right">P.U.</th><th class="right">Subtotal</th>
     </tr>
-  </table>
-
-  <p>
-    <b>OT:</b> #{{ $factura->orden->id }} — {{ $factura->orden->servicio->nombre ?? '-' }}<br>
-    <b>Centro:</b> {{ $factura->orden->centro->nombre ?? '-' }}<br>
-    <b>Folio externo:</b> {{ $factura->folio ?? '—' }}<br>
-    <b>Estatus:</b> {{ $factura->estatus }}
-  </p>
-
-  <table>
-    <thead>
+  </thead>
+  <tbody>
+    @foreach($o->items as $it)
       <tr>
-        <th>Concepto</th>
-        <th class="right">Importe</th>
+        <td>{{ $it->tamano ? ('Tamaño: '.$it->tamano) : $it->descripcion }}</td>
+        <td class="right">{{ $it->cantidad_real }}</td>
+        <td class="right">{{ number_format($it->precio_unitario,2) }}</td>
+        <td class="right">{{ number_format($it->precio_unitario * $it->cantidad_real,2) }}</td>
       </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td>Servicios de {{ $factura->orden->servicio->nombre ?? '—' }} (OT #{{ $factura->orden->id }})</td>
-        <td class="right">{{ number_format($factura->total,2) }}</td>
-      </tr>
-    </tbody>
-  </table>
+    @endforeach
+  </tbody>
+</table>
 
-  <p class="right"><b>Total:</b> {{ number_format($factura->total,2) }}</p>
-</body>
-</html>
+<div class="row">
+  <div></div>
+  <div style="text-align:right">
+    <div><strong>Total:</strong> $ {{ number_format($f->total,2) }}</div>
+  </div>
+</div>
+
+<div class="footer">Documento informativo. Para efectos fiscales, consulte el CFDI timbrado.</div>
+</body></html>

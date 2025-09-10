@@ -3,8 +3,11 @@
 // app/Models/Solicitud.php
 namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
+use Spatie\Activitylog\Traits\LogsActivity;
+use Spatie\Activitylog\LogOptions;
 
 class Solicitud extends Model {
+  use LogsActivity;
   protected $table='solicitudes';
   protected $fillable=[
     'folio','id_cliente','id_centrotrabajo','id_servicio',
@@ -14,4 +17,13 @@ class Solicitud extends Model {
   public function centro(){ return $this->belongsTo(CentroTrabajo::class,'id_centrotrabajo'); }
   public function servicio(){ return $this->belongsTo(ServicioEmpresa::class,'id_servicio'); }
   public function archivos(){ return $this->morphMany(\App\Models\Archivo::class,'fileable'); }
+
+  public function getActivitylogOptions(): LogOptions
+  {
+      return LogOptions::defaults()
+          ->useLogName('solicitudes')
+          ->logFillable()
+          ->logOnlyDirty()
+          ->dontSubmitEmptyLogs();
+  }
 }

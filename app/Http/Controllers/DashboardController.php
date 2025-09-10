@@ -11,6 +11,9 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Inertia\Inertia;
+use Maatwebsite\Excel\Facades\Excel;
+use App\Exports\OtExport;
+use App\Exports\FacturaExport;
 
 class DashboardController extends Controller
 {
@@ -108,69 +111,24 @@ class DashboardController extends Controller
     }
 
     // ----- Exports CSV -----
-    public function exportOts(Request $req): StreamedResponse
+    public function exportOts(Request $req)
     {
-        $desde = $req->date('desde') ?: now()->subDays(30)->startOfDay();
-        $hasta = $req->date('hasta') ?: now()->endOfDay();
-        $centroId = $req->integer('centro');
+        $filters = $req->only([
+            'id','estatus','calidad','servicio','centro','tl','desde','hasta'
+        ]);
+        $format = $req->get('format','xlsx'); // csv|xlsx
+        $file   = 'reporte_ots_'.now()->format('Ymd_His').'.'.$format;
 
-        $u = $req->user();
-        if (!$u->hasAnyRole(['admin','facturacion'])) {
-            $centroId = (int)$u->centro_trabajo_id;
-        }
-
-        $rows = Orden::with(['servicio:id,nombre','centro:id,nombre'])
-            ->when($centroId, fn($q)=>$q->where('id_centrotrabajo',$centroId))
-            ->whereBetween('created_at', [$desde, $hasta])
-            ->orderBy('id')
-            ->get(['id','folio','id_servicio','id_centrotrabajo','estatus','calidad_resultado','created_at'])
-            ->map(function($o){
-                return [
-                    $o->id,
-                    $o->folio,
-                    $o->servicio?->nombre,
-                    $o->centro?->nombre,
-                    $o->estatus,
-                    $o->calidad_resultado,
-                    $o->created_at,
-                ];
-            });
-
-        $headers = ['ID','Folio','Servicio','Centro','Estatus','Calidad','Creado'];
-        return $this->streamCsv('ots.csv', $headers, $rows);
+        return Excel::download(new OtExport($filters, $req->user()), $file);
     }
 
-    public function exportFacturas(Request $req): StreamedResponse
+    public function exportFacturas(Request $req)
     {
-        $desde = $req->date('desde') ?: now()->subDays(30)->startOfDay();
-        $hasta = $req->date('hasta') ?: now()->endOfDay();
-        $centroId = $req->integer('centro');
+        $filters = $req->only(['estatus','servicio','centro','desde','hasta']);
+        $format = $req->get('format','xlsx'); // csv|xlsx
+        $file   = 'reporte_facturas_'.now()->format('Ymd_His').'.'.$format;
 
-        $u = $req->user();
-        if (!$u->hasAnyRole(['admin','facturacion'])) {
-            $centroId = (int)$u->centro_trabajo_id;
-        }
-
-        $rows = Factura::with(['orden.servicio:id,nombre','orden.centro:id,nombre'])
-            ->when($centroId, fn($q)=>$q->whereHas('orden', fn($w)=>$w->where('id_centrotrabajo',$centroId)))
-            ->whereBetween('created_at', [$desde, $hasta])
-            ->orderBy('id')
-            ->get(['id','id_orden','total','folio','estatus','created_at'])
-            ->map(function($f){
-                return [
-                    $f->id,
-                    $f->id_orden,
-                    $f->orden?->servicio?->nombre,
-                    $f->orden?->centro?->nombre,
-                    number_format((float)$f->total,2,'.',''),
-                    $f->folio,
-                    $f->estatus,
-                    $f->created_at,
-                ];
-            });
-
-        $headers = ['ID','OT','Servicio','Centro','Total','Folio','Estatus','Creado'];
-        return $this->streamCsv('facturas.csv', $headers, $rows);
+        return Excel::download(new FacturaExport($filters, $req->user()), $file);
     }
 
     private function streamCsv(string $filename, array $headers, $rows): StreamedResponse

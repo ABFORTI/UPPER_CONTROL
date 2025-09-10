@@ -27,7 +27,13 @@ class CalidadController extends Controller
     ]);
   }
 
-  public function validar(Request $req, Orden $orden) {
+  private function act(string $log)
+  {
+      return app(\Spatie\Activitylog\ActivityLogger::class)->useLog($log);
+  }
+
+  public function validar(Request $req, Orden $orden)
+  {
     $this->authorize('calidad', $orden);
     $this->authCalidad($orden);
     if ($orden->estatus !== 'completada') abort(422);
@@ -50,10 +56,17 @@ class CalidadController extends Controller
     "La OT #{$orden->id} fue validada. Autoriza para facturación.",
     route('ordenes.show',$orden->id)
   );
+    $this->act('ordenes')
+      ->performedOn($orden)
+      ->event('calidad_validar')
+      ->log("OT #{$orden->id} validada por calidad");
+    // Encolar PDF al validar
+    \App\Jobs\GenerateOrdenPdf::dispatch($orden->id);
     return redirect()->route('ordenes.show',$orden->id)->with('ok','Calidad validó la OT');
   }
 
-  public function rechazar(Request $req, Orden $orden) {
+  public function rechazar(Request $req, Orden $orden)
+  {
     $this->authorize('calidad', $orden);
     $this->authCalidad($orden);
     if ($orden->estatus !== 'completada') abort(422);
@@ -76,6 +89,11 @@ class CalidadController extends Controller
     "La OT #{$orden->id} fue rechazada por calidad.",
     route('ordenes.show',$orden->id)
   );
+    $this->act('ordenes')
+      ->performedOn($orden)
+      ->event('calidad_rechazar')
+      ->withProperties(['observaciones' => $req->observaciones])
+      ->log("OT #{$orden->id} rechazada por calidad");
     return redirect()->route('ordenes.show',$orden->id)->with('ok','Calidad rechazó la OT');
   }
 

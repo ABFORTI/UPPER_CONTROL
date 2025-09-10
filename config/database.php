@@ -60,6 +60,11 @@ return [
             'options' => extension_loaded('pdo_mysql') ? array_filter([
                 PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
             ]) : [],
+            'dump' => [
+                'dump_binary_path' => 'C:\xampp\mysql\bin', // 👈 OJO: sin barra final
+                'use_single_transaction' => true,
+                'timeout' => 300,
+            ],
         ],
 
         'mariadb' => [

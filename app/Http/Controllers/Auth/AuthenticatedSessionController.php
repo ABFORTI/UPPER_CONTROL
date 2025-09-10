@@ -31,6 +31,12 @@ class AuthenticatedSessionController extends Controller
     {
         $request->authenticate();
 
+        $user = $request->user();
+        if (!$user->activo) {
+            Auth::guard('web')->logout();
+            return back()->withErrors(['email'=>'Tu usuario está desactivado.']);
+        }
+
         $request->session()->regenerate();
 
         return redirect()->intended(route('dashboard', absolute: false));

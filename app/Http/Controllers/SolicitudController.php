@@ -124,11 +124,12 @@ class SolicitudController extends Controller
         $this->authorize('aprobar', $solicitud);
         $this->authorizeCentro($solicitud->id_centrotrabajo);
 
-        $solicitud->update([
-            'estatus'      => 'aprobada',
-            'aprobada_por' => auth()->id(),
-            'aprobada_at'  => now(),
-        ]);
+        $solicitud->update(['estatus'=>'aprobada','aprobada_por'=>auth()->id(),'aprobada_at'=>now()]);
+        $this->act('solicitudes')
+            ->performedOn($solicitud)
+            ->event('aprobar')
+            ->withProperties(['resultado' => 'aprobada'])
+            ->log("Solicitud {$solicitud->folio} aprobada");
 
         Notifier::toUser(
             $solicitud->id_cliente,
@@ -139,16 +140,17 @@ class SolicitudController extends Controller
         return back()->with('ok','Solicitud aprobada');
     }
 
-    public function rechazar(Solicitud $solicitud)
+    public function rechazar(Solicitud $solicitud, Request $req)
     {
         $this->authorize('aprobar', $solicitud);
         $this->authorizeCentro($solicitud->id_centrotrabajo);
 
-        $solicitud->update([
-            'estatus'      => 'rechazada',
-            'aprobada_por' => auth()->id(),
-            'aprobada_at'  => now(),
-        ]);
+        $solicitud->update(['estatus'=>'rechazada','aprobada_por'=>auth()->id(),'aprobada_at'=>now()]);
+        $this->act('solicitudes')
+            ->performedOn($solicitud)
+            ->event('rechazar')
+            ->withProperties(['resultado' => 'rechazada', 'motivo' => $req->input('motivo')])
+            ->log("Solicitud {$solicitud->folio} rechazada");
 
         return back()->with('ok','Solicitud rechazada');
     }
@@ -197,5 +199,10 @@ class SolicitudController extends Controller
                 'rechazar' => $canAprobar,
             ],
         ]);
+    }
+
+    private function act(string $log)
+    {
+        return app(\Spatie\Activitylog\ActivityLogger::class)->useLog($log);
     }
 }

@@ -6,26 +6,27 @@ use App\Models\Orden;
 use App\Models\Factura;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
-use Barryvdh\DomPDF\Facade\Pdf;
+use Barryvdh\DomPDF\Facade\Pdf as PDF;
 use App\Services\Notifier;
+use App\Jobs\GenerateFacturaPdf;
+use Illuminate\Support\Facades\Storage;
 
 class FacturaController extends Controller
 {
-  public function pdf(Factura $factura)
-    {
-        $this->authorize('view', $factura); // si tienes policy; si no, quítalo
-        $factura->load(['orden.servicio','orden.centro']);
+  
+public function pdf(\App\Models\Factura $factura)
+{
+    $this->authorize('view', $factura->orden);
 
-        $pdf = Pdf::loadView('pdf.factura', [
-            'factura' => $factura,
-            'empresa' => [
-                'nombre' => 'Upper Logistics',
-                'logo'   => public_path('images/logo.png'), // opcional
-            ],
-        ])->setPaper('letter');
-
-        return $pdf->download("Factura-{$factura->id}.pdf");
+    if ($factura->pdf_path && Storage::exists($factura->pdf_path)) {
+        return Storage::download($factura->pdf_path, "Factura_{$factura->id}.pdf");
     }
+
+    // Fallback on-demand
+    $factura->load(['orden.servicio','orden.centro','orden.items']);
+    $pdf = PDF::loadView('pdf.factura', ['factura'=>$factura])->setPaper('letter');
+    return $pdf->download("Factura_{$factura->id}.pdf");
+}
   public function createFromOrden(\App\Models\Orden $orden) {
     $this->authFacturacion($orden);
     if ($orden->estatus !== 'autorizada_cliente') abort(422,'La OT no está autorizada por el cliente.');
@@ -42,9 +43,10 @@ class FacturaController extends Controller
     ]);
 }
 
-  public function storeFromOrden(Request $req, Orden $orden) {
-    $this->authFacturacion($orden);
-    $req->validate([
+  public function storeFromOrden(Request $req, Orden $orden)
+    {
+        $this->authFacturacion($orden);
+        $req->validate([
       'total' => ['required','numeric','min:0'],
       'folio_externo' => ['nullable','string','max:100'],
     ]);
@@ -61,6 +63,12 @@ class FacturaController extends Controller
         "Se generó la factura de la OT #{$orden->id}.",
         route('facturas.show',$factura->id)
     );
+        $this->act('facturas')
+            ->performedOn($factura)
+            ->event('crear_factura')
+            ->withProperties(['orden_id' => $orden->id, 'total' => $factura->total])
+            ->log("Factura #{$factura->id} creada para OT #{$orden->id}");
+        GenerateFacturaPdf::dispatch($factura->id);
     return redirect()->route('facturas.show',$factura->id)->with('ok','Factura registrada');
   }
 
@@ -97,10 +105,16 @@ class FacturaController extends Controller
         "La factura #{$factura->id} cambió a estatus: {$factura->estatus}.",
         route('facturas.show',$factura->id)
     );
+        $this->act('facturas')
+            ->performedOn($factura)
+            ->event('estatus')
+            ->withProperties(['estatus' => $factura->estatus])
+            ->log("Factura #{$factura->id} actualizada a {$factura->estatus}");
+        GenerateFacturaPdf::dispatch($factura->id);
     return back()->with('ok','Marcada como facturada');
   }
 
-  public function marcarCobro(Factura $factura) {
+  public function marcarCobro(Request $req, Factura $factura) {
   $this->authorize('operar', $factura);
   $this->authFacturacion($factura->orden);
   $factura->update(['estatus'=>'por_pagar', 'fecha_cobro'=>now()->toDateString()]);
@@ -111,10 +125,16 @@ class FacturaController extends Controller
     "La factura #{$factura->id} cambió a estatus: {$factura->estatus}.",
     route('facturas.show',$factura->id)
   );
+        $this->act('facturas')
+            ->performedOn($factura)
+            ->event('estatus')
+            ->withProperties(['estatus' => $factura->estatus])
+            ->log("Factura #{$factura->id} actualizada a {$factura->estatus}");
+        GenerateFacturaPdf::dispatch($factura->id);
   return back()->with('ok','Cobro registrado (por pagar)');
   }
 
-  public function marcarPagado(Factura $factura) {
+  public function marcarPagado(Request $req, Factura $factura) {
   $this->authorize('operar', $factura);
   $this->authFacturacion($factura->orden);
   $factura->update(['estatus'=>'pagado', 'fecha_pagado'=>now()->toDateString()]);
@@ -125,6 +145,12 @@ class FacturaController extends Controller
     "La factura #{$factura->id} cambió a estatus: {$factura->estatus}.",
     route('facturas.show',$factura->id)
   );
+        $this->act('facturas')
+            ->performedOn($factura)
+            ->event('estatus')
+            ->withProperties(['estatus' => $factura->estatus])
+            ->log("Factura #{$factura->id} actualizada a {$factura->estatus}");
+        GenerateFacturaPdf::dispatch($factura->id);
   return back()->with('ok','Pago confirmado');
   }
 
@@ -133,5 +159,9 @@ class FacturaController extends Controller
     if ($u->hasRole('admin')) return;
     if (!$u->hasRole('facturacion')) abort(403);
     if ((int)$u->centro_trabajo_id !== (int)$orden->id_centrotrabajo) abort(403);
+  }
+  private function act(string $log)
+  {
+      return app(\Spatie\Activitylog\ActivityLogger::class)->useLog($log);
   }
 }

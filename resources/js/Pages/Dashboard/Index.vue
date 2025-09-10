@@ -1,6 +1,7 @@
 <script setup>
 import { router } from '@inertiajs/vue3'
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue'
+import { usePage } from '@inertiajs/vue3'
 
 defineOptions({ layout: AuthenticatedLayout })
 
@@ -11,6 +12,22 @@ const props = defineProps({
   centros: { type: Array,  default: () => [] },
   urls:    { type: Object, default: () => ({ index:'', export_ots:'', export_facturas:'' }) },
 })
+
+const page = usePage()
+const filters = page.props.filters || {}
+
+function qs(obj){
+  const p = new URLSearchParams()
+  Object.entries(obj).forEach(([k,v])=>{
+    if (v !== undefined && v !== null && v !== '') p.append(k,v)
+  })
+  return p.toString()
+}
+
+const urlOtsXlsx = `/upper-control/public/dashboard/export/ots?${qs({...filters, format:'xlsx'})}`
+const urlOtsCsv  = `/upper-control/public/dashboard/export/ots?${qs({...filters, format:'csv'})}`
+const urlFactXlsx = `/upper-control/public/dashboard/export/facturas?${qs({...filters, format:'xlsx'})}`
+const urlFactCsv  = `/upper-control/public/dashboard/export/facturas?${qs({...filters, format:'csv'})}`
 
 function submit(e){
   const form = new FormData(e.target)
@@ -28,7 +45,6 @@ function logout() {
   <div class="p-6 max-w-7xl mx-auto">
     <h1 class="text-2xl font-bold mb-4 flex items-center gap-4">
       Dashboard
-      <button @click="logout" class="ml-auto text-xs underline text-red-700">Cerrar sesión</button>
     </h1>
 
     <form @submit.prevent="submit" class="flex flex-wrap items-end gap-3 mb-5">
@@ -48,10 +64,14 @@ function logout() {
         </select>
       </div>
       <button class="px-3 py-2 rounded bg-black text-white">Aplicar</button>
-
-      <a :href="urls.export_ots" class="ml-auto px-3 py-2 rounded bg-slate-700 text-white">Exportar OTs (CSV)</a>
-      <a :href="urls.export_facturas" class="px-3 py-2 rounded bg-indigo-700 text-white">Exportar Facturas (CSV)</a>
     </form>
+
+    <div class="flex gap-2 mb-6">
+      <a :href="urlOtsXlsx" class="px-3 py-2 rounded bg-emerald-600 text-white">Exportar OTs (XLSX)</a>
+      <a :href="urlOtsCsv"  class="px-3 py-2 rounded bg-slate-700 text-white">Exportar OTs (CSV)</a>
+      <a :href="urlFactXlsx" class="px-3 py-2 rounded bg-indigo-600 text-white">Exportar Facturas (XLSX)</a>
+      <a :href="urlFactCsv"  class="px-3 py-2 rounded bg-gray-700 text-white">Exportar Facturas (CSV)</a>
+    </div>
 
     <!-- KPIs -->
     <div class="grid md:grid-cols-3 gap-3">

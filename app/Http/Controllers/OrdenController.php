@@ -3,6 +3,7 @@
 // app/Http/Controllers/OrdenController.php
 namespace App\Http\Controllers;
 
+
 use App\Models\Solicitud;
 use App\Models\Orden;
 use App\Models\OrdenItem;
@@ -11,37 +12,35 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Gate;
-use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Support\Facades\Storage;
+use Barryvdh\DomPDF\Facade\Pdf as PDF;
 use App\Notifications\OtAsignada;
-use App\Support\Notify;
 use App\Services\Notifier;
-use App\Notifications\OtListaParaCalidad;
+use App\Jobs\GenerateOrdenPdf;
+
 class OrdenController extends Controller
 {
-    public function pdf(Orden $orden)
+    // PDF OT
+    public function pdf(\App\Models\Orden $orden)
     {
         $this->authorize('view', $orden);
-        $orden->load(['solicitud','servicio','centro','items','teamLeader']);
 
-        $pdf = Pdf::loadView('pdf.orden', [
-            'orden' => $orden,
-            'empresa' => [
-                'nombre' => 'Upper Logistics',
-                'logo'   => public_path('images/logo.png'), // opcional
-            ],
-        ])->setPaper('letter');
+        if ($orden->pdf_path && Storage::exists($orden->pdf_path)) {
+            return Storage::download($orden->pdf_path, "OT_{$orden->id}.pdf");
+        }
 
-        return $pdf->download("OT-{$orden->id}.pdf");
+        // Fallback: generar al vuelo (por si el worker aún no corrió)
+        $orden->load(['servicio','centro','teamLeader','items']);
+        $pdf = PDF::loadView('pdf.orden', ['orden'=>$orden])->setPaper('letter');
+        return $pdf->download("OT_{$orden->id}.pdf");
     }
-    /** Formulario: Generar OT desde una solicitud aprobada */
+
+    /** Form: Generar OT desde solicitud aprobada */
     public function createFromSolicitud(Solicitud $solicitud)
     {
-        // Policy: coord/admin del mismo centro
         $this->authorize('createFromSolicitud', [Orden::class, $solicitud->id_centrotrabajo]);
         $this->authorizeFromCentro($solicitud->id_centrotrabajo);
-        if ($solicitud->estatus !== 'aprobada') {
-            abort(422, 'La solicitud no está aprobada.');
-        }
+        if ($solicitud->estatus !== 'aprobada') abort(422, 'La solicitud no está aprobada.');
 
         $teamLeaders = User::role('team_leader')
             ->where('centro_trabajo_id', $solicitud->id_centrotrabajo)
@@ -52,20 +51,17 @@ class OrdenController extends Controller
             'folio'       => $this->buildFolioOT($solicitud->id_centrotrabajo),
             'teamLeaders' => $teamLeaders,
             'urls'        => [
-                // URL absoluta: evita 404 en subcarpeta
                 'store' => route('ordenes.storeFromSolicitud', $solicitud),
             ],
         ]);
     }
 
-    /** POST: Guardar OT (simple; sin PricingService) */
+    /** POST: Guardar OT (sin pricing) */
     public function storeFromSolicitud(Request $req, Solicitud $solicitud)
     {
         $this->authorize('createFromSolicitud', [Orden::class, $solicitud->id_centrotrabajo]);
         $this->authorizeFromCentro($solicitud->id_centrotrabajo);
-        if ($solicitud->estatus !== 'aprobada') {
-            abort(422, 'La solicitud no está aprobada.');
-        }
+        if ($solicitud->estatus !== 'aprobada') abort(422, 'La solicitud no está aprobada.');
 
         $data = $req->validate([
             'team_leader_id'       => ['nullable','integer','exists:users,id'],
@@ -75,6 +71,8 @@ class OrdenController extends Controller
         ]);
 
         $orden = DB::transaction(function () use ($solicitud, $data) {
+            $totalPlan = collect($data['items'])->sum(fn($i) => (int)($i['cantidad'] ?? 0));
+
             $orden = Orden::create([
                 'folio'            => $this->buildFolioOT($solicitud->id_centrotrabajo),
                 'id_solicitud'     => $solicitud->id,
@@ -82,7 +80,7 @@ class OrdenController extends Controller
                 'id_servicio'      => $solicitud->id_servicio,
                 'team_leader_id'   => $data['team_leader_id'] ?? null,
                 'estatus'          => !empty($data['team_leader_id']) ? 'asignada' : 'generada',
-                'total_planeado'   => collect($data['items'])->sum('cantidad'),
+                'total_planeado'   => $totalPlan,
                 'total_real'       => 0,
                 'calidad_resultado'=> 'pendiente',
             ]);
@@ -92,7 +90,6 @@ class OrdenController extends Controller
                     'id_orden'          => $orden->id,
                     'descripcion'       => $it['descripcion'],
                     'cantidad_planeada' => (int)$it['cantidad'],
-                    // Campos de precio opcionales (0 por ahora)
                     'precio_unitario'   => 0,
                     'subtotal'          => 0,
                 ]);
@@ -100,6 +97,11 @@ class OrdenController extends Controller
 
             return $orden;
         });
+        $this->act('ordenes')
+            ->performedOn($orden)
+            ->event('generar_ot')
+            ->withProperties(['team_leader_id' => $orden->team_leader_id])
+            ->log("OT #{$orden->id} generada desde solicitud {$solicitud->folio}");
 
         // Notificar a TL si existe
         if ($orden->team_leader_id) {
@@ -119,9 +121,12 @@ class OrdenController extends Controller
             route('ordenes.show',$orden->id)
         );
 
+        GenerateOrdenPdf::dispatch($orden->id);
+
         return redirect()->route('ordenes.show', $orden->id)->with('ok','OT creada correctamente');
     }
 
+    /** Registrar avances */
     public function registrarAvance(Request $req, Orden $orden)
     {
         $this->authorize('reportarAvance', $orden);
@@ -134,7 +139,8 @@ class OrdenController extends Controller
             'comentario'            => ['nullable','string','max:500'],
         ]);
 
-        DB::transaction(function () use ($orden, $data) {
+        $justCompleted = false;
+        DB::transaction(function () use ($orden, $data, $req, &$justCompleted) {
             foreach ($data['items'] as $i) {
                 $item = \App\Models\OrdenItem::where('id', $i['id_item'])
                     ->where('id_orden', $orden->id)
@@ -178,11 +184,20 @@ class OrdenController extends Controller
 
             // (opcional) registrar bitácora de avance en una tabla aparte
             // \App\Models\Avance::create([...]);
+            $this->act('ordenes')
+                ->performedOn($orden)
+                ->event('avance')
+                ->withProperties(['items' => $data['items'], 'comentario' => $req->comentario])
+                ->log("OT #{$orden->id}: avance registrado");
         });
+
+        // Encolar PDF si se completó
+        if ($justCompleted) {
+            GenerateOrdenPdf::dispatch($orden->id);
+        }
 
         return back()->with('ok','Avance registrado');
     }
-
 
     /** Detalle de OT */
     public function show(Orden $orden)
@@ -191,16 +206,16 @@ class OrdenController extends Controller
         $this->authorizeFromCentro($orden->id_centrotrabajo, $orden);
 
         $orden->load([
-        'solicitud','servicio','centro','items','teamLeader','avances.usuario',
-        'evidencias' => fn($q)=>$q->with('usuario')->orderByDesc('id'),
-        'items.evidencias' // si agregas relación en OrdenItem
+            'solicitud','servicio','centro','items','teamLeader','avances.usuario',
+            // Deja la línea de abajo SOLO si existe la relación:
+            // 'items.evidencias',
+            'evidencias' => fn($q)=>$q->with('usuario')->orderByDesc('id'),
         ]);
 
         $canReportar = Gate::allows('reportarAvance', $orden);
         $canAsignar  = auth()->user()->hasAnyRole(['admin','coordinador'])
                       && $orden->estatus !== 'completada';
 
-        // team leaders del centro (solo si va a mostrarse el selector)
         $teamLeaders = $canAsignar
             ? User::role('team_leader')
                 ->where('centro_trabajo_id',$orden->id_centrotrabajo)
@@ -221,14 +236,14 @@ class OrdenController extends Controller
                 'facturar'          => route('facturas.createFromOrden', $orden),
                 'pdf'               => route('ordenes.pdf', $orden),
                 'evidencias_store'  => route('evidencias.store', $orden),
-                'evidencias_destroy'=> route('evidencias.destroy', 0), // base, se reemplaza el 0 por el ID en Vue
+                'evidencias_destroy'=> route('evidencias.destroy', 0),
             ],
         ]);
     }
 
+    /** Asignar Team Leader */
     public function asignarTL(Request $req, Orden $orden)
     {
-        // solo admin/coordinador del centro
         $this->authorize('createFromSolicitud', [Orden::class, $orden->id_centrotrabajo]);
         $this->authorizeFromCentro($orden->id_centrotrabajo, $orden);
 
@@ -239,18 +254,19 @@ class OrdenController extends Controller
         $orden->team_leader_id = $data['team_leader_id'];
         if ($orden->estatus === 'generada') $orden->estatus = 'asignada';
         $orden->save();
+        $this->act('ordenes')
+            ->performedOn($orden)
+            ->event('asignar_tl')
+            ->withProperties(['team_leader_id' => $req->team_leader_id])
+            ->log("OT #{$orden->id}: asignado TL {$req->team_leader_id}");
 
         // Notificar al TL asignado
-        if ($orden->team_leader_id) {
-            optional($orden->teamLeader)->notify(new OtAsignada($orden));
-        }
+        optional($orden->teamLeader)->notify(new OtAsignada($orden));
 
         return back()->with('ok','Team Leader asignado');
     }
 
-
-
-    /** Listado con filtros (tal como lo traías) */
+    /** Listado con filtros */
     public function index(Request $req)
     {
         $u = $req->user();
@@ -293,7 +309,8 @@ class OrdenController extends Controller
                     'calidad'  => route('calidad.show',  $o),
                     'facturar' => route('facturas.createFromOrden', $o),
                 ],
-            ];
+            
+                ]    ;
         });
 
         return Inertia::render('Ordenes/Index', [
@@ -309,18 +326,25 @@ class OrdenController extends Controller
     {
         $u = auth()->user();
         if ($u->hasAnyRole(['admin','facturacion'])) return;
-        if ((int)$u->centro_trabajo_id !== $centroId && !$u->hasRole('calidad')) abort(403);
+        // 👇 Requiere MISMO centro para todos los demás roles
+        if ((int)$u->centro_trabajo_id !== $centroId) abort(403);
+        // Si es TL, solo su propia OT
         if ($orden && $u->hasRole('team_leader') && $orden->team_leader_id !== $u->id) abort(403);
     }
 
     private function buildFolioOT(int $centroId): string
     {
-        $pref = 'UPP'; // ajusta si quieres por centro
+        $pref = 'UPP';
         $yyyymm = now()->format('Ym');
         $seq = Orden::where('id_centrotrabajo', $centroId)
             ->whereBetween('created_at', [now()->startOfMonth(), now()->endOfMonth()])
             ->count() + 1;
 
         return sprintf('%s-%s-%04d', $pref, $yyyymm, $seq);
+    }
+
+    private function act(string $log)
+    {
+        return app(\Spatie\Activitylog\ActivityLogger::class)->useLog($log);
     }
 }

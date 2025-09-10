@@ -1,65 +1,73 @@
-<!doctype html>
+@php
+  $o = $orden;
+@endphp
+<!DOCTYPE html>
 <html>
-<head>
-  <meta charset="utf-8">
-  <style>
-    body{ font-family: DejaVu Sans, sans-serif; font-size:12px; }
-    .title{ font-size:18px; font-weight:bold; margin-bottom:6px }
-    .muted{ color:#555 }
-    table{ width:100%; border-collapse: collapse; margin-top:10px }
-    th,td{ border:1px solid #ddd; padding:6px; text-align:left }
-    th{ background:#f5f5f5 }
-    .right{ text-align:right }
-  </style>
-</head>
-<body>
-  <table style="border:none">
-    <tr style="border:none">
-      <td style="border:none">
-        <div class="title">Orden de Trabajo</div>
-        <div class="muted">OT #{{ $orden->id }}</div>
-      </td>
-      <td style="border:none; text-align:right">
-        @if(!empty($empresa['logo']) && file_exists($empresa['logo']))
-          <img src="{{ $empresa['logo'] }}" height="48">
-        @endif
-        <div>{{ $empresa['nombre'] }}</div>
-      </td>
+  <head>
+    <meta charset="utf-8">
+<style>
+  *{ font-family: DejaVu Sans, sans-serif; } body{ font-size:12px; }
+  .row{ display:flex; justify-content:space-between; align-items:center; }
+  .mb8{ margin-bottom:8px; } .mb16{ margin-bottom:16px; } .mb24{ margin-bottom:24px; }
+  .badge{ padding:3px 6px; border:1px solid #999; border-radius:3px; }
+  table{ width:100%; border-collapse:collapse; } th,td{ border:1px solid #ddd; padding:6px; }
+  th{ background:#f3f3f3; text-align:left; }
+  .right{ text-align:right; } .small{ font-size:11px; color:#666; }
+  .footer{ position:fixed; left:0; right:0; bottom:10px; text-align:center; font-size:10px; color:#888; }
+</style>
+</head><body>
+
+<div class="row mb16">
+  <img src="{{ public_path('img/logo.png') }}" alt="Logo" style="height:40px">
+  <div style="text-align:right">
+    <div><strong>OT #{{ $o->id }}</strong></div>
+    <div class="small">{{ $o->created_at->format('Y-m-d H:i') }}</div>
+  </div>
+</div>
+
+<div class="mb8"><strong>Servicio:</strong> {{ $o->servicio->nombre ?? '—' }}</div>
+<div class="mb8">
+  <strong>Centro:</strong> {{ $o->centro->nombre ?? '—' }} &nbsp; | &nbsp;
+  <strong>Team Leader:</strong> {{ $o->teamLeader->name ?? 'No asignado' }}
+</div>
+<div class="mb16">
+  <strong>Estatus:</strong> <span class="badge">{{ $o->estatus }}</span>
+  &nbsp; <strong>Calidad:</strong> <span class="badge">{{ $o->calidad_resultado }}</span>
+</div>
+
+<table class="mb24">
+  <thead>
+    <tr>
+      <th>Descripción / Tamaño</th>
+      <th class="right">Planeado</th>
+      <th class="right">Real</th>
+      <th class="right">P.U.</th>
+      <th class="right">Subtotal</th>
     </tr>
-  </table>
+  </thead>
+  <tbody>
+  @foreach($o->items as $it)
+    <tr>
+      <td>{{ $it->tamano ? ('Tamaño: '.$it->tamano) : $it->descripcion }}</td>
+      <td class="right">{{ $it->cantidad_planeada }}</td>
+      <td class="right">{{ $it->cantidad_real }}</td>
+      <td class="right">{{ number_format($it->precio_unitario,2) }}</td>
+      <td class="right">{{ number_format($it->subtotal,2) }}</td>
+    </tr>
+  @endforeach
+  </tbody>
+</table>
 
-  <p>
-    <b>Servicio:</b> {{ $orden->servicio->nombre ?? '-' }}<br>
-    <b>Centro:</b> {{ $orden->centro->nombre ?? '-' }}<br>
-    <b>Team Leader:</b> {{ $orden->teamLeader->name ?? 'No asignado' }}<br>
-    <b>Estatus:</b> {{ $orden->estatus }} |
-    <b>Calidad:</b> {{ $orden->calidad_resultado }}
-  </p>
+<div class="row">
+  <div class="small">
+    Generado por Upper Control. Documento sin validez fiscal.
+  </div>
+  <div style="text-align:right">
+    <div><strong>Total planeado:</strong> $ {{ number_format($o->total_planeado,2) }}</div>
+    <div><strong>Total real:</strong> $ {{ number_format($o->total_real,2) }}</div>
+  </div>
+</div>
 
-  <table>
-    <thead>
-      <tr>
-        <th>Descripción / Tamaño</th>
-        <th class="right">Planeado</th>
-        <th class="right">Real</th>
-        <th class="right">P.U.</th>
-        <th class="right">Subtotal</th>
-      </tr>
-    </thead>
-    <tbody>
-      @foreach($orden->items as $it)
-        <tr>
-          <td>{{ $it->tamano ? 'Tamaño: '.$it->tamano : $it->descripcion }}</td>
-          <td class="right">{{ $it->cantidad_planeada }}</td>
-          <td class="right">{{ $it->cantidad_real }}</td>
-          <td class="right">{{ number_format($it->precio_unitario,2) }}</td>
-          <td class="right">{{ number_format($it->subtotal,2) }}</td>
-        </tr>
-      @endforeach
-    </tbody>
-  </table>
-
-  <p class="right"><b>Total planeado:</b> {{ number_format($orden->total_planeado,0) }}
-  &nbsp; | &nbsp; <b>Total real:</b> {{ number_format($orden->total_real,2) }}</p>
+<div class="footer">Upper Logistics — {{ now()->format('Y') }}</div>
 </body>
 </html>

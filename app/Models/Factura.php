@@ -3,9 +3,22 @@
 // app/Models/Factura.php
 namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
+use Spatie\Activitylog\Traits\LogsActivity;
+use Spatie\Activitylog\LogOptions;
 
 class Factura extends Model {
-  protected $table='facturas';
-  protected $fillable=['id_orden','total','folio_externo','estatus','fecha_facturado','fecha_cobro','fecha_pagado'];
-  public function orden(){ return $this->belongsTo(Orden::class,'id_orden'); }
+    use LogsActivity;
+    protected $table='facturas';
+    protected $fillable = [
+        'id_orden','folio','total','estatus'
+    ];
+    public function orden(){ return $this->belongsTo(Orden::class,'id_orden'); }
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()
+            ->useLogName('facturas')
+            ->logFillable()
+            ->logOnlyDirty()
+            ->dontSubmitEmptyLogs();
+    }
 }

@@ -30,71 +30,38 @@ const submit = () => {
 </script>
 
 <template>
-    <GuestLayout>
-        <Head title="Log in" />
-
-        <div v-if="status" class="mb-4 text-sm font-medium text-green-600">
-            {{ status }}
+  <div class="min-h-screen flex items-center justify-center bg-[#F5F7FA] font-roboto">
+    <div class="bg-white rounded-2xl shadow-2xl flex w-full max-w-4xl overflow-hidden scale-105">
+      <!-- Branding / Info -->
+      <div class="w-1/2 bg-[#F5F7FA] flex flex-col items-center justify-center p-10">
+        <div class="bg-[#1A73E8] rounded-full w-20 h-20 flex items-center justify-center mb-6">
+          <span class="text-white text-4xl font-bold">•</span>
         </div>
-
+        <div class="text-center">
+          <div class="font-poppins font-bold text-2xl text-[#2E3A59] mb-1">Upper Control</div>
+          <div class="font-poppins text-sm text-[#1A73E8] mb-2">Plataforma de Gestión Logística</div>
+          <div class="text-base text-[#2E3A59] opacity-80 font-roboto">Solicita, cotiza y realiza seguimiento de servicios logísticos de manera centralizada y transparente</div>
+        </div>
+      </div>
+      <!-- Login Form -->
+      <div class="w-1/2 flex flex-col justify-center p-10">
+        <h2 class="font-poppins text-3xl font-semibold mb-8 text-[#2E3A59]">Iniciar sesión</h2>
         <form @submit.prevent="submit">
-            <div>
-                <InputLabel for="email" value="Email" />
-
-                <TextInput
-                    id="email"
-                    type="email"
-                    class="mt-1 block w-full"
-                    v-model="form.email"
-                    required
-                    autofocus
-                    autocomplete="username"
-                />
-
-                <InputError class="mt-2" :message="form.errors.email" />
-            </div>
-
-            <div class="mt-4">
-                <InputLabel for="password" value="Password" />
-
-                <TextInput
-                    id="password"
-                    type="password"
-                    class="mt-1 block w-full"
-                    v-model="form.password"
-                    required
-                    autocomplete="current-password"
-                />
-
-                <InputError class="mt-2" :message="form.errors.password" />
-            </div>
-
-            <div class="mt-4 block">
-                <label class="flex items-center">
-                    <Checkbox name="remember" v-model:checked="form.remember" />
-                    <span class="ms-2 text-sm text-gray-600"
-                        >Remember me</span
-                    >
-                </label>
-            </div>
-
-            <div class="mt-4 flex items-center justify-end">
-                <Link
-                    v-if="canResetPassword"
-                    :href="route('password.request')"
-                    class="rounded-md text-sm text-gray-600 underline hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-                >
-                    Forgot your password?
-                </Link>
-
-                <PrimaryButton
-                    class="ms-4"
-                    :class="{ 'opacity-25': form.processing }"
-                    :disabled="form.processing"
-                >
-                    Log in
-                </PrimaryButton>
-            </div>
+          <div class="mb-5">
+            <label class="block text-sm mb-1 font-poppins text-[#2E3A59]">Correo electrónico</label>
+            <input v-model="form.email" type="email" class="w-full border border-[#E0E3EB] rounded px-3 py-2 font-roboto text-[#2E3A59] focus:border-[#1A73E8] focus:ring-2 focus:ring-[#1A73E8]/20 outline-none" placeholder="usuario@empresa.com" required autofocus>
+          </div>
+          <div class="mb-5">
+            <label class="block text-sm mb-1 font-poppins text-[#2E3A59]">Contraseña</label>
+            <input v-model="form.password" type="password" class="w-full border border-[#E0E3EB] rounded px-3 py-2 font-roboto text-[#2E3A59] focus:border-[#1A73E8] focus:ring-2 focus:ring-[#1A73E8]/20 outline-none" required>
+          </div>
+          <div class="flex items-center mb-6">
+            <input v-model="form.remember" type="checkbox" id="remember" class="mr-2 accent-[#1A73E8]">
+            <label for="remember" class="text-sm font-roboto text-[#2E3A59]">Recuérdame</label>
+          </div>
+          <button type="submit" class="w-full bg-[#1A73E8] text-white py-2 rounded font-poppins font-semibold text-lg hover:bg-[#1765c1] transition">Entrar</button>
         </form>
-    </GuestLayout>
+      </div>
+    </div>
+  </div>
 </template>

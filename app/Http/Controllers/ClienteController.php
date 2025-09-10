@@ -14,37 +14,48 @@ use Illuminate\Support\Facades\Notification;
 
 class ClienteController extends Controller
 {
-  public function autorizar(Orden $orden) {
-    $this->authorize('autorizarCliente', $orden);
-    $u = auth()->user();
-    // sólo el cliente dueño de la solicitud (o admin)
-    if (!$u->hasRole('admin') && (int)$orden->solicitud->id_cliente !== (int)$u->id) abort(403);
-    if ($orden->calidad_resultado !== 'validado') abort(422,'Aún no está validada por Calidad.');
+    private function act(string $log)
+    {
+        return app(\Spatie\Activitylog\ActivityLogger::class)->useLog($log);
+    }
 
-    Aprobacion::create([
-      'aprobable_type'=> Orden::class,
-      'aprobable_id'  => $orden->id,
-      'tipo'          => 'cliente',
-      'resultado'     => 'aprobado',
-      'id_usuario'    => $u->id,
-    ]);
-  $orden->estatus = 'autorizada_cliente';
-  $orden->cliente_autorizada_at = now();
-  $orden->save();
+    public function autorizar(Request $req, Orden $orden)
+    {
+        $this->authorize('autorizarCliente', $orden);
+        $u = auth()->user();
+        // sólo el cliente dueño de la solicitud (o admin)
+        if (!$u->hasRole('admin') && (int)$orden->solicitud->id_cliente !== (int)$u->id) abort(403);
+        if ($orden->calidad_resultado !== 'validado') abort(422,'Aún no está validada por Calidad.');
 
-  // avisar a 'facturacion' del centro
-  $factUsers = Notify::usersByRoleAndCenter('facturacion', $orden->id_centrotrabajo);
-  Notify::send($factUsers, new OtAutorizadaParaFacturacion($orden));
+        Aprobacion::create([
+            'aprobable_type'=> Orden::class,
+            'aprobable_id'  => $orden->id,
+            'tipo'          => 'cliente',
+            'resultado'     => 'aprobado',
+            'id_usuario'    => $u->id,
+        ]);
+        $orden->estatus = 'autorizada_cliente';
+        $orden->cliente_autorizada_at = now();
+        $orden->save();
 
-  // Notificar a facturación con Notifier
-  Notifier::toRoleInCentro(
-      'facturacion',
-      $orden->id_centrotrabajo,
-      'OT autorizada por cliente',
-      "La OT #{$orden->id} está lista para facturar.",
-      route('facturas.createFromOrden',$orden->id)
-  );
+        // avisar a 'facturacion' del centro
+        $factUsers = Notify::usersByRoleAndCenter('facturacion', $orden->id_centrotrabajo);
+        Notify::send($factUsers, new OtAutorizadaParaFacturacion($orden));
 
-    return back()->with('ok','Has autorizado la OT.');
-  }
+        // Notificar a facturación con Notifier
+        Notifier::toRoleInCentro(
+            'facturacion',
+            $orden->id_centrotrabajo,
+            'OT autorizada por cliente',
+            "La OT #{$orden->id} está lista para facturar.",
+            route('facturas.createFromOrden',$orden->id)
+        );
+
+        $this->act('ordenes')
+            ->performedOn($orden)
+            ->event('cliente_autoriza')
+            ->log("OT #{$orden->id} autorizada por cliente");
+
+        return back()->with('ok','Has autorizado la OT.');
+    }
 }
