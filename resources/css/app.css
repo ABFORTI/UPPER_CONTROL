@@ -1,3 +1,38 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Roboto:wght@400;500&display=swap');
+
+/* tokens */
+:root{
+  --c-primary:#1A73E8;
+  --c-primary-dark:#1558b0;
+  --c-text:#2E3A59;
+  --c-surface:#F5F7FA;
+  --c-success:#34A853;
+  --c-danger:#EA4335;
+}
+
+/* base */
+html, body {
+  font-family: 'Roboto', system-ui, -apple-system, Segoe UI, Arial, sans-serif;
+  color: var(--c-text);
+  background: var(--c-surface);
+}
+
+/* helpers */
+.btn{ @apply inline-flex items-center justify-center px-4 py-2 rounded-md font-semibold transition-colors; }
+.btn-primary{ color:#fff; background:var(--c-primary); }
+.btn-primary:hover{ background:var(--c-primary-dark); }
+
+.badge{ @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-medium; }
+.badge-gray{ @apply bg-gray-100 text-gray-700; }
+.badge-green{ background:rgba(52,168,83,.15); color:var(--c-success); }
+.badge-red{ background:rgba(234,67,53,.15); color:var(--c-danger); }
+
+.card{ @apply bg-white rounded-xl shadow-card; }
+.card-section{ @apply p-4 md:p-6; }
+
+.table-head{ @apply text-white text-xs uppercase tracking-wider; background:#1f2a44; }
+.table-cell{ @apply p-3 whitespace-nowrap; }
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

@@ -2,135 +2,133 @@
 import { computed, watch } from 'vue'
 import { useForm } from '@inertiajs/vue3'
 
+
 const props = defineProps({
-  servicios: Array, // [{id,nombre,usa_tamanos}]
-  urls: Object      // { store: 'http://localhost/upper-control/public/solicitudes' }
+servicios: { type: Array, required: true },
+urls: { type: Object, required: true }, // { store }
 })
 
-// Estado con useForm (maneja POST, errores y "processing")
+
 const form = useForm({
-  id_servicio: props.servicios?.[0]?.id ?? null,
-  descripcion: '',
-  cantidad: 1, // para SIN tamaños
-  notas: '',
-  tamanos: { chico: 0, mediano: 0, grande: 0 }, // para CON tamaños
-  archivos: [] // opcional
+id_servicio: '',
+descripcion: '',
+cantidad: 1,
+tamanos: { chico:0, mediano:0, grande:0 },
+notas: '',
 })
 
-const servicioSel  = computed(() => props.servicios.find(s => s.id === Number(form.id_servicio)))
-const usaTamanos   = computed(() => !!servicioSel.value?.usa_tamanos)
-const totalTamanos = computed(() =>
-  Number(form.tamanos.chico||0) + Number(form.tamanos.mediano||0) + Number(form.tamanos.grande||0)
-)
 
-watch(usaTamanos, (v) => {
-  if (v) form.cantidad = totalTamanos.value || 0
-  else   form.tamanos = { chico:0, mediano:0, grande:0 }
-})
-watch(() => ({...form.tamanos}), () => { if (usaTamanos.value) form.cantidad = totalTamanos.value })
+const servicio = computed(() => props.servicios.find(s => s.id === Number(form.id_servicio)) || null)
+const usaTamanos = computed(() => !!servicio.value?.usa_tamanos)
+const totalTamanos = computed(() => (Number(form.tamanos.chico||0)+Number(form.tamanos.mediano||0)+Number(form.tamanos.grande||0)))
 
-function onFiles(e){ form.archivos = Array.from(e.target.files || []) }
 
-// Usamos un nombre distinto para evitar colisión con el método nativo submit()
-function handleSubmit() {
-  // Si hay archivos -> multipart
-  if (form.archivos.length) {
-    const fd = new FormData()
-    fd.append('id_servicio', Number(form.id_servicio))
-    fd.append('descripcion', form.descripcion)
-    fd.append('cantidad',    usaTamanos.value ? totalTamanos.value : Number(form.cantidad||0))
-    fd.append('notas',       form.notas || '')
-    if (usaTamanos.value) {
-      fd.append('tamanos', JSON.stringify({
-        chico: Number(form.tamanos.chico||0),
-        mediano: Number(form.tamanos.mediano||0),
-        grande: Number(form.tamanos.grande||0),
-      }))
-    }
-    form.archivos.forEach(f => fd.append('archivos[]', f))
-    form.post(props.urls.store, { forceFormData: true })
-  } else {
-    // Sin archivos -> transform enviando justo lo necesario
-    form.transform(d => ({
-      id_servicio: Number(d.id_servicio),
-      descripcion: d.descripcion,
-      cantidad:    usaTamanos.value ? totalTamanos.value : Number(d.cantidad||0),
-      notas:       d.notas,
-      tamanos:     usaTamanos.value ? {
-        chico: Number(d.tamanos.chico||0),
-        mediano: Number(d.tamanos.mediano||0),
-        grande: Number(d.tamanos.grande||0),
-      } : null,
-    })).post(props.urls.store, { preserveScroll: true })
-  }
+watch(usaTamanos, v => { if (v) form.cantidad = 0; else form.tamanos = {chico:0,mediano:0,grande:0} })
+
+
+function guardar(){
+const payload = {
+id_servicio: form.id_servicio,
+descripcion: form.descripcion,
+notas: form.notas,
+}
+if (usaTamanos.value) payload.tamanos = { chico:+form.tamanos.chico||0, mediano:+form.tamanos.mediano||0, grande:+form.tamanos.grande||0 }
+else payload.cantidad = +form.cantidad||0
+
+
+form.transform(() => payload).post(props.urls.store, { preserveScroll:true })
 }
 </script>
 
 <template>
-  <div class="p-6 max-w-2xl">
-    <h1 class="text-2xl font-bold mb-4">Nueva solicitud</h1>
-
-    <form @submit.prevent="handleSubmit" class="space-y-4">
-      <div>
-        <label class="block mb-1">Servicio</label>
-        <select v-model="form.id_servicio" class="border p-2 rounded w-full">
-          <option v-for="s in servicios" :key="s.id" :value="s.id">
-            {{ s.nombre }}{{ s.usa_tamanos ? ' (con tamaños)' : '' }}
-          </option>
-        </select>
-        <p v-if="form.errors.id_servicio" class="text-red-600 text-sm">{{ form.errors.id_servicio }}</p>
+  <div class="p-4 md:p-6">
+    <div class="card">
+      <div class="px-4 py-3 rounded-t-xl" style="background:#1f2a44">
+        <h2 class="text-white font-display font-semibold">AGREGAR SOLICITUD DE SERVICIO</h2>
       </div>
-
-      <div>
-        <label class="block mb-1">Descripción del producto</label>
-        <input v-model="form.descripcion" class="border p-2 rounded w-full" placeholder="Ej. Teléfonos" />
-        <p v-if="form.errors.descripcion" class="text-red-600 text-sm">{{ form.errors.descripcion }}</p>
-      </div>
-
-      <div v-if="!usaTamanos">
-        <label class="block mb-1">Cantidad</label>
-        <input type="number" min="1" v-model.number="form.cantidad" class="border p-2 rounded w-full" />
-        <p v-if="form.errors.cantidad" class="text-red-600 text-sm">{{ form.errors.cantidad }}</p>
-      </div>
-
-      <div v-else class="border rounded p-3">
-        <div class="font-medium mb-2">Cantidades por tamaño</div>
-        <div class="grid gap-2 md:grid-cols-3">
-          <div>
-            <label class="block text-sm mb-1">Chico</label>
-            <input type="number" min="0" v-model.number="form.tamanos.chico" class="border p-2 rounded w-full"/>
+      <div class="card-section">
+        <div class="grid md:grid-cols-3 gap-4">
+          <!-- Izquierda -->
+          <div class="md:col-span-2 grid gap-4">
+            <div class="grid md:grid-cols-3 gap-3">
+              <div class="md:col-span-1">
+                <label class="block text-sm mb-1">Servicio</label>
+                <select v-model="form.id_servicio" class="border p-2 rounded w-full">
+                  <option value="">— Selecciona —</option>
+                  <option v-for="s in servicios" :key="s.id" :value="s.id">{{ s.nombre }} <span v-if="s.usa_tamanos">(tamaños)</span></option>
+                </select>
+                <p v-if="form.errors.id_servicio" class="text-red-600 text-sm">{{ form.errors.id_servicio }}</p>
+              </div>
+              <div class="md:col-span-2">
+                <label class="block text-sm mb-1">Descripción del producto</label>
+                <input v-model="form.descripcion" class="border p-2 rounded w-full" placeholder="Ej. Monitores / Teléfonos" />
+                <p v-if="form.errors.descripcion" class="text-red-600 text-sm">{{ form.errors.descripcion }}</p>
+              </div>
+            </div>
+            <!-- Cantidad por pieza -->
+            <div v-if="!usaTamanos" class="grid md:grid-cols-4 gap-3 items-end">
+              <div class="md:col-span-1">
+                <label class="block text-sm mb-1">Cantidad</label>
+                <input type="number" min="1" v-model.number="form.cantidad" class="border p-2 rounded w-full" />
+                <p v-if="form.errors.cantidad" class="text-red-600 text-sm">{{ form.errors.cantidad }}</p>
+              </div>
+              <div class="md:col-span-3">
+                <div class="p-3 bg-gray-50 rounded border text-sm">Total: <strong>{{ form.cantidad || 0 }}</strong></div>
+              </div>
+            </div>
+            <!-- Cantidades por tamaño -->
+            <div v-else>
+              <label class="block text-sm mb-2">Cantidades por tamaño</label>
+              <div class="grid md:grid-cols-4 gap-3">
+                <div>
+                  <span class="text-xs opacity-70">Chico</span>
+                  <input type="number" min="0" v-model.number="form.tamanos.chico" class="border p-2 rounded w-full" />
+                </div>
+                <div>
+                  <span class="text-xs opacity-70">Mediano</span>
+                  <input type="number" min="0" v-model.number="form.tamanos.mediano" class="border p-2 rounded w-full" />
+                </div>
+                <div>
+                  <span class="text-xs opacity-70">Grande</span>
+                  <input type="number" min="0" v-model.number="form.tamanos.grande" class="border p-2 rounded w-full" />
+                </div>
+                <div class="flex items-end">
+                  <div class="p-3 bg-gray-50 rounded border text-sm w-full">Total: <strong>{{ totalTamanos }}</strong></div>
+                </div>
+              </div>
+              <p v-if="form.errors.tamanos" class="text-red-600 text-sm mt-1">{{ form.errors.tamanos }}</p>
+            </div>
+            <!-- Notas -->
+            <div>
+              <label class="block text-sm mb-1">Notas</label>
+              <textarea v-model="form.notas" rows="3" class="border p-2 rounded w-full" placeholder="Comentarios adicionales"></textarea>
+            </div>
           </div>
-          <div>
-            <label class="block text-sm mb-1">Mediano</label>
-            <input type="number" min="0" v-model.number="form.tamanos.mediano" class="border p-2 rounded w-full"/>
-          </div>
-          <div>
-            <label class="block text-sm mb-1">Grande</label>
-            <input type="number" min="0" v-model.number="form.tamanos.grande" class="border p-2 rounded w-full"/>
-          </div>
+          <!-- Sidebar Resumen -->
+          <aside class="grid gap-4">
+            <div class="border rounded p-4 bg-white">
+              <h3 class="font-semibold mb-2">Resumen</h3>
+              <ul class="text-sm space-y-1">
+                <li><span class="opacity-60">Servicio:</span> <strong>{{ servicio?.nombre || '—' }}</strong></li>
+                <li><span class="opacity-60">Tipo:</span> <strong>{{ usaTamanos ? 'Con tamaños' : 'Pieza' }}</strong></li>
+                <li v-if="!usaTamanos"><span class="opacity-60">Cantidad:</span> <strong>{{ form.cantidad || 0 }}</strong></li>
+                <li v-else>
+                  <div class="opacity-60">Tamaños</div>
+                  <div class="grid grid-cols-3 gap-2">
+                    <div>Ch: <strong>{{ form.tamanos.chico || 0 }}</strong></div>
+                    <div>Md: <strong>{{ form.tamanos.mediano || 0 }}</strong></div>
+                    <div>Gr: <strong>{{ form.tamanos.grande || 0 }}</strong></div>
+                  </div>
+                  <div class="mt-1">Total: <strong>{{ totalTamanos }}</strong></div>
+                </li>
+              </ul>
+            </div>
+            <button @click="guardar" :disabled="form.processing" class="btn btn-primary">
+              {{ form.processing ? 'Guardando…' : 'AGREGAR' }}
+            </button>
+          </aside>
         </div>
-        <div class="mt-2 text-sm">Total: <b>{{ totalTamanos }}</b></div>
-        <p v-if="form.errors.tamanos" class="text-red-600 text-sm">{{ form.errors.tamanos }}</p>
       </div>
-
-      <div>
-        <label class="block mb-1">Notas</label>
-        <textarea v-model="form.notas" rows="3" class="border p-2 rounded w-full"></textarea>
-      </div>
-
-      <div>
-        <label class="block mb-1">Adjuntos</label>
-        <input type="file" multiple @change="onFiles" />
-      </div>
-
-      <button type="submit" :disabled="form.processing"
-              class="px-4 py-2 bg-black text-white rounded disabled:opacity-60">
-        {{ form.processing ? 'Guardando…' : 'Guardar' }}
-      </button>
-
-      <div v-if="$page.props?.flash?.ok" class="p-2 bg-emerald-50 border border-emerald-200 rounded">
-        {{$page.props.flash.ok}}
-      </div>
-    </form>
+    </div>
   </div>
 </template>

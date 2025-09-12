@@ -63,13 +63,16 @@ function leave (e) {
                 <Link :href="route('dashboard')" :class="{ 'text-black font-semibold': url.includes('/dashboard') }">
                   Dashboard
                 </Link>
+                <Link :href="route('solicitudes.index')">
+                  Solicitudes
+                </Link>
                 <Link v-if="isAdmin || isCoord" :href="route('precios.index')" :class="{ 'text-black font-semibold': url.includes('/precios') }">
                   Precios
                 </Link>
                 <Link v-if="isAdmin" :href="route('admin.users.index')" :class="{ 'text-black font-semibold': url.includes('/admin/users') }">
                   Usuarios
                 </Link>
-                <Link :href="route('admin.centros.index')">Centros</Link> 
+                <Link v-if="isAdmin" :href="route('admin.centros.index')">Centros</Link> 
                 <Link v-if="$page.props.auth?.user?.roles?.includes('admin')" :href="route('admin.backups.index')">Backups</Link>
               </div>
             </div>

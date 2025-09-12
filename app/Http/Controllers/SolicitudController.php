@@ -37,19 +37,19 @@ class SolicitudController extends Controller
         $data = $q->paginate(10)->withQueryString();
 
         return Inertia::render('Solicitudes/Index', [
-            'data'      => $data,
-            'filters'   => $req->only(['estatus','servicio','folio','desde','hasta']),
-            'servicios' => ServicioEmpresa::select('id','nombre')->orderBy('nombre')->get(),
-            'urls'      => ['index' => route('solicitudes.index')],
-        ]);
+            'data' => $q->with(['servicio','centro','cliente'])->paginate(10)->withQueryString(),
+            'filters' => $req->only(['estatus','servicio','folio','desde','hasta']),
+            'servicios'=> ServicioEmpresa::select('id','nombre')->orderBy('nombre')->get(),
+            'urls' => ['index' => route('solicitudes.index')],
+            ]);
     }
 
     public function create()
     {
         return Inertia::render('Solicitudes/Create', [
-            // 👇 importante: enviamos usa_tamanos para mostrar los campos por tamaño
-            'servicios' => ServicioEmpresa::select('id','nombre','usa_tamanos')->orderBy('nombre')->get(),
-            'urls'      => ['store' => route('solicitudes.store')], // URL absoluta (respeta tu subcarpeta)
+            'servicios' => \App\Models\ServicioEmpresa::select('id','nombre','usa_tamanos')
+                            ->orderBy('nombre')->get(),
+            'urls' => ['store' => route('solicitudes.store')],
         ]);
     }
 
