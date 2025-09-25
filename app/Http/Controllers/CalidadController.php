@@ -105,14 +105,44 @@ class CalidadController extends Controller
   }
   // app/Http/Controllers/CalidadController.php
   public function index(\Illuminate\Http\Request $req) {
-    $u = $req->user();
-    $q = \App\Models\Orden::with('servicio','centro')
-        ->when(!$u->hasRole('admin'), fn($qq)=>$qq->where('id_centrotrabajo',$u->centro_trabajo_id))
-        ->where('estatus','completada')
-        ->where('calidad_resultado','pendiente')
-        ->orderByDesc('id')->paginate(10)->withQueryString();
+  $u = $req->user();
+  $estado = $req->string('estado')->toString(); // '', pendiente|validado|rechazado
+  $estadoNorm = in_array($estado, ['pendiente','validado','rechazado'], true) ? $estado : 'pendiente';
 
-    return \Inertia\Inertia::render('Calidad/Index', ['data'=>$q]);
+  $q = \App\Models\Orden::with('servicio','centro')
+    ->when(!$u->hasRole('admin'), fn($qq)=>$qq->where('id_centrotrabajo',$u->centro_trabajo_id))
+    // Lógica de filtrado:
+    // - Pendientes: sólo OTs completadas y calidad pendiente
+    // - Validadas/Rechazadas: mostrar independientemente de si pasaron a 'autorizada_cliente'
+    ->when($estadoNorm === 'pendiente', function($qq){
+      $qq->where('estatus','completada')->where('calidad_resultado','pendiente');
+    })
+    ->when($estadoNorm !== 'pendiente', function($qq) use ($estadoNorm){
+      $qq->where('calidad_resultado',$estadoNorm);
+    })
+    ->orderByDesc('id');
+
+  $data = $q->paginate(10)->withQueryString();
+  $data->getCollection()->transform(function($o){
+    return [
+      'id' => $o->id,
+      'servicio' => ['nombre' => $o->servicio?->nombre],
+      'centro'   => ['nombre' => $o->centro?->nombre],
+      'estatus'  => $o->estatus,
+      'calidad_resultado' => $o->calidad_resultado,
+      'created_at' => $o->created_at,
+      'urls' => [
+        'review' => route('calidad.show', $o),
+        'show'   => route('ordenes.show', $o),
+      ],
+    ];
+  });
+
+  return \Inertia\Inertia::render('Calidad/Index', [
+    'data'   => $data,
+    'estado' => $estadoNorm,
+    'urls'   => [ 'index' => route('calidad.index') ],
+  ]);
   }
 
 }

@@ -7,6 +7,7 @@ const props = defineProps({
   urls:        { type: Object, required: true },   // { asignar_tl, avances_store, evidencias_store, evidencias_destroy, calidad_validar, calidad_rechazar, cliente_autorizar, facturar, pdf }
   can:         { type: Object, default: () => ({}) }, // { reportarAvance:bool, asignar_tl:bool }
   teamLeaders: { type: Array,  default: () => [] },
+  cotizacion:  { type: Object, default: () => ({}) },
 })
 
 // colecciones “a prueba de null”
@@ -139,6 +140,34 @@ function borrarEvidencia(id){
     </table>
     <div v-else class="text-sm opacity-70">Sin ítems.</div>
 
+    <!-- Cotización -->
+    <div v-if="cotizacion?.lines?.length" class="mt-4 border rounded">
+      <div class="p-2 font-medium">Totales</div>
+      <table class="w-full text-sm">
+        <thead class="bg-gray-50">
+          <tr>
+            <th class="p-2 text-left">Concepto</th>
+            <th class="p-2 text-right">Cantidad</th>
+            <th class="p-2 text-right">P. Unitario</th>
+            <th class="p-2 text-right">Subtotal</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="(l,i) in cotizacion.lines" :key="i" class="border-t">
+            <td class="p-2">{{ l.label }}</td>
+            <td class="p-2 text-right">{{ l.cantidad }}</td>
+            <td class="p-2 text-right">${{ Number(l.pu||0).toFixed(2) }}</td>
+            <td class="p-2 text-right">${{ Number(l.subtotal||0).toFixed(2) }}</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="p-3 grid gap-1 justify-end">
+        <div class="text-sm">Subtotal: <strong>${{ Number(cotizacion.subtotal||0).toFixed(2) }}</strong></div>
+        <div class="text-sm">IVA ({{ Number((cotizacion.iva_rate||0)*100).toFixed(0) }}%): <strong>${{ Number(cotizacion.iva||0).toFixed(2) }}</strong></div>
+        <div class="text-base font-semibold">Total: <strong>${{ Number(cotizacion.total||0).toFixed(2) }}</strong></div>
+      </div>
+    </div>
+
     <!-- Guardar avance -->
     <div v-if="can?.reportarAvance" class="mt-2">
       <textarea v-model="avForm.comentario" rows="2" class="border p-2 rounded w-full md:w-1/2"
@@ -213,23 +242,23 @@ function borrarEvidencia(id){
 
     <!-- Acciones de Calidad / Cliente / Facturación -->
     <div class="mt-6 flex flex-wrap gap-2">
-      <button v-if="orden?.estatus==='completada' && orden?.calidad_resultado==='pendiente'"
+      <button v-if="can?.calidad_validar"
               @click="validarCalidad" class="px-3 py-2 rounded bg-green-600 text-white">
         Validar Calidad
       </button>
 
-      <div v-if="orden?.estatus==='completada' && orden?.calidad_resultado==='pendiente'"
+      <div v-if="can?.calidad_validar"
            class="flex gap-2 items-center">
         <input v-model="obs" class="border p-2 rounded" placeholder="Motivo del rechazo" />
         <button @click="rechazarCalidad" class="px-3 py-2 rounded bg-red-600 text-white">Rechazar</button>
       </div>
 
-      <button v-if="orden?.calidad_resultado==='validado'"
+      <button v-if="can?.cliente_autorizar"
               @click="autorizarCliente" class="px-3 py-2 rounded bg-black text-white">
         Autorizar como Cliente
       </button>
 
-      <a v-if="orden?.estatus==='autorizada_cliente'" :href="urls.facturar"
+      <a v-if="can?.facturar" :href="urls.facturar"
          class="px-3 py-2 rounded bg-indigo-600 text-white">
         Ir a Facturación
       </a>

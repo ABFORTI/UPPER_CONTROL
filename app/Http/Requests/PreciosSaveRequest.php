@@ -18,6 +18,7 @@ class PreciosSaveRequest extends FormRequest {
       'items.*.tamanos.chico' => ['nullable','numeric','min:0'],
       'items.*.tamanos.mediano' => ['nullable','numeric','min:0'],
       'items.*.tamanos.grande' => ['nullable','numeric','min:0'],
+      'items.*.tamanos.jumbo' => ['nullable','numeric','min:0'],
     ];
   }
 }

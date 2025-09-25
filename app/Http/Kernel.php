@@ -61,6 +61,8 @@ class Kernel extends HttpKernel
             \App\Http\Middleware\TrimStrings::class,
             \Illuminate\Routing\Middleware\SubstituteBindings::class,
             \App\Http\Middleware\ImpersonationFlags::class,
+            // Restringe navegación para usuarios cuyo único rol es 'calidad'
+            \App\Http\Middleware\RestrictCalidadOnly::class,
         ],
 
         'api' => [

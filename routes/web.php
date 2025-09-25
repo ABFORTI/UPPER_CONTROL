@@ -105,6 +105,8 @@ Route::middleware('auth')->group(function () {
  * ========================== */
 Route::middleware('auth')->group(function () {
     // Calidad
+    Route::get('/calidad', [CalidadController::class,'index'])
+        ->middleware('role:calidad|admin')->name('calidad.index');
     Route::get('/ordenes/{orden}/calidad', [CalidadController::class,'show'])
         ->middleware('role:calidad|admin')->name('calidad.show');
     Route::post('/ordenes/{orden}/calidad/validar', [CalidadController::class,'validar'])
@@ -117,6 +119,8 @@ Route::middleware('auth')->group(function () {
         ->name('cliente.autorizar');
 
     // Facturas
+    Route::get('/facturas', [FacturaController::class,'index'])
+        ->middleware('role:facturacion|admin')->name('facturas.index');
     Route::get('/ordenes/{orden}/facturar', [FacturaController::class,'createFromOrden'])
         ->middleware('role:facturacion|admin')->name('facturas.createFromOrden');
     Route::post('/ordenes/{orden}/facturar', [FacturaController::class,'storeFromOrden'])

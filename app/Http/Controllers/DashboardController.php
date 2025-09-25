@@ -40,12 +40,41 @@ class DashboardController extends Controller
         $otsTotal        = (clone $otsQuery)->count();
         $otsCompletadas  = (clone $otsQuery)->where('estatus','completada')->count();
         $otsCalPendiente = (clone $otsQuery)->where('estatus','completada')->where('calidad_resultado','pendiente')->count();
+        $otsAutCliente   = (clone $otsQuery)->where('estatus','autorizada_cliente')->count();
+
+        // Distribución por estatus (todas las principales)
+        $estatusDistrib = (clone $otsQuery)
+            ->selectRaw('estatus, COUNT(*) c')
+            ->groupBy('estatus')->pluck('c','estatus');
+        $estatusMap = ['generada'=>0,'asignada'=>0,'en_proceso'=>0,'completada'=>0,'autorizada_cliente'=>0];
+        foreach ($estatusDistrib as $k=>$v) { if(array_key_exists($k,$estatusMap)) $estatusMap[$k]=(int)$v; }
+
+        // Calidad breakdown (solo OTs completadas en rango / centro)
+        $calidadDistrib = (clone $otsQuery)
+            ->where('estatus','completada')
+            ->selectRaw('calidad_resultado, COUNT(*) c')
+            ->groupBy('calidad_resultado')->pluck('c','calidad_resultado');
+        $calidadMap = ['pendiente'=>0,'validado'=>0,'rechazado'=>0];
+        foreach ($calidadDistrib as $k=>$v) { if(array_key_exists($k,$calidadMap)) $calidadMap[$k]=(int)$v; }
+        $calidadTotalEvaluables = array_sum($calidadMap);
+        $tasaValidacion = $calidadTotalEvaluables > 0 ? round(($calidadMap['validado'] / $calidadTotalEvaluables) * 100,1) : 0.0;
 
         $factQuery = Factura::whereBetween('created_at', [$desde, $hasta])
             ->when($centroId, fn($q)=>$q->whereHas('orden', fn($w)=>$w->where('id_centrotrabajo',$centroId)));
 
         $factPendientes = (clone $factQuery)->where('estatus','pendiente')->count();
         $montoFacturado = (clone $factQuery)->whereIn('estatus', ['facturado','cobrado','pagado'])->sum('total');
+        $factByStatus = (clone $factQuery)
+            ->selectRaw('estatus, COUNT(*) c')
+            ->groupBy('estatus')->pluck('c','estatus');
+        $factMap = ['pendiente'=>0,'facturado'=>0,'cobrado'=>0,'pagado'=>0];
+        foreach ($factByStatus as $k=>$v){ if(array_key_exists($k,$factMap)) $factMap[$k]=(int)$v; }
+
+        // Serie ingresos diarios (facturas pagadas o cobradas) últimos 30 días (o rango seleccionado)
+        $ingresosDiarios = (clone $factQuery)
+            ->whereIn('estatus',['cobrado','pagado'])
+            ->selectRaw('DATE(created_at) d, SUM(total) t')
+            ->groupBy('d')->orderBy('d')->get();
 
         // --- Serie: OTs por día por estatus (tabla simple)
         $porDia = (clone $otsQuery)
@@ -88,13 +117,21 @@ class DashboardController extends Controller
                 'ots'         => $otsTotal,
                 'ots_completadas' => $otsCompletadas,
                 'ots_cal_pend'    => $otsCalPendiente,
+                'ots_aut_cliente' => $otsAutCliente,
                 'fact_pendientes' => $factPendientes,
                 'monto_facturado' => (float)$montoFacturado,
+                'tasa_validacion' => $tasaValidacion,
             ],
             'series' => [
                 'ots_por_dia'   => $porDia,
                 'fact_por_mes'  => $porMes,
                 'top_servicios' => $topServicios,
+                'ingresos_diarios' => $ingresosDiarios,
+            ],
+            'distribuciones' => [
+                'estatus_ots' => $estatusMap,
+                'calidad'     => $calidadMap,
+                'facturas'    => $factMap,
             ],
             'filters' => [
                 'desde'  => $desde->toDateString(),

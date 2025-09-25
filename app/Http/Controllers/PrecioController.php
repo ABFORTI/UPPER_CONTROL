@@ -10,6 +10,8 @@ use App\Models\ServicioCentro;
 use App\Models\ServicioTamano;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Auth;
+use App\Models\User;
 use Inertia\Inertia;
 
 class PrecioController extends Controller
@@ -41,6 +43,7 @@ class PrecioController extends Controller
           'chico'   => optional($sc?->tamanos->firstWhere('tamano','chico'))->precio,
           'mediano' => optional($sc?->tamanos->firstWhere('tamano','mediano'))->precio,
           'grande'  => optional($sc?->tamanos->firstWhere('tamano','grande'))->precio,
+          'jumbo'   => optional($sc?->tamanos->firstWhere('tamano','jumbo'))->precio,
         ],
       ];
     });
@@ -74,7 +77,7 @@ class PrecioController extends Controller
         );
 
         if ($usaTamanos) {
-          foreach (['chico','mediano','grande'] as $t) {
+          foreach (['chico','mediano','grande','jumbo'] as $t) {
             $precio = (float)($item['tamanos'][$t] ?? 0);
             ServicioTamano::updateOrCreate(
               ['id_servicio_centro'=>$sc->id, 'tamano'=>$t],
@@ -92,9 +95,10 @@ class PrecioController extends Controller
   }
 
   private function authorizeAdminOrCoord(): void {
-    $u = auth()->user();
-    if ($u->hasRole('admin')) return;
-    if ($u->hasRole('coordinador')) return;
+    /** @var User|null $u */
+    $u = Auth::user();
+    if (!$u) abort(403);
+    if ($u->hasRole('admin') || $u->hasRole('coordinador')) return;
     abort(403);
   }
 }

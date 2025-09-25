@@ -6,6 +6,7 @@ use App\Models\Orden;
 use App\Models\Factura;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
+use function auth; // para que el analizador reconozca el helper
 use Barryvdh\DomPDF\Facade\Pdf as PDF;
 use App\Services\Notifier;
 use App\Jobs\GenerateFacturaPdf;
@@ -13,6 +14,43 @@ use Illuminate\Support\Facades\Storage;
 
 class FacturaController extends Controller
 {
+  public function index(Request $request)
+  {
+    $u = $request->user();
+    if (!$u->hasRole('admin') && !$u->hasRole('facturacion')) abort(403);
+
+    $estatus = $request->get('estatus'); // opcional
+
+    $q = Factura::query()->with(['orden.servicio','orden.centro']);
+    if ($estatus) {
+        $q->where('estatus', $estatus);
+    }
+    // Restricción por centro si no es admin
+    if (!$u->hasRole('admin')) {
+        $q->whereHas('orden', fn($qq)=>$qq->where('id_centrotrabajo', $u->centro_trabajo_id));
+    }
+
+    $facturas = $q->latest('id')->limit(100)->get()->map(function($f){
+        return [
+          'id' => $f->id,
+          'orden_id' => $f->id_orden,
+          'servicio' => $f->orden?->servicio?->nombre,
+          'centro'   => $f->orden?->centro?->nombre,
+          'total'    => $f->total,
+          'estatus'  => $f->estatus,
+          'folio'    => $f->folio_externo,
+          'created_at' => $f->created_at?->toDateTimeString(),
+          'url' => route('facturas.show', $f->id),
+        ];
+    });
+
+    return Inertia::render('Facturas/Index', [
+        'items' => $facturas,
+        'filtros' => [ 'estatus' => $estatus ],
+        'urls' => [ 'base' => route('facturas.index') ],
+        'estatuses' => ['pendiente','facturado','por_pagar','pagado'],
+    ]);
+  }
   
 public function pdf(\App\Models\Factura $factura)
 {
@@ -155,7 +193,7 @@ public function pdf(\App\Models\Factura $factura)
   }
 
   private function authFacturacion(\App\Models\Orden $orden): void {
-    $u = auth()->user();
+    $u = request()->user();
     if ($u->hasRole('admin')) return;
     if (!$u->hasRole('facturacion')) abort(403);
     if ((int)$u->centro_trabajo_id !== (int)$orden->id_centrotrabajo) abort(403);

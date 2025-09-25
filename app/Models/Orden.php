@@ -10,7 +10,8 @@ class Orden extends Model {
     protected $table='ordenes_trabajo';
     protected $fillable = [
         'id_solicitud','id_centrotrabajo','id_servicio','team_leader_id',
-        'estatus','calidad_resultado','total_planeado','total_real'
+        'estatus','calidad_resultado','total_planeado','total_real',
+        'subtotal','iva','total'
     ];
     public function solicitud(){ return $this->belongsTo(Solicitud::class,'id_solicitud'); }
     public function centro(){ return $this->belongsTo(CentroTrabajo::class,'id_centrotrabajo'); }
