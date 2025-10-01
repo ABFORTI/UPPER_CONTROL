@@ -106,8 +106,11 @@ class CalidadController extends Controller
   // app/Http/Controllers/CalidadController.php
   public function index(\Illuminate\Http\Request $req) {
   $u = $req->user();
-  $estado = $req->string('estado')->toString(); // '', pendiente|validado|rechazado
-  $estadoNorm = in_array($estado, ['pendiente','validado','rechazado'], true) ? $estado : 'pendiente';
+  $estado = $req->string('estado')->toString(); // 'todos' | pendiente | validado | rechazado | ''
+  // Aceptar 'todos' como "sin filtro"; si viene vacío o distinto, usar 'todos' por defecto
+  $estadoNorm = in_array($estado, ['pendiente','validado','rechazado','todos'], true)
+    ? $estado
+    : 'todos';
 
   $q = \App\Models\Orden::with('servicio','centro')
     ->when(!$u->hasRole('admin'), fn($qq)=>$qq->where('id_centrotrabajo',$u->centro_trabajo_id))
@@ -117,7 +120,7 @@ class CalidadController extends Controller
     ->when($estadoNorm === 'pendiente', function($qq){
       $qq->where('estatus','completada')->where('calidad_resultado','pendiente');
     })
-    ->when($estadoNorm !== 'pendiente', function($qq) use ($estadoNorm){
+    ->when($estadoNorm !== 'pendiente' && $estadoNorm !== 'todos', function($qq) use ($estadoNorm){
       $qq->where('calidad_resultado',$estadoNorm);
     })
     ->orderByDesc('id');

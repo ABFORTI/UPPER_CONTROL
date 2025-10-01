@@ -26,14 +26,18 @@ class OrdenController extends Controller
     {
         $this->authorize('view', $orden);
 
-        if ($orden->pdf_path && Storage::exists($orden->pdf_path)) {
-            return Storage::download($orden->pdf_path, "OT_{$orden->id}.pdf");
-        }
+                if ($orden->pdf_path && Storage::exists($orden->pdf_path)) {
+                        $abs = Storage::path($orden->pdf_path);
+                        return response()->file($abs, [
+                            'Content-Type' => 'application/pdf',
+                            'Content-Disposition' => 'inline; filename="OT_' . $orden->id . '.pdf"'
+                        ]);
+                }
 
         // Fallback: generar al vuelo (por si el worker aún no corrió)
         $orden->load(['servicio','centro','teamLeader','items']);
         $pdf = PDF::loadView('pdf.orden', ['orden'=>$orden])->setPaper('letter');
-        return $pdf->download("OT_{$orden->id}.pdf");
+        return $pdf->stream("OT_{$orden->id}.pdf");
     }
 
     /** Form: Generar OT desde solicitud aprobada */
@@ -400,7 +404,7 @@ class OrdenController extends Controller
             'id'       => $req->integer('id') ?: null,
         ];
 
-        $q = Orden::with(['servicio','centro','teamLeader','solicitud'])
+    $q = Orden::with(['servicio','centro','teamLeader','solicitud','factura'])
             ->when(!$isAdminOrFact, fn($qq)=>$qq->where('id_centrotrabajo',$u->centro_trabajo_id))
             ->when($isTL, fn($qq)=>$qq->where('team_leader_id',$u->id))
             ->when($isCliente, fn($qq)=>$qq->whereHas('solicitud', fn($w)=>$w->where('id_cliente',$u->id)))
@@ -416,10 +420,13 @@ class OrdenController extends Controller
         $data = $q->paginate(10)->withQueryString();
 
         $data->getCollection()->transform(function ($o) {
+            // Derivar estatus de facturación: si hay factura vinculada, usar su estatus; si no, "sin_factura".
+            $factStatus = optional($o->factura)->estatus ?? 'sin_factura';
             return [
                 'id' => $o->id,
                 'estatus' => $o->estatus,
                 'calidad_resultado' => $o->calidad_resultado,
+                'facturacion' => $factStatus,
                 'created_at' => $o->created_at,
                 'servicio' => ['nombre' => $o->servicio?->nombre],
                 'centro'   => ['nombre' => $o->centro?->nombre],

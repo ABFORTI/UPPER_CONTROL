@@ -17,6 +17,17 @@ html, body {
   background: var(--c-surface);
 }
 
+/* headings - Poppins */
+h1, h2, h3, .heading {
+  font-family: 'Poppins', system-ui, -apple-system, Segoe UI, Arial, sans-serif;
+  color: var(--c-text);
+}
+.section-title { font-family: 'Poppins', system-ui, -apple-system, Segoe UI, Arial, sans-serif; font-weight:600; color: var(--c-text); }
+
+/* alerts */
+.alert-success { background: rgba(52,168,83,.12); color: var(--c-success); border:1px solid rgba(52,168,83,.25); border-radius: 8px; padding: 8px 12px; }
+.alert-danger  { background: rgba(234,67,53,.12); color: var(--c-danger); border:1px solid rgba(234,67,53,.25); border-radius: 8px; padding: 8px 12px; }
+
 /* helpers */
 .btn{ @apply inline-flex items-center justify-center px-4 py-2 rounded-md font-semibold transition-colors; }
 .btn-primary{ color:#fff; background:var(--c-primary); }

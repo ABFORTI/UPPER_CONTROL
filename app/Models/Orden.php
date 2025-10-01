@@ -26,6 +26,8 @@ class Orden extends Model {
     return $this->morphMany(\App\Models\Aprobacion::class, 'aprobable');
 }
 
+    public function factura(){ return $this->hasOne(\App\Models\Factura::class,'id_orden'); }
+
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()

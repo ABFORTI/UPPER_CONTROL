@@ -132,6 +132,8 @@ Route::middleware('auth')->group(function () {
 
     Route::post('/facturas/{factura}/facturado', [FacturaController::class,'marcarFacturado'])
         ->middleware('role:facturacion|admin')->name('facturas.facturado');
+    Route::post('/facturas/{factura}/xml', [FacturaController::class,'uploadXml'])
+        ->middleware('role:facturacion|admin')->name('facturas.xml');
     Route::post('/facturas/{factura}/cobro', [FacturaController::class,'marcarCobro'])
         ->middleware('role:facturacion|admin')->name('facturas.cobro');
     Route::post('/facturas/{factura}/pagado', [FacturaController::class,'marcarPagado'])

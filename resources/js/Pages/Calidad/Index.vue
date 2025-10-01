@@ -1,6 +1,6 @@
 <!-- resources/js/Pages/Calidad/Index.vue -->
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { router, Link } from '@inertiajs/vue3'
 
 const props = defineProps({
@@ -10,70 +10,106 @@ const props = defineProps({
 })
 
 const rows = computed(()=> props.data?.data ?? [])
-const estadoSafe = computed(() => props.estado || 'pendiente')
 
-function goEstado(e) {
-  router.get(props.urls.index, { estado: e }, { preserveState:true, preserveScroll:true, replace:true })
+// Filtros unificados por estatus (píldoras) con conjunto fijo
+const sel = ref((props.estado && props.estado !== 'todos') ? props.estado : '')
+const estatuses = computed(() => ['pendiente', 'validado', 'rechazado'])
+function applyFilter(){
+  const params = { estado: sel.value || 'todos' }
+  router.get(props.urls.index, params, { preserveState:true, preserveScroll:true, replace:true })
+}
+
+// Exportar/Copy (cliente)
+function toCsv(items){
+  const headers = ['ID','Servicio','Centro','Calidad','Fecha']
+  const rows = items.map(o => [
+    o.id,
+    o.servicio?.nombre || '-',
+    o.centro?.nombre || '-',
+    o.calidad_resultado || '-',
+    o.created_at || ''
+  ])
+  const csv = [headers, ...rows].map(r => r.map(v => `"${String(v??'').replaceAll('"','""')}"`).join(',')).join('\n')
+  return csv
+}
+function downloadExcel(){
+  const csv = toCsv(rows.value || [])
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'calidad.csv'
+  a.click()
+  URL.revokeObjectURL(url)
+}
+async function copyTable(){
+  try{
+    const tsv = (rows.value||[]).map(o => [o.id, o.servicio?.nombre||'-', o.centro?.nombre||'-', o.calidad_resultado||'-', o.created_at||''].join('\t')).join('\n')
+    await navigator.clipboard.writeText(tsv)
+  }catch(e){ console.warn('No se pudo copiar:', e) }
 }
 </script>
 
 <template>
-  <div class="p-6">
-    <h1 class="text-2xl font-bold mb-4">Calidad</h1>
+  <div class="p-6 max-w-none">
+    <h1 class="text-3xl font-extrabold tracking-tight mb-4 uppercase">Calidad</h1>
 
-    <!-- Tabs de estado -->
-    <div class="flex gap-2 mb-4">
-      <button @click="goEstado('pendiente')"
-              class="px-3 py-1.5 rounded border"
-        :class="{ 'bg-black text-white': estadoSafe==='pendiente' }">Pendientes</button>
-      <button @click="goEstado('validado')"
-              class="px-3 py-1.5 rounded border"
-        :class="{ 'bg-black text-white': estadoSafe==='validado' }">Validadas</button>
-      <button @click="goEstado('rechazado')"
-              class="px-3 py-1.5 rounded border"
-        :class="{ 'bg-black text-white': estadoSafe==='rechazado' }">Rechazadas</button>
-    </div>
+    <div class="rounded-xl border bg-white">
+      <!-- Acciones y filtros (alineados a la derecha) -->
+      <div class="px-8 py-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+        <div class="flex items-center gap-2">
+          <button @click="downloadExcel" class="px-4 py-2 rounded text-white" style="background:#22c55e">Excel</button>
+          <button @click="copyTable" class="px-4 py-2 rounded text-white" style="background:#64748b">Copiar</button>
+        </div>
 
-    <!-- Tabla -->
-    <div class="overflow-x-auto">
-      <table class="min-w-full text-sm border">
-        <thead>
-          <tr class="bg-gray-50 text-left">
-            <th class="p-2">ID</th>
-            <th class="p-2">Servicio</th>
-            <th class="p-2">Centro</th>
-            <th class="p-2">Calidad</th>
-            <th class="p-2">Fecha</th>
-            <th class="p-2">Acciones</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="o in rows" :key="o.id" class="border-t">
-            <td class="p-2">#{{ o.id }}</td>
-            <td class="p-2">{{ o.servicio?.nombre }}</td>
-            <td class="p-2">{{ o.centro?.nombre }}</td>
-            <td class="p-2">{{ o.calidad_resultado }}</td>
-            <td class="p-2">{{ o.created_at }}</td>
-            <td class="p-2 space-x-2">
-              <template v-if="estadoSafe==='pendiente'">
-                <a :href="o.urls.review" class="px-3 py-1.5 rounded bg-emerald-600 text-white">Revisar</a>
-              </template>
-              <a :href="o.urls.show" class="text-blue-600 underline">Ver OT</a>
-            </td>
-          </tr>
-          <tr v-if="rows.length===0">
-            <td colspan="6" class="p-4 text-center opacity-70">No hay registros.</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+        <div class="flex flex-wrap items-center gap-2 w-full lg:w-auto justify-end">
+          <div class="flex flex-wrap items-center gap-2">
+            <button @click="sel=''; applyFilter()" :class="['px-3 py-1 rounded-full text-sm border', sel==='' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-700 border-slate-300']">Todos</button>
+            <button v-for="e in estatuses" :key="e" @click="sel=e; applyFilter()" :class="['px-3 py-1 rounded-full text-sm border capitalize', sel===e ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-700 border-slate-300']">{{ e }}</button>
+          </div>
+        </div>
+      </div>
 
-    <!-- Paginación -->
-    <div class="mt-4 flex gap-2">
-      <Link v-for="link in data.links" :key="link.label" :href="link.url || '#'"
-            class="px-2 py-1 border rounded"
-            :class="{'bg-black text-white': link.active}"
-            v-html="link.label" />
+      <!-- Tabla -->
+      <div class="px-8 pb-4">
+        <div class="rounded-lg overflow-hidden shadow-sm">
+          <table class="min-w-full text-base">
+            <thead class="bg-slate-800 text-white uppercase text-sm">
+              <tr>
+                <th class="px-4 py-3 text-left">ID</th>
+                <th class="px-4 py-3 text-left">Servicio</th>
+                <th class="px-4 py-3 text-left">Centro</th>
+                <th class="px-4 py-3 text-left">Calidad</th>
+                <th class="px-4 py-3 text-left">Fecha</th>
+                <th class="px-4 py-3 text-left">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="o in rows" :key="o.id" class="border-t even:bg-slate-50 hover:bg-slate-100/60">
+                <td class="px-4 py-3 font-mono">#{{ o.id }}</td>
+                <td class="px-4 py-3">{{ o.servicio?.nombre }}</td>
+                <td class="px-4 py-3">{{ o.centro?.nombre }}</td>
+                <td class="px-4 py-3">{{ o.calidad_resultado }}</td>
+                <td class="px-4 py-3">{{ o.created_at }}</td>
+                <td class="px-4 py-3">
+                  <a :href="o.urls.show" class="text-blue-600 underline">Ver OT</a>
+                </td>
+              </tr>
+              <tr v-if="rows.length===0">
+                <td colspan="6" class="p-4 text-center opacity-70">No hay registros.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Paginación -->
+      <div class="px-8 py-3 flex gap-2 justify-end">
+        <Link v-for="link in data.links" :key="link.label" :href="link.url || '#'"
+              class="px-3 py-1.5 rounded border text-sm"
+              :class="{'bg-slate-900 text-white border-slate-900': link.active}"
+              v-html="link.label" />
+      </div>
     </div>
   </div>
 </template>
