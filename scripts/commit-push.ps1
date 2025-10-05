@@ -12,6 +12,10 @@ try {
         Set-Location -Path (Join-Path $PSScriptRoot '..')
     }
 
+    # Detectar rama actual
+    $branch = (git rev-parse --abbrev-ref HEAD).Trim()
+    if (-not $branch) { throw "No se pudo detectar la rama actual" }
+
     if (-not $Message -or $Message.Trim().Length -eq 0) {
         $Message = Read-Host -Prompt 'Mensaje del commit'
     }
@@ -30,11 +34,11 @@ try {
         Write-Host 'No hay cambios para commitear.' -ForegroundColor Yellow
     }
 
-    Write-Host '-> Actualizando desde origin/master (rebase)...' -ForegroundColor Cyan
-    git pull --rebase origin master
+    Write-Host "-> Actualizando desde origin/$branch (rebase)..." -ForegroundColor Cyan
+    git pull --rebase origin $branch
 
-    Write-Host '-> Enviando a origin/master...' -ForegroundColor Cyan
-    git push origin master
+    Write-Host "-> Enviando a origin/$branch..." -ForegroundColor Cyan
+    git push origin $branch
 
     Write-Host 'Listo ✅' -ForegroundColor Green
 }

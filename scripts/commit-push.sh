@@ -19,10 +19,11 @@ else
   echo "No hay cambios para commitear."
 fi
 
-echo "-> Actualizando desde origin/master (rebase)..."
-git pull --rebase origin master
+branch=$(git rev-parse --abbrev-ref HEAD)
+echo "-> Actualizando desde origin/${branch} (rebase)..."
+git pull --rebase origin "${branch}"
 
-echo "-> Enviando a origin/master..."
-git push origin master
+echo "-> Enviando a origin/${branch}..."
+git push origin "${branch}"
 
 echo "Listo ✅"
