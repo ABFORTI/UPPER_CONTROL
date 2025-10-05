@@ -1,6 +1,6 @@
 Param(
-    [Parameter(Position=0)]
-    [string]$Message
+    [Parameter(Position=0, ValueFromRemainingArguments=$true)]
+    [string[]]$MessageTokens
 )
 
 Set-StrictMode -Version Latest
@@ -15,6 +15,8 @@ try {
     # Detectar rama actual
     $branch = (git rev-parse --abbrev-ref HEAD).Trim()
     if (-not $branch) { throw "No se pudo detectar la rama actual" }
+
+    $Message = ($MessageTokens -join ' ')
 
     if (-not $Message -or $Message.Trim().Length -eq 0) {
         $Message = Read-Host -Prompt 'Mensaje del commit'
