@@ -88,6 +88,12 @@ class SolicitudController extends Controller
         $serv = ServicioEmpresa::findOrFail($req->id_servicio);
         $u    = $req->user();
 
+        if (!$u || !$u->centro_trabajo_id) {
+            return back()->withErrors([
+                'centro' => 'Tu usuario no tiene un centro de trabajo asignado. Pide a un administrador que lo configure.'
+            ])->withInput();
+        }
+
     if ($serv->usa_tamanos) {
             // Normaliza payload y valida total
             $t = $req->input('tamanos');

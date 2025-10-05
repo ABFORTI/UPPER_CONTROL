@@ -17,6 +17,10 @@ class PricingService
      */
     public function precioUnitario(int $centroId, int $servicioId, ?string $tamano = null): float
     {
+        // Tolerancia: si vienen ids inválidos, sin precio definido
+        if (!$centroId || !$servicioId) {
+            return 0.0;
+        }
         // 1) Encontrar el registro de servicios_centro para el centro y servicio
         $sc = DB::table('servicios_centro')
             ->where('id_centrotrabajo', $centroId)
