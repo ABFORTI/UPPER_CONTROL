@@ -14,22 +14,30 @@ try {
     }
 
     Write-Host '-> Obteniendo del remoto (fetch)...' -ForegroundColor Cyan
-    git fetch --prune origin
+    git fetch --prune origin | Out-Null
 
-    # ¿Existe localmente?
-    git rev-parse --verify $Branch 2>$null
+    # ¿Existe localmente? (silencioso)
+    git show-ref --verify --quiet "refs/heads/$Branch"
     $existsLocal = $LASTEXITCODE -eq 0
+
+    # ¿Existe en remoto? (capturar salida y comprobar no vacía)
+    $remoteRef = git ls-remote --heads origin -- "$Branch"
+    $existsRemote = -not [string]::IsNullOrWhiteSpace(($remoteRef -join ''))
 
     if ($existsLocal) {
         Write-Host "-> Cambiando a la rama '$Branch'..." -ForegroundColor Cyan
-        git switch $Branch
-    } else {
+        git switch $Branch | Out-Null
+    }
+    elseif ($existsRemote) {
         Write-Host "-> Creando rama local '$Branch' rastreando origin/$Branch..." -ForegroundColor Cyan
-        git switch -c $Branch --track "origin/$Branch"
+        git switch -c $Branch --track "origin/$Branch" | Out-Null
+    }
+    else {
+        throw "La rama 'origin/$Branch' no existe. Verifica el nombre o créala antes de obtenerla."
     }
 
     Write-Host "-> Actualizando '$Branch' con rebase..." -ForegroundColor Cyan
-    git pull --rebase --autostash origin $Branch
+    git pull --rebase --autostash origin $Branch | Out-Null
 
     Write-Host 'Listo ✅' -ForegroundColor Green
 }
