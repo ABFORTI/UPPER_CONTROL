@@ -54,11 +54,15 @@ Route::middleware('auth')->group(function () {
 });
 
 /* ==========
- |  PRECIOS
+ |  SERVICIOS (precios)
  * ========== */
 Route::middleware(['auth','role:admin|coordinador'])->group(function () {
-    Route::get('/precios', [PrecioController::class,'index'])->name('precios.index');
-    Route::post('/precios/guardar', [PrecioController::class,'guardar'])->name('precios.guardar');
+    Route::get('/servicios', [PrecioController::class,'index'])->name('servicios.index');
+    Route::get('/servicios/create', [PrecioController::class,'create'])->name('servicios.create');
+    Route::post('/servicios/guardar', [PrecioController::class,'guardar'])->name('servicios.guardar');
+    Route::post('/servicios/crear', [PrecioController::class,'crear'])->name('servicios.crear');
+    Route::post('/servicios/clonar', [PrecioController::class,'clonar'])->name('servicios.clonar');
+    Route::post('/servicios/eliminar', [PrecioController::class,'eliminar'])->name('servicios.eliminar');
 });
 
 /* ===============

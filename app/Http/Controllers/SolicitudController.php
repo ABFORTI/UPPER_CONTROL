@@ -18,6 +18,8 @@ class SolicitudController extends Controller
     public function index(Request $req)
     {
         $u = $req->user();
+        $isCliente = method_exists($u, 'hasRole') ? $u->hasRole('cliente') : false;
+        $isClienteCentro = method_exists($u, 'hasRole') ? $u->hasRole('cliente_centro') : false;
 
         $filters = [
             'estatus'  => $req->string('estatus')->toString(),
@@ -30,6 +32,11 @@ class SolicitudController extends Controller
         $q = Solicitud::with(['servicio','centro'])
             ->when(!$u->hasAnyRole(['admin','facturacion','calidad']),
                 fn($qq) => $qq->where('id_centrotrabajo', $u->centro_trabajo_id))
+            ->when($u->hasAnyRole(['facturacion','calidad']) && !$u->hasRole('admin'), function($qq) use ($u) {
+                $ids = $this->allowedCentroIds($u);
+                if (!empty($ids)) { $qq->whereIn('id_centrotrabajo', $ids); }
+            })
+            ->when($isCliente && !$isClienteCentro, fn($qq)=>$qq->where('id_cliente',$u->id))
             ->when($filters['estatus'],  fn($qq,$v)=>$qq->where('estatus',$v))
             ->when($filters['servicio'], fn($qq,$v)=>$qq->where('id_servicio',$v))
             ->when($filters['folio'],    fn($qq,$v)=>$qq->where('folio','like',"%{$v}%"))
@@ -50,20 +57,41 @@ class SolicitudController extends Controller
 
     public function create()
     {
+        /** @var \App\Models\User $u */
         $u = \Illuminate\Support\Facades\Auth::user();
         $servicios = \App\Models\ServicioEmpresa::select('id','nombre','usa_tamanos')
-                        ->orderBy('nombre')->get();
+            ->orderBy('nombre')->get();
 
-        // Construir mapa de precios por servicio para el centro del usuario
+        $canChooseCentro = $u && $u->hasAnyRole(['admin','facturacion','calidad']);
+        $selectedCentroId = (int)($u->centro_trabajo_id ?? 0) ?: null;
+
+        $centros = collect();
         $precios = [];
-        if ($u) {
-            $ids = $servicios->pluck('id')->all();
+        $preciosPorCentro = [];
+
+        if ($canChooseCentro) {
+            // Admin: siempre todos los centros; otros roles: solo asignados (o todos si no hay asignados)
+            if ($u->hasRole('admin')) {
+                $centros = \App\Models\CentroTrabajo::select('id','nombre','prefijo')->orderBy('nombre')->get();
+            } else {
+                $assignedCentros = $u->centros()
+                    ->select('centros_trabajo.id','centros_trabajo.nombre','centros_trabajo.prefijo')
+                    ->orderBy('centros_trabajo.nombre')
+                    ->get();
+                $centros = $assignedCentros->isNotEmpty()
+                    ? $assignedCentros
+                    : \App\Models\CentroTrabajo::select('id','nombre','prefijo')->orderBy('nombre')->get();
+            }
+
+            // Construye mapa de precios por centro y servicio
+            $idsServicios = $servicios->pluck('id')->all();
+            $idsCentros = $centros->pluck('id')->all();
             $scs = \App\Models\ServicioCentro::with('tamanos')
-                ->where('id_centrotrabajo', $u->centro_trabajo_id)
-                ->whereIn('id_servicio', $ids)
+                ->whereIn('id_centrotrabajo', $idsCentros)
+                ->whereIn('id_servicio', $idsServicios)
                 ->get();
             foreach ($scs as $sc) {
-                $precios[$sc->id_servicio] = [
+                $preciosPorCentro[$sc->id_centrotrabajo][$sc->id_servicio] = [
                     'precio_base' => (float)($sc->precio_base ?? 0),
                     'tamanos' => [
                         'chico'   => optional($sc->tamanos->firstWhere('tamano','chico'))->precio,
@@ -73,12 +101,36 @@ class SolicitudController extends Controller
                     ],
                 ];
             }
+        } else {
+            // Construir mapa de precios por servicio solo para el centro del usuario
+            if ($u && $u->centro_trabajo_id) {
+                $ids = $servicios->pluck('id')->all();
+                $scs = \App\Models\ServicioCentro::with('tamanos')
+                    ->where('id_centrotrabajo', $u->centro_trabajo_id)
+                    ->whereIn('id_servicio', $ids)
+                    ->get();
+                foreach ($scs as $sc) {
+                    $precios[$sc->id_servicio] = [
+                        'precio_base' => (float)($sc->precio_base ?? 0),
+                        'tamanos' => [
+                            'chico'   => optional($sc->tamanos->firstWhere('tamano','chico'))->precio,
+                            'mediano' => optional($sc->tamanos->firstWhere('tamano','mediano'))->precio,
+                            'grande'  => optional($sc->tamanos->firstWhere('tamano','grande'))->precio,
+                            'jumbo'   => optional($sc->tamanos->firstWhere('tamano','jumbo'))->precio,
+                        ],
+                    ];
+                }
+            }
         }
 
         return Inertia::render('Solicitudes/Create', [
-            'servicios' => $servicios,
-            'precios'   => $precios,
-            'iva'       => 0.16,
+            'servicios'         => $servicios,
+            'precios'           => $precios,
+            'preciosPorCentro'  => $preciosPorCentro,
+            'centros'           => $centros,
+            'canChooseCentro'   => $canChooseCentro,
+            'selectedCentroId'  => $selectedCentroId,
+            'iva'               => 0.16,
             'urls' => ['store' => route('solicitudes.store')],
         ]);
     }
@@ -88,13 +140,34 @@ class SolicitudController extends Controller
         $serv = ServicioEmpresa::findOrFail($req->id_servicio);
         $u    = $req->user();
 
-        if (!$u || !$u->centro_trabajo_id) {
+        // Determinar centro a usar
+        $canChooseCentro = $u && $u->hasAnyRole(['admin','facturacion','calidad']);
+        $centroId = null;
+        if ($canChooseCentro) {
+            $req->validate(['id_centrotrabajo' => ['required','integer','exists:centros_trabajo,id']]);
+            $centroId = (int)$req->input('id_centrotrabajo');
+        } else {
+            $centroId = (int)($u->centro_trabajo_id ?? 0);
+        }
+
+        if (!$centroId) {
+            return back()->withErrors([
+                'centro' => 'No se pudo determinar el centro de trabajo para la solicitud.'
+            ])->withInput();
+        }
+
+        // Para roles no privilegiados, deben tener centro_trabajo_id asignado
+        if (!($u && $u->hasAnyRole(['admin','facturacion','calidad'])) && (!$u || !$u->centro_trabajo_id)) {
             return back()->withErrors([
                 'centro' => 'Tu usuario no tiene un centro de trabajo asignado. Pide a un administrador que lo configure.'
             ])->withInput();
         }
 
-    if ($serv->usa_tamanos) {
+        // Usar un pequeño retry para evitar colisiones de folio bajo concurrencia
+        $attempts = 0; $maxAttempts = 3; $lastException = null;
+        while ($attempts < $maxAttempts) {
+            try {
+                if ($serv->usa_tamanos) {
             // Normaliza payload y valida total
             $t = $req->input('tamanos');
             if (is_string($t)) {
@@ -117,20 +190,20 @@ class SolicitudController extends Controller
             // Calcula importes
             $pricing = app(\App\Domain\Servicios\PricingService::class);
             $pu = [
-                'chico'  => (float)$pricing->precioUnitario($u->centro_trabajo_id, $serv->id, 'chico'),
-                'mediano'=> (float)$pricing->precioUnitario($u->centro_trabajo_id, $serv->id, 'mediano'),
-                'grande' => (float)$pricing->precioUnitario($u->centro_trabajo_id, $serv->id, 'grande'),
-                'jumbo'  => (float)$pricing->precioUnitario($u->centro_trabajo_id, $serv->id, 'jumbo'),
+                'chico'  => (float)$pricing->precioUnitario($centroId, $serv->id, 'chico'),
+                'mediano'=> (float)$pricing->precioUnitario($centroId, $serv->id, 'mediano'),
+                'grande' => (float)$pricing->precioUnitario($centroId, $serv->id, 'grande'),
+                'jumbo'  => (float)$pricing->precioUnitario($centroId, $serv->id, 'jumbo'),
             ];
             $subtotal = ($chico*$pu['chico']) + ($mediano*$pu['mediano']) + ($grande*$pu['grande']) + ($jumbo*$pu['jumbo']);
             $ivaRate = 0.16; $iva = $subtotal*$ivaRate; $totalImporte = $subtotal+$iva;
 
             // Guarda solicitud + desglose por tamaño en transacción
-            $sol = DB::transaction(function () use ($req, $serv, $u, $chico, $mediano, $grande, $jumbo, $total, $subtotal, $iva, $totalImporte) {
+            $sol = DB::transaction(function () use ($req, $serv, $u, $centroId, $chico, $mediano, $grande, $jumbo, $total, $subtotal, $iva, $totalImporte) {
                 $sol = Solicitud::create([
-                    'folio'            => $this->generarFolio($u->centro_trabajo_id),
+                    'folio'            => $this->generarFolio($centroId),
                     'id_cliente'       => $u->id,
-                    'id_centrotrabajo' => $u->centro_trabajo_id,
+                    'id_centrotrabajo' => $centroId,
                     'id_servicio'      => $serv->id,
                     'descripcion'      => $req->descripcion,
                     'cantidad'         => $total,
@@ -166,23 +239,42 @@ class SolicitudController extends Controller
             ]);
 
             $pricing = app(\App\Domain\Servicios\PricingService::class);
-            $pu = (float)$pricing->precioUnitario($req->user()->centro_trabajo_id, $serv->id, null);
+            $pu = (float)$pricing->precioUnitario($centroId, $serv->id, null);
             $subtotal = $pu * (int)$req->cantidad;
             $ivaRate = 0.16; $iva = $subtotal*$ivaRate; $totalImporte = $subtotal+$iva;
 
-            $sol = Solicitud::create([
-                'folio'            => $this->generarFolio($req->user()->centro_trabajo_id), // 👈 genera folio
-                'id_cliente'       => $req->user()->id,
-                'id_centrotrabajo' => $req->user()->centro_trabajo_id,
-                'id_servicio'      => $serv->id,
-                'descripcion'      => $req->descripcion,
-                'cantidad'         => (int)$req->cantidad,
-                'subtotal'         => $subtotal,
-                'iva'              => $iva,
-                'total'            => $totalImporte,
-                'notas'            => $req->notas,
-                'estatus'          => 'pendiente',
-            ]);
+                    $sol = Solicitud::create([
+                        'folio'            => $this->generarFolio($centroId), // 👈 genera folio
+                        'id_cliente'       => $req->user()->id,
+                        'id_centrotrabajo' => $centroId,
+                        'id_servicio'      => $serv->id,
+                        'descripcion'      => $req->descripcion,
+                        'cantidad'         => (int)$req->cantidad,
+                        'subtotal'         => $subtotal,
+                        'iva'              => $iva,
+                        'total'            => $totalImporte,
+                        'notas'            => $req->notas,
+                        'estatus'          => 'pendiente',
+                    ]);
+                }
+
+                // Si todo fue bien, salimos del bucle
+                break;
+            } catch (\Throwable $ex) {
+                // Maneja colisiones de UNIQUE tanto como UniqueConstraintViolationException como QueryException (23000)
+                $isUnique = $ex instanceof \Illuminate\Database\UniqueConstraintViolationException
+                    || ($ex instanceof \Illuminate\Database\QueryException && (string)$ex->getCode() === '23000');
+                if ($isUnique) {
+                    $lastException = $ex;
+                    $attempts++;
+                    usleep(120000); // 120ms
+                    continue;
+                }
+                throw $ex; // otros errores: propagar
+            }
+        }
+        if (!isset($sol)) {
+            throw $lastException ?? new \RuntimeException('No fue posible generar un folio único');
         }
 
 
@@ -241,30 +333,48 @@ class SolicitudController extends Controller
     private function authorizeCentro(int $centroId): void
     {
         $u = Auth::user();
-        if ($u instanceof \App\Models\User && $u->hasAnyRole(['admin','facturacion'])) return;
-        if (!($u instanceof \App\Models\User) || ((int)$u->centro_trabajo_id !== $centroId && !$u->hasRole('calidad'))) {
-            abort(403);
-        }
+        if (!($u instanceof \App\Models\User)) abort(403);
+        if ($u->hasRole('admin')) return; // admin full acceso
+        $ids = $this->allowedCentroIds($u);
+        if (empty($ids) || !in_array((int)$centroId, array_map('intval', $ids), true)) abort(403);
     }
 
-    /** Folio tipo ABC-YYYYMM-0001 (usa código/clave/nombre del centro) */
+    private function allowedCentroIds(\App\Models\User $u): array
+    {
+        if ($u->hasRole('admin')) return [];
+        $ids = $u->centros()->pluck('centros_trabajo.id')->map(fn($v)=>(int)$v)->all();
+        $primary = (int)($u->centro_trabajo_id ?? 0);
+        if ($primary) $ids[] = $primary;
+        return array_values(array_unique(array_filter($ids)));
+    }
+
+    /** Folio tipo ABC-YYYYMM-0001: usa prefijo del centro si existe; si no, deriva de nombre */
     private function generarFolio(int $centroId): string
     {
         $centro = CentroTrabajo::find($centroId);
-        $prefijo = $centro?->codigo
-            ?? ($centro?->clave ?? null)
+        // Prefiere prefijo definido (p.ej. UMX, UGDL). Si no existe, deriva de nombre.
+        $prefijo = $centro?->prefijo
             ?? ($centro && $centro->nombre
-                ? strtoupper(substr(preg_replace('/[^a-z]/i','',$centro->nombre),0,3))
+                ? strtoupper(substr(preg_replace('/[^a-z]/i', '', $centro->nombre), 0, 3))
                 : 'UPR');
 
-        $prefijo = strtoupper(substr($prefijo, 0, 3));
+        $prefijo = strtoupper(substr($prefijo, 0, 10)); // por si acaso más largo
         $yyyymm  = now()->format('Ym');
 
-        $seq = Solicitud::where('id_centrotrabajo', $centroId)
-            ->whereBetween('created_at', [now()->startOfMonth(), now()->endOfMonth()])
-            ->count() + 1;
+        $base = $prefijo . '-' . $yyyymm . '-';
+        // Buscar el último folio que coincida y extraer el consecutivo de 4 dígitos
+        // Intentar minimizar colisiones: leer último folio con lock (si dentro de transacción)
+        $lastFolio = Solicitud::where('folio', 'like', $base . '%')
+            ->orderByDesc('folio')
+            ->lockForUpdate()
+            ->value('folio');
 
-        return sprintf('%s-%s-%04d', $prefijo, $yyyymm, $seq);
+        $seq = 1;
+        if (is_string($lastFolio) && preg_match('/-(\d{4})$/', $lastFolio, $m)) {
+            $seq = ((int) $m[1]) + 1;
+        }
+
+        return sprintf('%s%04d', $base, $seq);
     }
 
     public function show(Request $req, Solicitud $solicitud)

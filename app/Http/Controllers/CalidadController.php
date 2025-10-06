@@ -10,6 +10,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Notification;
 use Inertia\Inertia;
 use App\Services\Notifier;
+use Illuminate\Support\Facades\Auth;
 
 class CalidadController extends Controller
 {
@@ -98,10 +99,11 @@ class CalidadController extends Controller
   }
 
   private function authCalidad(Orden $orden): void {
-    $u = auth()->user();
+    $u = Auth::user();
     if ($u->hasRole('admin')) return;
     if (!$u->hasRole('calidad')) abort(403);
-    if ((int)$u->centro_trabajo_id !== (int)$orden->id_centrotrabajo) abort(403);
+    $ids = $this->allowedCentroIds($u);
+    if (!in_array((int)$orden->id_centrotrabajo, array_map('intval', $ids), true)) abort(403);
   }
   // app/Http/Controllers/CalidadController.php
   public function index(\Illuminate\Http\Request $req) {
@@ -113,7 +115,11 @@ class CalidadController extends Controller
     : 'todos';
 
   $q = \App\Models\Orden::with('servicio','centro')
-    ->when(!$u->hasRole('admin'), fn($qq)=>$qq->where('id_centrotrabajo',$u->centro_trabajo_id))
+    ->when(!$u->hasRole('admin'), function($qq) use ($u) {
+      $ids = $this->allowedCentroIds($u);
+      if (!empty($ids)) { $qq->whereIn('id_centrotrabajo', $ids); }
+      else { $qq->whereRaw('1=0'); }
+    })
     // Lógica de filtrado:
     // - Pendientes: sólo OTs completadas y calidad pendiente
     // - Validadas/Rechazadas: mostrar independientemente de si pasaron a 'autorizada_cliente'
@@ -146,6 +152,15 @@ class CalidadController extends Controller
     'estado' => $estadoNorm,
     'urls'   => [ 'index' => route('calidad.index') ],
   ]);
+  }
+
+  private function allowedCentroIds(\App\Models\User $u): array
+  {
+    if ($u->hasRole('admin')) return [];
+    $ids = $u->centros()->pluck('centros_trabajo.id')->map(fn($v)=>(int)$v)->all();
+    $primary = (int)($u->centro_trabajo_id ?? 0);
+    if ($primary) $ids[] = $primary;
+    return array_values(array_unique(array_filter($ids)));
   }
 
 }

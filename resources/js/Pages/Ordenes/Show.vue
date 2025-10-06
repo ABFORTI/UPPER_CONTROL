@@ -216,21 +216,21 @@ function borrarEvidencia(id){
         </div>
 
         <!-- imagen -->
-        <a v-if="ev.mime && ev.mime.startsWith('image/')" :href="`../storage/${ev.path}`" target="_blank">
-          <img :src="`../storage/${ev.path}`" class="w-full h-36 object-cover rounded" />
+        <a v-if="ev.mime && ev.mime.startsWith('image/')" :href="ev.url" target="_blank">
+          <img :src="ev.url" class="w-full h-36 object-cover rounded" />
         </a>
 
         <!-- pdf -->
-        <a v-else-if="ev.mime==='application/pdf'" :href="`../storage/${ev.path}`" target="_blank"
+  <a v-else-if="ev.mime==='application/pdf'" :href="ev.url" target="_blank"
            class="block text-indigo-600 text-sm">Ver PDF</a>
 
         <!-- video -->
         <video v-else-if="ev.mime==='video/mp4'" controls class="w-full rounded">
-          <source :src="`../storage/${ev.path}`" type="video/mp4" />
+          <source :src="ev.url" type="video/mp4" />
         </video>
 
         <!-- otro -->
-        <a v-else :href="`../storage/${ev.path}`" target="_blank" class="block text-indigo-600 text-sm">
+        <a v-else :href="ev.url" target="_blank" class="block text-indigo-600 text-sm">
           Descargar archivo
         </a>
 

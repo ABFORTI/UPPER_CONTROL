@@ -15,4 +15,12 @@ class Evidencia extends Model
   public function orden(){ return $this->belongsTo(Orden::class,'id_orden'); }
   public function item(){ return $this->belongsTo(OrdenItem::class,'id_item'); }
   public function usuario(){ return $this->belongsTo(User::class,'id_usuario'); }
+
+  // URL pública del archivo
+  protected $appends = ['url'];
+  public function getUrlAttribute(): string
+  {
+    $base = config('filesystems.disks.public.url') ?: (config('app.url').'/storage');
+    return rtrim($base,'/').'/'.ltrim((string)$this->path,'/');
+  }
 }

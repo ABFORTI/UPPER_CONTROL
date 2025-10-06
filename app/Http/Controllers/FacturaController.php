@@ -24,9 +24,14 @@ class FacturaController extends Controller
 
   // 1) Facturas existentes
   $qFact = Factura::query()->with(['orden.servicio','orden.centro']);
-  // Restricción por centro si no es admin
+  // Restricción por centro si no es admin -> usar centros asignados de facturación
   if (!$u->hasRole('admin')) {
-    $qFact->whereHas('orden', fn($qq)=>$qq->where('id_centrotrabajo', $u->centro_trabajo_id));
+    $ids = $this->allowedCentroIds($u);
+    if (!empty($ids)) {
+      $qFact->whereHas('orden', fn($qq) => $qq->whereIn('id_centrotrabajo', $ids));
+    } else {
+      $qFact->whereRaw('1=0'); // sin centros asignados => nada
+    }
   }
   // Si el filtro es un estatus de factura, aplicarlo
   if ($estatus && in_array($estatus, ['pendiente','facturado','por_pagar','pagado'], true)) {
@@ -53,13 +58,17 @@ class FacturaController extends Controller
     // Excluir OTs que ya tengan factura
     $ordenesConFactura = Factura::query()
       ->when(!$u->hasRole('admin'), function($q) use ($u) {
-        $q->whereHas('orden', fn($qq)=>$qq->where('id_centrotrabajo', $u->centro_trabajo_id));
+        $ids = $this->allowedCentroIds($u);
+        $q->whereHas('orden', fn($qq) => $qq->whereIn('id_centrotrabajo', $ids));
       })
       ->pluck('id_orden');
 
     $qOts = Orden::query()
       ->where('estatus','autorizada_cliente')
-      ->when(!$u->hasRole('admin'), fn($qq)=>$qq->where('id_centrotrabajo', $u->centro_trabajo_id))
+      ->when(!$u->hasRole('admin'), function($qq) use ($u) {
+        $ids = $this->allowedCentroIds($u);
+        $qq->whereIn('id_centrotrabajo', $ids);
+      })
       ->whereNotIn('id', $ordenesConFactura)
       ->with(['servicio','centro'])
       ->latest('id')
@@ -329,17 +338,19 @@ public function pdf(\App\Models\Factura $factura)
           $xmlData['sat_qr_target'] = $qrTarget;
           $xmlData['sat_qr_params'] = ['id'=>$uuidUp,'re'=>$rfcEmUp,'rr'=>$rfcReUp,'tt'=>$ttDefault,'fe'=>$fe,'fe_cfd'=>$feCFD,'fe_sat'=>$feSAT,'target'=>'default'];
           try {
-            $png = QrCode::format('png')->errorCorrection('H')->size(256)->margin(1)->generate($qrTarget);
-            $xmlData['sat_qr_png'] = 'data:image/png;base64,'.base64_encode($png);
-          } catch (\Throwable $e) {
-            $xmlData['sat_qr_png'] = null;
-          }
+            $clazz = '\\SimpleSoftwareIO\\QrCode\\Facades\\QrCode';
+            if (class_exists($clazz)) {
+              $png = $clazz::format('png')->errorCorrection('H')->size(256)->margin(1)->generate($qrTarget);
+              $xmlData['sat_qr_png'] = 'data:image/png;base64,'.base64_encode($png);
+            } else { $xmlData['sat_qr_png'] = null; }
+          } catch (\Throwable $e) { $xmlData['sat_qr_png'] = null; }
           try {
-            $svg = QrCode::format('svg')->errorCorrection('H')->size(256)->margin(1)->generate($qrTarget);
-            $xmlData['sat_qr_svg_datauri'] = 'data:image/svg+xml;base64,'.base64_encode($svg);
-          } catch (\Throwable $e) {
-            $xmlData['sat_qr_svg_datauri'] = null;
-          }
+            $clazz = '\\SimpleSoftwareIO\\QrCode\\Facades\\QrCode';
+            if (class_exists($clazz)) {
+              $svg = $clazz::format('svg')->errorCorrection('H')->size(256)->margin(1)->generate($qrTarget);
+              $xmlData['sat_qr_svg_datauri'] = 'data:image/svg+xml;base64,'.base64_encode($svg);
+            } else { $xmlData['sat_qr_svg_datauri'] = null; }
+          } catch (\Throwable $e) { $xmlData['sat_qr_svg_datauri'] = null; }
         }
         // Árbol completo
         $xmlTree = $this->xmlElementToArray($xml);
@@ -624,12 +635,18 @@ private function xmlElementToArray(\SimpleXMLElement $element): array
           $data['sat_qr_target'] = $qrTarget;
           $data['sat_qr_params'] = ['id'=>$uuidUp,'re'=>$rfcEmUp,'rr'=>$rfcReUp,'tt'=>$ttDefault,'fe'=>$fe,'fe_cfd'=>$feCFD,'fe_sat'=>$feSAT,'target'=>'default'];
           try {
-            $png = QrCode::format('png')->errorCorrection('H')->size(256)->margin(1)->generate($qrTarget);
-            $data['sat_qr_png'] = 'data:image/png;base64,'.base64_encode($png);
+            $clazz = '\\SimpleSoftwareIO\\QrCode\\Facades\\QrCode';
+            if (class_exists($clazz)) {
+              $png = $clazz::format('png')->errorCorrection('H')->size(256)->margin(1)->generate($qrTarget);
+              $data['sat_qr_png'] = 'data:image/png;base64,'.base64_encode($png);
+            } else { $data['sat_qr_png'] = null; }
           } catch (\Throwable $e) { $data['sat_qr_png'] = null; }
           try {
-            $svg = QrCode::format('svg')->errorCorrection('H')->size(256)->margin(1)->generate($qrTarget);
-            $data['sat_qr_svg_datauri'] = 'data:image/svg+xml;base64,'.base64_encode($svg);
+            $clazz = '\\SimpleSoftwareIO\\QrCode\\Facades\\QrCode';
+            if (class_exists($clazz)) {
+              $svg = $clazz::format('svg')->errorCorrection('H')->size(256)->margin(1)->generate($qrTarget);
+              $data['sat_qr_svg_datauri'] = 'data:image/svg+xml;base64,'.base64_encode($svg);
+            } else { $data['sat_qr_svg_datauri'] = null; }
           } catch (\Throwable $e) { $data['sat_qr_svg_datauri'] = null; }
         }
       } catch (\Throwable $e) { /* noop */ }
@@ -912,7 +929,17 @@ private function xmlElementToArray(\SimpleXMLElement $element): array
     $u = request()->user();
     if ($u->hasRole('admin')) return;
     if (!$u->hasRole('facturacion')) abort(403);
-    if ((int)$u->centro_trabajo_id !== (int)$orden->id_centrotrabajo) abort(403);
+    $ids = $this->allowedCentroIds($u);
+    if (!in_array((int)$orden->id_centrotrabajo, array_map('intval', $ids), true)) abort(403);
+  }
+
+  private function allowedCentroIds(\App\Models\User $u): array
+  {
+    if ($u->hasRole('admin')) return [];
+    $ids = $u->centros()->pluck('centros_trabajo.id')->map(fn($v)=>(int)$v)->all();
+    $primary = (int)($u->centro_trabajo_id ?? 0);
+    if ($primary) $ids[] = $primary;
+    return array_values(array_unique(array_filter($ids)));
   }
   private function act(string $log)
   {

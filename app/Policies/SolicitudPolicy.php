@@ -13,6 +13,11 @@ class SolicitudPolicy
 
     public function view(User $u, Solicitud $s): bool {
         if ($u->hasAnyRole(['admin','facturacion'])) return true;
+        // Cliente con alcance a todo el centro (opcional)
+        if ($u->hasRole('cliente_centro')) {
+            return (int)$u->centro_trabajo_id === (int)$s->id_centrotrabajo;
+        }
+        // Cliente estándar: sólo sus propias solicitudes
         if ($u->hasRole('cliente')) return $s->id_cliente === $u->id;
         // resto por centro
         return (int)$u->centro_trabajo_id === (int)$s->id_centrotrabajo;

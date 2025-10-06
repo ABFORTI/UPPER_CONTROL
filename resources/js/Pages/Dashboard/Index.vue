@@ -8,11 +8,12 @@ defineOptions({ layout: AuthenticatedLayout })
 
 const props = defineProps({
   kpis:    { type: Object, default: () => ({}) },
-  series:  { type: Object, default: () => ({ ots_por_dia:[], fact_por_mes:[], top_servicios:[], ingresos_diarios:[] }) },
-  distribuciones: { type: Object, default: () => ({ estatus_ots:{}, calidad:{}, facturas:{} }) },
-  filters: { type: Object, default: () => ({ desde:'', hasta:'', centro:'' }) },
+  series:  { type: Object, default: () => ({ ots_por_dia:[], top_servicios:[] }) },
+  distribuciones: { type: Object, default: () => ({ estatus_ots:{}, calidad:{} }) },
+  filters: { type: Object, default: () => ({ year:'', week:'', desde:'', hasta:'', centro:'' }) },
   centros: { type: Array,  default: () => [] },
-  urls:    { type: Object, default: () => ({ index:'', export_ots:'', export_facturas:'' }) },
+  usuarios_centro: { type: Array, default: () => [] },
+  urls:    { type: Object, default: () => ({ index:'', export_ots:'' }) },
 })
 
 const page = usePage()
@@ -26,8 +27,6 @@ function qs(obj){
 
 const urlOtsXlsx = `/dashboard/export/ots?${qs({...filters, format:'xlsx'})}`
 const urlOtsCsv  = `/dashboard/export/ots?${qs({...filters, format:'csv'})}`
-const urlFactXlsx = `/dashboard/export/facturas?${qs({...filters, format:'xlsx'})}`
-const urlFactCsv  = `/dashboard/export/facturas?${qs({...filters, format:'csv'})}`
 
 function submit(e){
   const form = new FormData(e.target)
@@ -36,9 +35,7 @@ function submit(e){
 }
 
 // Helpers para minigráficos
-const maxFactMes = computed(()=> Math.max(1, ...(props.series.fact_por_mes||[]).map(r=>Number(r.t)||0)))
 const maxTopServ = computed(()=> Math.max(1, ...(props.series.top_servicios||[]).map(r=>Number(r.completadas)||0)))
-const maxIngresosDia = computed(()=> Math.max(1, ...(props.series.ingresos_diarios||[]).map(r=>Number(r.t)||0)))
 
 function pct(value, max){ return (max === 0 ? 0 : (value / max) * 100).toFixed(2) }
 
@@ -53,35 +50,50 @@ const calidadProg = computed(()=> ({
 
 <template>
   <div class="p-6 max-w-7xl mx-auto space-y-8">
-    <div>
-      <h1 class="text-2xl font-bold mb-4 flex items-center gap-4">Dashboard</h1>
-      <form @submit.prevent="submit" class="flex flex-wrap items-end gap-3 mb-5">
-        <div>
-          <label class="block text-xs uppercase tracking-wide opacity-70 mb-1">Desde</label>
-          <input type="date" name="desde" :value="filters.desde" class="border p-2 rounded bg-white" />
+    <div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+      <div>
+        <h1 class="text-3xl font-bold flex items-center gap-3 tracking-tight">Panel de control</h1>
+        <p class="text-slate-600">Resumen operativo del periodo seleccionado.</p>
+      </div>
+      <form @submit.prevent="submit" class="flex flex-wrap items-end gap-4">
+        <!-- Tarjeta de periodo (Año + Semana) -->
+        <div class="bg-white border rounded p-3 flex flex-col gap-2">
+          <div class="text-xs uppercase tracking-wide opacity-70">Periodo</div>
+          <div class="flex items-end gap-3">
+            <div class="min-w-[7rem]">
+              <label class="block text-xs uppercase tracking-wide opacity-70 mb-1">Año</label>
+              <select name="year" :value="filters.year" class="border p-2 rounded bg-white w-28">
+                <option v-for="y in [filters.year-2, filters.year-1, filters.year, filters.year+1]" :key="y" :value="y">{{ y }}</option>
+              </select>
+            </div>
+            <div class="min-w-[8.5rem]">
+              <label class="block text-xs uppercase tracking-wide opacity-70 mb-1">Semana</label>
+              <select name="week" :value="filters.week" class="border p-2 rounded bg-white w-36">
+                <option v-for="w in 53" :key="w" :value="w">Semana {{ w }}</option>
+              </select>
+            </div>
+          </div>
+          <div class="text-[11px] text-slate-500">{{ filters.desde }} — {{ filters.hasta }}</div>
         </div>
-        <div>
-          <label class="block text-xs uppercase tracking-wide opacity-70 mb-1">Hasta</label>
-          <input type="date" name="hasta" :value="filters.hasta" class="border p-2 rounded bg-white" />
-        </div>
-        <div v-if="centros.length">
+
+        <!-- Select de centro -->
+        <div v-if="centros.length" class="bg-white border rounded p-3">
           <label class="block text-xs uppercase tracking-wide opacity-70 mb-1">Centro</label>
           <select name="centro" :value="filters.centro" class="border p-2 rounded bg-white min-w-[14rem]">
             <option value="">— Todos —</option>
             <option v-for="c in centros" :key="c.id" :value="c.id">{{ c.nombre }}</option>
           </select>
         </div>
+
         <button class="px-4 py-2 rounded bg-black text-white font-medium">Aplicar</button>
         <div class="flex flex-wrap gap-2 ml-auto">
           <a :href="urlOtsXlsx" class="px-3 py-2 rounded bg-emerald-600 text-white text-sm">OTs XLSX</a>
           <a :href="urlOtsCsv"  class="px-3 py-2 rounded bg-emerald-700 text-white text-sm">OTs CSV</a>
-          <a :href="urlFactXlsx" class="px-3 py-2 rounded bg-indigo-600 text-white text-sm">Fact XLSX</a>
-          <a :href="urlFactCsv"  class="px-3 py-2 rounded bg-indigo-700 text-white text-sm">Fact CSV</a>
         </div>
-      </form>
+     </form>
     </div>
-
-    <!-- KPIs principales -->
+    
+   <!-- KPIs principales (sin dinero) -->
     <div class="grid md:grid-cols-4 gap-4">
       <div class="bg-white shadow-sm rounded-lg p-4 border">
         <div class="text-xs uppercase tracking-wide text-slate-500">Solicitudes</div>
@@ -100,10 +112,10 @@ const calidadProg = computed(()=> ({
         </div>
   <div class="text-[11px] mt-1 text-slate-500">{{ kpis.ots_completadas > 0 ? ((kpis.ots_cal_pend / kpis.ots_completadas) * 100).toFixed(1) : 0 }}% de OTs completas</div>
       </div>
-      <div class="bg-white shadow-sm rounded-lg p-4 border">
-        <div class="text-xs uppercase tracking-wide text-slate-500">Monto Facturado</div>
-        <div class="mt-1 text-3xl font-semibold">$ {{ Number(kpis.monto_facturado || 0).toFixed(2) }}</div>
-        <div class="text-[11px] mt-1 text-slate-500">Facturas Pend: {{ kpis.fact_pendientes ?? 0 }}</div>
+      <div class="bg-gradient-to-br from-indigo-600 to-fuchsia-600 text-white shadow-sm rounded-lg p-4">
+        <div class="text-xs uppercase tracking-wide opacity-90">Tasa Validación</div>
+        <div class="mt-1 text-3xl font-semibold">{{ kpis.tasa_validacion }}%</div>
+        <div class="text-[11px] mt-1 opacity-90">OTs completadas evaluables</div>
       </div>
     </div>
 
@@ -136,16 +148,19 @@ const calidadProg = computed(()=> ({
         </ul>
       </div>
       <div class="bg-white border rounded p-4">
-        <h2 class="font-semibold mb-3 text-sm tracking-wide uppercase">Facturas</h2>
-        <div class="space-y-2 text-sm">
-          <div v-for="(val,label) in distribuciones.facturas" :key="label" class="flex items-center gap-2">
-            <span class="w-24 capitalize text-slate-600">{{ label }}</span>
-            <div class="flex-1 h-2 bg-slate-200 rounded overflow-hidden">
-              <div class="h-2 bg-indigo-600" :style="{ width: pct(val, Object.values(distribuciones.facturas).reduce((a,b)=>a+b,0)||1)+'%' }"></div>
+        <h2 class="font-semibold mb-3 text-sm tracking-wide uppercase">Usuarios del centro</h2>
+        <div v-if="!usuarios_centro.length" class="text-sm text-slate-500">Selecciona un centro para ver sus usuarios.</div>
+        <ul v-else class="divide-y">
+          <li v-for="u in usuarios_centro" :key="u.id" class="py-2 flex items-start justify-between gap-4">
+            <div>
+              <div class="font-medium leading-5">{{ u.nombre }}</div>
+              <div class="text-xs text-slate-500">{{ u.email }}</div>
             </div>
-            <span class="w-10 text-right tabular-nums">{{ val }}</span>
-          </div>
-        </div>
+            <div class="flex flex-wrap gap-1">
+              <span v-for="r in u.roles" :key="r" class="px-2 py-0.5 rounded-full text-xs bg-slate-100 border">{{ r }}</span>
+            </div>
+          </li>
+        </ul>
       </div>
     </div>
 
@@ -177,33 +192,6 @@ const calidadProg = computed(()=> ({
             </tr>
           </tbody>
         </table>
-      </div>
-      <div class="bg-white border rounded p-4">
-        <h2 class="font-semibold mb-3 text-sm tracking-wide uppercase">Ingresos diarios</h2>
-        <div class="space-y-1 max-h-72 overflow-auto pr-1 text-xs">
-          <div v-for="d in (series.ingresos_diarios||[])" :key="d.d" class="flex items-center gap-2">
-            <span class="w-20 text-slate-600">{{ d.d }}</span>
-            <div class="flex-1 h-2 bg-slate-200 rounded overflow-hidden">
-              <div class="h-2 bg-green-600" :style="{ width: pct(Number(d.t||0), maxIngresosDia)+'%' }"></div>
-            </div>
-            <span class="w-20 text-right tabular-nums">$ {{ Number(d.t||0).toFixed(2) }}</span>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="grid lg:grid-cols-2 gap-6">
-      <div class="bg-white border rounded p-4">
-        <h2 class="font-semibold mb-3 text-sm tracking-wide uppercase">Facturación por mes</h2>
-        <div class="space-y-2 text-xs">
-          <div v-for="m in (series.fact_por_mes||[])" :key="m.ym" class="flex items-center gap-2">
-            <span class="w-16 text-slate-600">{{ m.ym }}</span>
-            <div class="flex-1 h-2 bg-slate-200 rounded overflow-hidden">
-              <div class="h-2 bg-indigo-600" :style="{ width: pct(Number(m.t||0), maxFactMes)+'%' }"></div>
-            </div>
-            <span class="w-24 text-right tabular-nums">$ {{ Number(m.t||0).toFixed(2) }}</span>
-          </div>
-        </div>
       </div>
       <div class="bg-white border rounded p-4">
         <h2 class="font-semibold mb-3 text-sm tracking-wide uppercase">Top servicios</h2>

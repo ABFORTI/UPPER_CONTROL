@@ -6,21 +6,42 @@ import { useForm } from '@inertiajs/vue3'
 const props = defineProps({
   servicios: { type: Array, required: true },
   precios:   { type: Object, required: false, default: () => ({}) },
+  preciosPorCentro: { type: Object, required: false, default: () => ({}) },
+  centros:   { type: Array, required: false, default: () => ([])} ,
+  canChooseCentro: { type: Boolean, required: false, default: false },
+  selectedCentroId: { type: Number, required: false, default: null },
   iva:       { type: Number, required: false, default: 0.16 },
   urls:      { type: Object, required: true }, // { store }
 })
 
 
 const form = useForm({
+id_centrotrabajo: null,
 id_servicio: '',
 descripcion: '',
 cantidad: 1,
 tamanos: { chico:0, mediano:0, grande:0, jumbo:0 },
 notas: '',
 })
+// Inicializar centro si aplica
+if (props.canChooseCentro) {
+  form.id_centrotrabajo = props.selectedCentroId || (props.centros[0]?.id ?? null)
+}
 
 
-const servicio = computed(() => props.servicios.find(s => s.id === Number(form.id_servicio)) || null)
+// Servicios disponibles según el centro
+const filteredServicios = computed(() => {
+  if (props.canChooseCentro) {
+    const cid = Number(form.id_centrotrabajo)
+    const map = props.preciosPorCentro?.[cid] || {}
+    const ids = Object.keys(map).map(n => Number(n))
+    return props.servicios.filter(s => ids.includes(Number(s.id)))
+  }
+  const ids = Object.keys(props.precios || {}).map(n => Number(n))
+  return props.servicios.filter(s => ids.includes(Number(s.id)))
+})
+
+const servicio = computed(() => filteredServicios.value.find(s => s.id === Number(form.id_servicio)) || null)
 const usaTamanos = computed(() => !!servicio.value?.usa_tamanos)
 const totalTamanos = computed(() => (
   Number(form.tamanos.chico||0)
@@ -29,8 +50,15 @@ const totalTamanos = computed(() => (
   + Number(form.tamanos.jumbo||0)
 ))
 
-// Precios del servicio seleccionado (para el centro del usuario)
-const preciosServicio = computed(() => props.precios?.[Number(form.id_servicio)] || null)
+// Precios del servicio seleccionado según el centro elegido (si aplica)
+const preciosServicio = computed(() => {
+  if (props.canChooseCentro) {
+    const cid = Number(form.id_centrotrabajo)
+    const sid = Number(form.id_servicio)
+    return props.preciosPorCentro?.[cid]?.[sid] || null
+  }
+  return props.precios?.[Number(form.id_servicio)] || null
+})
 
 // Precio unitario para servicios sin tamaños
 const precioUnitario = computed(() => {
@@ -71,6 +99,7 @@ watch(usaTamanos, v => { if (v) form.cantidad = 0; else form.tamanos = {chico:0,
 
 function guardar(){
 const payload = {
+id_centrotrabajo: form.id_centrotrabajo,
 id_servicio: form.id_servicio,
 descripcion: form.descripcion,
 notas: form.notas,
@@ -98,12 +127,21 @@ form.transform(() => payload).post(props.urls.store, { preserveScroll:true })
         <div class="grid md:grid-cols-3 gap-4">
           <!-- Izquierda -->
           <div class="md:col-span-2 grid gap-4">
+            <div v-if="canChooseCentro" class="grid md:grid-cols-3 gap-3">
+              <div class="md:col-span-1">
+                <label class="block text-sm mb-1">Centro de trabajo</label>
+                <select v-model="form.id_centrotrabajo" class="border p-2 rounded w-full">
+                  <option v-for="c in centros" :key="c.id" :value="c.id">{{ c.prefijo }} — {{ c.nombre }}</option>
+                </select>
+                <p v-if="form.errors.id_centrotrabajo" class="text-red-600 text-sm">{{ form.errors.id_centrotrabajo }}</p>
+              </div>
+            </div>
             <div class="grid md:grid-cols-3 gap-3">
               <div class="md:col-span-1">
                 <label class="block text-sm mb-1">Servicio</label>
                 <select v-model="form.id_servicio" class="border p-2 rounded w-full">
                   <option value="">— Selecciona —</option>
-                  <option v-for="s in servicios" :key="s.id" :value="s.id">{{ s.nombre }} <span v-if="s.usa_tamanos">(tamaños)</span></option>
+                  <option v-for="s in filteredServicios" :key="s.id" :value="s.id">{{ s.nombre }} <span v-if="s.usa_tamanos">(tamaños)</span></option>
                 </select>
                 <p v-if="form.errors.id_servicio" class="text-red-600 text-sm">{{ form.errors.id_servicio }}</p>
               </div>

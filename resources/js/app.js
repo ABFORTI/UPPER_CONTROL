@@ -31,7 +31,7 @@ createInertiaApp({
             component.layout = AuthenticatedLayout;
         }
 
-        return mod;
+    return component;
     },
     setup({ el, App, props, plugin }) {
         return createApp({ render: () => h(App, props) })

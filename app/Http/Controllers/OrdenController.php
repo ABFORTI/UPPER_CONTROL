@@ -296,20 +296,24 @@ class OrdenController extends Controller
         // Permisos específicos adicionales
         $canCalidad = false; $canClienteAutorizar = false; $canFacturar = false;
         if ($authUser instanceof \App\Models\User) {
-            // Calidad: rol calidad o admin, mismo centro, OT completada y pendiente
-            $canCalidad = ($authUser->hasRole('admin') || $authUser->hasRole('calidad'))
-                && (int)$authUser->centro_trabajo_id === (int)$orden->id_centrotrabajo
-                && $orden->estatus === 'completada'
-                && $orden->calidad_resultado === 'pendiente';
+            // Calidad: admin o rol calidad con centro permitido (pivot + principal), OT completada y pendiente
+            if ($orden->estatus === 'completada' && $orden->calidad_resultado === 'pendiente') {
+                if ($authUser->hasRole('admin')) {
+                    $canCalidad = true;
+                } elseif ($authUser->hasRole('calidad')) {
+                    $idsPermitidos = $this->allowedCentroIds($authUser);
+                    $canCalidad = in_array((int)$orden->id_centrotrabajo, array_map('intval', $idsPermitidos), true);
+                }
+            }
 
             // Cliente autoriza: dueño de la solicitud (o admin) y calidad validada
             $canClienteAutorizar = ($authUser->hasRole('admin') || ($orden->solicitud && (int)$orden->solicitud->id_cliente === (int)$authUser->id))
                 && $orden->calidad_resultado === 'validado'
                 && $orden->estatus === 'completada';
 
-            // Facturar: rol facturacion o admin, mismo centro, OT autorizada por cliente
-            $canFacturar = ($authUser->hasRole('admin') || $authUser->hasRole('facturacion'))
-                && (int)$authUser->centro_trabajo_id === (int)$orden->id_centrotrabajo
+            // Facturar: rol facturacion o admin; mantener restricción de estatus
+            // Nota: el acceso al centro ya se valida en authorizeFromCentro (facturacion tiene bypass)
+            $canFacturar = ($authUser->hasAnyRole(['admin','facturacion']))
                 && $orden->estatus === 'autorizada_cliente';
         }
 
@@ -394,6 +398,7 @@ class OrdenController extends Controller
     $isAdminOrFact = $u && method_exists($u, 'hasAnyRole') ? $u->hasAnyRole(['admin','facturacion']) : false;
     $isTL = $u && method_exists($u, 'hasRole') ? $u->hasRole('team_leader') : false;
     $isCliente = $u && method_exists($u, 'hasRole') ? $u->hasRole('cliente') : false;
+    $isClienteCentro = $u && method_exists($u, 'hasRole') ? $u->hasRole('cliente_centro') : false;
 
         $filters = [
             'estatus'  => $req->string('estatus')->toString(),
@@ -405,9 +410,9 @@ class OrdenController extends Controller
         ];
 
     $q = Orden::with(['servicio','centro','teamLeader','solicitud','factura'])
-            ->when(!$isAdminOrFact, fn($qq)=>$qq->where('id_centrotrabajo',$u->centro_trabajo_id))
-            ->when($isTL, fn($qq)=>$qq->where('team_leader_id',$u->id))
-            ->when($isCliente, fn($qq)=>$qq->whereHas('solicitud', fn($w)=>$w->where('id_cliente',$u->id)))
+        ->when(!$isAdminOrFact, fn($qq)=>$qq->where('id_centrotrabajo',$u->centro_trabajo_id))
+        ->when($isTL, fn($qq)=>$qq->where('team_leader_id',$u->id))
+        ->when($isCliente && !$isClienteCentro, fn($qq)=>$qq->whereHas('solicitud', fn($w)=>$w->where('id_cliente',$u->id)))
             ->when($filters['id'], fn($qq,$v)=>$qq->where('id',$v))
             ->when($filters['estatus'], fn($qq,$v)=>$qq->where('estatus',$v))
             ->when($filters['calidad'], fn($qq,$v)=>$qq->where('calidad_resultado',$v))
@@ -452,11 +457,39 @@ class OrdenController extends Controller
     private function authorizeFromCentro(int $centroId, ?Orden $orden=null): void
     {
         $u = Auth::user();
-        if ($u instanceof \App\Models\User && $u->hasAnyRole(['admin','facturacion'])) return;
-        // 👇 Requiere MISMO centro para todos los demás roles
-        if (!($u instanceof \App\Models\User) || (int)$u->centro_trabajo_id !== $centroId) abort(403);
-        // Si es TL, solo su propia OT
-        if ($orden && $u instanceof \App\Models\User && $u->hasRole('team_leader') && $orden->team_leader_id !== $u->id) abort(403);
+        if (!($u instanceof \App\Models\User)) abort(403);
+        if ($u->hasAnyRole(['admin','facturacion'])) return; // acceso amplio
+
+        // Cliente: permitir si es dueño de la solicitud de la OT
+        if ($orden && $u->hasRole('cliente')) {
+            if ($orden->solicitud && (int)$orden->solicitud->id_cliente === (int)$u->id) return;
+        }
+
+        // Calidad o Coordinador: permitir si el centro está en sus centros asignados (pivot) o su principal
+        if ($u->hasAnyRole(['calidad','coordinador'])) {
+            $ids = $this->allowedCentroIds($u);
+            if (in_array((int)$centroId, array_map('intval', $ids), true)) {
+                // Si es TL además, validar que la OT sea suya
+                if ($orden && $u->hasRole('team_leader') && (int)$orden->team_leader_id !== (int)$u->id) {
+                    abort(403);
+                }
+                return;
+            }
+            abort(403);
+        }
+
+        // Team Leader u otros: requerir mismo centro principal
+        if ((int)$u->centro_trabajo_id !== (int)$centroId) abort(403);
+        if ($orden && $u->hasRole('team_leader') && (int)$orden->team_leader_id !== (int)$u->id) abort(403);
+    }
+
+    private function allowedCentroIds(\App\Models\User $u): array
+    {
+        if ($u->hasRole('admin')) return [];
+        $ids = $u->centros()->pluck('centros_trabajo.id')->map(fn($v)=>(int)$v)->all();
+        $primary = (int)($u->centro_trabajo_id ?? 0);
+        if ($primary) $ids[] = $primary;
+        return array_values(array_unique(array_filter($ids)));
     }
 
     private function buildFolioOT(int $centroId): string

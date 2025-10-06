@@ -78,7 +78,7 @@ function rechazar() { router.post(props.urls.rechazar) }
       <h2 class="font-semibold">Adjuntos</h2>
       <ul class="list-disc pl-6">
         <li v-for="a in solicitud.archivos" :key="a.id">
-          <a :href="`/storage/${a.path}`" target="_blank" class="text-blue-600 underline">Descargar</a>
+          <a :href="a.url" target="_blank" class="text-blue-600 underline">Descargar</a>
         </li>
       </ul>
       <!-- Botón de Generar OT (solo cuando ya está aprobada) -->

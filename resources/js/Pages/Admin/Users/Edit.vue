@@ -4,10 +4,14 @@ import { useForm } from '@inertiajs/vue3'
 const props = defineProps({ user:Object, centros:Array, roles:Array })
 
 const form = useForm({
-  name: props.user?.name || '', email: props.user?.email || '', phone: props.user?.phone || '',
+  name: props.user?.name || '',
+  email: props.user?.email || '',
+  phone: props.user?.phone || '',
   centro_trabajo_id: props.user?.centro_trabajo_id || '',
   role: props.user?.role || 'cliente',
-  password: '', password_confirmation: ''
+  centros_ids: props.user?.centros_ids || [],
+  password: '',
+  password_confirmation: ''
 })
 
 function save(){
@@ -49,6 +53,16 @@ function save(){
           <option v-for="r in roles" :key="r" :value="r">{{ r }}</option>
         </select>
         <p class="text-red-600 text-sm" v-if="form.errors.role">{{ form.errors.role }}</p>
+      </div>
+
+      <!-- Multiselección de centros para roles con múltiples centros -->
+      <div v-if="['admin','calidad','facturacion'].includes(form.role)">
+        <label class="block text-sm mb-1">Centros asignados (múltiples)</label>
+        <select v-model="form.centros_ids" class="border p-2 rounded w-full" multiple size="5">
+          <option v-for="c in centros" :key="c.id" :value="c.id">{{ c.nombre }}</option>
+        </select>
+        <p class="text-gray-500 text-xs mt-1">Mantén Ctrl (Windows) o Cmd (Mac) para seleccionar varios.</p>
+        <p class="text-red-600 text-sm" v-if="form.errors.centros_ids">{{ form.errors.centros_ids }}</p>
       </div>
 
       <div class="grid md:grid-cols-2 gap-3">

@@ -98,9 +98,9 @@ function leave (e) {
             </li>
 
             <li v-if="isAdmin || isCoord">
-              <Link :href="route('precios.index')" class="flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-3 p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all" :class="{ 'bg-blue-50 text-blue-700 dark:bg-slate-800': url.includes('/precios') }">
+              <Link :href="route('servicios.index')" class="flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-3 p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all" :class="{ 'bg-blue-50 text-blue-700 dark:bg-slate-800': url.includes('/servicios') }">
                 <Icon name="dollar" />
-                <span class="w-0 opacity-0 group-hover:w-auto group-hover:opacity-100 overflow-hidden transition-all duration-200">Precios</span>
+                <span class="w-0 opacity-0 group-hover:w-auto group-hover:opacity-100 overflow-hidden transition-all duration-200">Servicios</span>
               </Link>
             </li>
             <li v-if="isAdmin">

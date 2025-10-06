@@ -40,7 +40,7 @@ function impersonate(url){
       <table class="w-full text-sm border">
         <thead>
           <tr class="bg-gray-50 text-left">
-            <th class="p-2">Nombre</th><th class="p-2">Email</th><th class="p-2">Centro</th>
+            <th class="p-2">Nombre</th><th class="p-2">Email</th><th class="p-2">Centro</th><th class="p-2">Centros asignados</th>
             <th class="p-2">Rol</th><th class="p-2">Activo</th><th class="p-2">Acciones</th>
           </tr>
         </thead>
@@ -48,7 +48,11 @@ function impersonate(url){
           <tr v-for="u in data.data" :key="u.id" class="border-t">
             <td class="p-2">{{ u.name }}</td>
             <td class="p-2">{{ u.email }}</td>
-            <td class="p-2">{{ u.centro_trabajo_id }}</td>
+            <td class="p-2">{{ u.centro_nombre || '—' }}</td>
+            <td class="p-2">
+              <span v-if="u.centros_nombres?.length">{{ u.centros_nombres.join(', ') }}</span>
+              <span v-else>—</span>
+            </td>
             <td class="p-2">{{ u.roles?.[0]?.name || '—' }}</td>
             <td class="p-2">
               <span :class="u.activo ? 'text-emerald-700' : 'text-red-700'">
