@@ -20,10 +20,16 @@ class DashboardController extends Controller
     public function index(Request $req)
     {
         $u = $req->user();
+    $isCliente = method_exists($u, 'hasRole') ? $u->hasRole('cliente') : false;
+    $isClienteCentro = method_exists($u, 'hasRole') ? $u->hasRole('cliente_centro') : false;
 
         // Rango por defecto: últimos 30 días
-        $desde = $req->date('desde') ?: now()->subDays(30)->startOfDay();
-        $hasta = $req->date('hasta') ?: now()->endOfDay();
+        // Periodo por semana ISO: week del año (no editable como fechas)
+        $year = $req->integer('year') ?: now()->year;
+        $week = $req->integer('week') ?: now()->isoWeek;
+        $base = CarbonImmutable::now()->setISODate($year, $week);
+        $desde = $base->startOfWeek();
+        $hasta = $base->endOfWeek();
 
         // Centro: admins/facturación pueden elegir, el resto se fija al suyo
         $centroId = $u->hasAnyRole(['admin','facturacion'])
@@ -32,20 +38,40 @@ class DashboardController extends Controller
 
         // --- KPIs básicos
         $solicitudesTotal = Solicitud::when($centroId, fn($q)=>$q->where('id_centrotrabajo',$centroId))
+            ->when($isCliente && !$isClienteCentro, fn($q)=>$q->where('id_cliente', $u->id))
             ->whereBetween('created_at', [$desde, $hasta])->count();
 
         $otsQuery = Orden::when($centroId, fn($q)=>$q->where('id_centrotrabajo',$centroId))
+            ->when($isCliente && !$isClienteCentro, fn($q)=>$q->whereHas('solicitud', fn($w)=>$w->where('id_cliente',$u->id)))
             ->whereBetween('created_at', [$desde, $hasta]);
 
         $otsTotal        = (clone $otsQuery)->count();
         $otsCompletadas  = (clone $otsQuery)->where('estatus','completada')->count();
         $otsCalPendiente = (clone $otsQuery)->where('estatus','completada')->where('calidad_resultado','pendiente')->count();
+        $otsAutCliente   = (clone $otsQuery)->where('estatus','autorizada_cliente')->count();
 
-        $factQuery = Factura::whereBetween('created_at', [$desde, $hasta])
-            ->when($centroId, fn($q)=>$q->whereHas('orden', fn($w)=>$w->where('id_centrotrabajo',$centroId)));
+        // Distribución por estatus (todas las principales)
+        $estatusDistrib = (clone $otsQuery)
+            ->selectRaw('estatus, COUNT(*) c')
+            ->groupBy('estatus')->pluck('c','estatus');
+        $estatusMap = ['generada'=>0,'asignada'=>0,'en_proceso'=>0,'completada'=>0,'autorizada_cliente'=>0];
+        foreach ($estatusDistrib as $k=>$v) { if(array_key_exists($k,$estatusMap)) $estatusMap[$k]=(int)$v; }
 
-        $factPendientes = (clone $factQuery)->where('estatus','pendiente')->count();
-        $montoFacturado = (clone $factQuery)->whereIn('estatus', ['facturado','cobrado','pagado'])->sum('total');
+        // Calidad breakdown (solo OTs completadas en rango / centro)
+        $calidadDistrib = (clone $otsQuery)
+            ->where('estatus','completada')
+            ->selectRaw('calidad_resultado, COUNT(*) c')
+            ->groupBy('calidad_resultado')->pluck('c','calidad_resultado');
+        $calidadMap = ['pendiente'=>0,'validado'=>0,'rechazado'=>0];
+        foreach ($calidadDistrib as $k=>$v) { if(array_key_exists($k,$calidadMap)) $calidadMap[$k]=(int)$v; }
+        $calidadTotalEvaluables = array_sum($calidadMap);
+        $tasaValidacion = $calidadTotalEvaluables > 0 ? round(($calidadMap['validado'] / $calidadTotalEvaluables) * 100,1) : 0.0;
+
+        // Quitar cálculos y series relacionados con dinero/facturación del dashboard
+        $factPendientes = 0;
+        $montoFacturado = 0.0;
+        $factMap = ['pendiente'=>0,'facturado'=>0,'cobrado'=>0,'pagado'=>0];
+        $ingresosDiarios = collect();
 
         // --- Serie: OTs por día por estatus (tabla simple)
         $porDia = (clone $otsQuery)
@@ -62,10 +88,7 @@ class DashboardController extends Controller
             })->values();
 
         // --- Serie: Facturación por mes (suma)
-        $porMes = (clone $factQuery)
-            ->whereIn('estatus',['facturado','cobrado','pagado'])
-            ->selectRaw("DATE_FORMAT(created_at, '%Y-%m') as ym, SUM(total) as t")
-            ->groupBy('ym')->orderBy('ym')->get();
+        $porMes = collect();
 
         // --- Top servicios por OTs completadas
         $topServicios = (clone $otsQuery)
@@ -82,30 +105,59 @@ class DashboardController extends Controller
             ? DB::table('centros_trabajo')->select('id','nombre')->orderBy('nombre')->get()
             : collect([]);
 
+        // Usuarios del centro con roles (si hay centro seleccionado o asignado)
+        $usuariosCentro = collect();
+        if ($centroId) {
+            $usuariosCentro = \App\Models\User::with(['roles:id,name','centros:id'])
+                ->select('users.id','users.name','users.email','users.centro_trabajo_id')
+                ->where(function($q) use ($centroId){
+                    $q->where('users.centro_trabajo_id', $centroId)
+                      ->orWhereHas('centros', fn($w)=>$w->where('centros_trabajo.id',$centroId));
+                })
+                ->get()
+                ->unique('id')
+                ->values()
+                ->map(fn($u)=>[
+                    'id'    => $u->id,
+                    'nombre'=> $u->name,
+                    'email' => $u->email,
+                    'roles' => $u->roles->pluck('name')->values(),
+                ]);
+        }
+
         return Inertia::render('Dashboard/Index', [
             'kpis' => [
                 'solicitudes' => $solicitudesTotal,
                 'ots'         => $otsTotal,
                 'ots_completadas' => $otsCompletadas,
                 'ots_cal_pend'    => $otsCalPendiente,
-                'fact_pendientes' => $factPendientes,
-                'monto_facturado' => (float)$montoFacturado,
+                'ots_aut_cliente' => $otsAutCliente,
+                // quitar: 'fact_pendientes', 'monto_facturado'
+                'tasa_validacion' => $tasaValidacion,
             ],
             'series' => [
                 'ots_por_dia'   => $porDia,
-                'fact_por_mes'  => $porMes,
                 'top_servicios' => $topServicios,
+                // quitar: 'fact_por_mes', 'ingresos_diarios'
+            ],
+            'distribuciones' => [
+                'estatus_ots' => $estatusMap,
+                'calidad'     => $calidadMap,
+                // quitar: 'facturas'
             ],
             'filters' => [
+                'year'   => $year,
+                'week'   => $week,
                 'desde'  => $desde->toDateString(),
                 'hasta'  => $hasta->toDateString(),
                 'centro' => $centroId,
             ],
             'centros' => $centros,
+            'usuarios_centro' => $usuariosCentro,
             'urls' => [
                 'index'           => route('dashboard'), // 👈 IMPORTANTE
                 'export_ots'      => route('dashboard.export.ots',      ['desde'=>$desde->toDateString(),'hasta'=>$hasta->toDateString(),'centro'=>$centroId]),
-                'export_facturas' => route('dashboard.export.facturas', ['desde'=>$desde->toDateString(),'hasta'=>$hasta->toDateString(),'centro'=>$centroId]),
+                // quitar: export_facturas
             ]
         ]);
     }

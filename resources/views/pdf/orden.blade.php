@@ -58,13 +58,20 @@
   </tbody>
 </table>
 
+@php
+  $subtotal = 0;
+  foreach ($o->items as $it) { $subtotal += (float)$it->subtotal; }
+  $ivaRate = 0.16; $iva = $subtotal * $ivaRate; $total = $subtotal + $iva;
+@endphp
+
 <div class="row">
   <div class="small">
     Generado por Upper Control. Documento sin validez fiscal.
   </div>
   <div style="text-align:right">
-    <div><strong>Total planeado:</strong> $ {{ number_format($o->total_planeado,2) }}</div>
-    <div><strong>Total real:</strong> $ {{ number_format($o->total_real,2) }}</div>
+    <div><strong>Subtotal:</strong> $ {{ number_format($subtotal,2) }}</div>
+    <div><strong>IVA (16%):</strong> $ {{ number_format($iva,2) }}</div>
+    <div><strong>Total:</strong> $ {{ number_format($total,2) }}</div>
   </div>
 </div>
 

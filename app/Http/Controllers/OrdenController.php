@@ -12,6 +12,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 use Barryvdh\DomPDF\Facade\Pdf as PDF;
 use App\Notifications\OtAsignada;
@@ -25,14 +26,18 @@ class OrdenController extends Controller
     {
         $this->authorize('view', $orden);
 
-        if ($orden->pdf_path && Storage::exists($orden->pdf_path)) {
-            return Storage::download($orden->pdf_path, "OT_{$orden->id}.pdf");
-        }
+                if ($orden->pdf_path && Storage::exists($orden->pdf_path)) {
+                        $abs = Storage::path($orden->pdf_path);
+                        return response()->file($abs, [
+                            'Content-Type' => 'application/pdf',
+                            'Content-Disposition' => 'inline; filename="OT_' . $orden->id . '.pdf"'
+                        ]);
+                }
 
         // Fallback: generar al vuelo (por si el worker aún no corrió)
         $orden->load(['servicio','centro','teamLeader','items']);
         $pdf = PDF::loadView('pdf.orden', ['orden'=>$orden])->setPaper('letter');
-        return $pdf->download("OT_{$orden->id}.pdf");
+        return $pdf->stream("OT_{$orden->id}.pdf");
     }
 
     /** Form: Generar OT desde solicitud aprobada */
@@ -41,15 +46,67 @@ class OrdenController extends Controller
         $this->authorize('createFromSolicitud', [Orden::class, $solicitud->id_centrotrabajo]);
         $this->authorizeFromCentro($solicitud->id_centrotrabajo);
         if ($solicitud->estatus !== 'aprobada') abort(422, 'La solicitud no está aprobada.');
+        // Evitar generar más de una OT por solicitud
+        if ($solicitud->ordenes()->exists()) {
+            return redirect()->route('solicitudes.show', $solicitud->id)
+                ->withErrors(['ot' => 'Ya existe una Orden de Trabajo para esta solicitud.']);
+        }
+
+        // Cargar relaciones necesarias y preparar prefill de items desde los tamaños (si existen)
+    $solicitud->load(['servicio','centro','tamanos']);
+
+        $prefill = [];
+        if ($solicitud->relationLoaded('tamanos') && $solicitud->tamanos->count() > 0) {
+            foreach ($solicitud->tamanos as $t) {
+                $tam = (string)($t->tamano ?? '');
+                $desc = trim(($solicitud->descripcion ?? '') . ($tam ? " (".ucfirst($tam).")" : ''));
+                $prefill[] = [
+                    'descripcion' => $desc ?: 'Item',
+                    'cantidad'    => (int)($t->cantidad ?? 0),
+                    'tamano'      => $tam ?: null,
+                ];
+            }
+        } else {
+            // Fallback: un solo renglón con la descripción/cantidad de la solicitud
+            $prefill[] = [
+                'descripcion' => $solicitud->descripcion ?? 'Item',
+                'cantidad'    => (int)($solicitud->cantidad ?? 1),
+                'tamano'      => null,
+            ];
+        }
 
         $teamLeaders = User::role('team_leader')
             ->where('centro_trabajo_id', $solicitud->id_centrotrabajo)
             ->select('id','name')->orderBy('name')->get();
 
+        // Calcular cotización (mismos criterios que en Show de Solicitudes)
+        $pricing = app(\App\Domain\Servicios\PricingService::class);
+        $ivaRate = 0.16;
+        $cotLines = [];
+        $sub = 0.0;
+        if ($solicitud->tamanos && $solicitud->tamanos->count() > 0) {
+            foreach ($solicitud->tamanos as $t) {
+                $tam = (string)($t->tamano ?? '');
+                $cant = (int)($t->cantidad ?? 0);
+                if ($cant <= 0) continue;
+                $pu = (float)$pricing->precioUnitario($solicitud->id_centrotrabajo, $solicitud->id_servicio, $tam);
+                $lineSub = $pu * $cant;
+                $sub += $lineSub;
+                $cotLines[] = ['label'=>ucfirst($tam), 'cantidad'=>$cant, 'pu'=>$pu, 'subtotal'=>$lineSub];
+            }
+        } else {
+            $pu = (float)$pricing->precioUnitario($solicitud->id_centrotrabajo, $solicitud->id_servicio, null);
+            $sub = $pu * (int)($solicitud->cantidad ?? 0);
+            $cotLines[] = ['label'=>'Pieza', 'cantidad'=>(int)($solicitud->cantidad ?? 0), 'pu'=>$pu, 'subtotal'=>$sub];
+        }
+        $cot = ['lines'=>$cotLines, 'subtotal'=>$sub, 'iva_rate'=>$ivaRate, 'iva'=>$sub*$ivaRate, 'total'=>$sub*(1+$ivaRate)];
+
         return Inertia::render('Ordenes/CreateFromSolicitud', [
             'solicitud'   => $solicitud->only('id','descripcion','cantidad','id_servicio','id_centrotrabajo'),
             'folio'       => $this->buildFolioOT($solicitud->id_centrotrabajo),
             'teamLeaders' => $teamLeaders,
+            'prefill'     => $prefill,
+            'cotizacion'  => $cot,
             'urls'        => [
                 'store' => route('ordenes.storeFromSolicitud', $solicitud),
             ],
@@ -62,15 +119,20 @@ class OrdenController extends Controller
         $this->authorize('createFromSolicitud', [Orden::class, $solicitud->id_centrotrabajo]);
         $this->authorizeFromCentro($solicitud->id_centrotrabajo);
         if ($solicitud->estatus !== 'aprobada') abort(422, 'La solicitud no está aprobada.');
+        if ($solicitud->ordenes()->exists()) {
+            return redirect()->route('solicitudes.show', $solicitud->id)
+                ->withErrors(['ot' => 'Ya existe una Orden de Trabajo para esta solicitud.']);
+        }
 
         $data = $req->validate([
             'team_leader_id'       => ['nullable','integer','exists:users,id'],
             'items'                => ['required','array','min:1'],
             'items.*.descripcion'  => ['required','string','max:255'],
             'items.*.cantidad'     => ['required','integer','min:1'],
+            'items.*.tamano'       => ['nullable','string','max:50'],
         ]);
 
-        $orden = DB::transaction(function () use ($solicitud, $data) {
+    $orden = DB::transaction(function () use ($solicitud, $data) {
             $totalPlan = collect($data['items'])->sum(fn($i) => (int)($i['cantidad'] ?? 0));
 
             $orden = Orden::create([
@@ -85,15 +147,26 @@ class OrdenController extends Controller
                 'calidad_resultado'=> 'pendiente',
             ]);
 
+            // Resolver precios unitarios por item (por tamaño si aplica)
+            $pricing = app(\App\Domain\Servicios\PricingService::class);
+            $sub = 0.0;
             foreach ($data['items'] as $it) {
+                $tamano = $it['tamano'] ?? null;
+                $pu = (float)$pricing->precioUnitario($solicitud->id_centrotrabajo, $solicitud->id_servicio, $tamano);
+
                 OrdenItem::create([
                     'id_orden'          => $orden->id,
                     'descripcion'       => $it['descripcion'],
                     'cantidad_planeada' => (int)$it['cantidad'],
-                    'precio_unitario'   => 0,
-                    'subtotal'          => 0,
+                    'precio_unitario'   => $pu,
+                    'subtotal'          => $pu * (int)$it['cantidad'],
                 ]);
+                $sub += $pu * (int)$it['cantidad'];
             }
+
+            // Totales con IVA
+            $ivaRate = 0.16; $iva = $sub * $ivaRate; $total = $sub + $iva;
+            $orden->subtotal = $sub; $orden->iva = $iva; $orden->total = $total; $orden->save();
 
             return $orden;
         });
@@ -121,7 +194,7 @@ class OrdenController extends Controller
             route('ordenes.show',$orden->id)
         );
 
-        GenerateOrdenPdf::dispatch($orden->id);
+    GenerateOrdenPdf::dispatch($orden->id)->onQueue('pdfs');
 
         return redirect()->route('ordenes.show', $orden->id)->with('ok','OT creada correctamente');
     }
@@ -213,8 +286,36 @@ class OrdenController extends Controller
         ]);
 
         $canReportar = Gate::allows('reportarAvance', $orden);
-        $canAsignar  = auth()->user()->hasAnyRole(['admin','coordinador'])
-                      && $orden->estatus !== 'completada';
+        $authUser = Auth::user();
+        $isAdminOrCoord = false;
+        if ($authUser instanceof \App\Models\User) {
+            $isAdminOrCoord = $authUser->hasAnyRole(['admin','coordinador']);
+        }
+        $canAsignar  = $isAdminOrCoord && $orden->estatus !== 'completada';
+
+        // Permisos específicos adicionales
+        $canCalidad = false; $canClienteAutorizar = false; $canFacturar = false;
+        if ($authUser instanceof \App\Models\User) {
+            // Calidad: admin o rol calidad con centro permitido (pivot + principal), OT completada y pendiente
+            if ($orden->estatus === 'completada' && $orden->calidad_resultado === 'pendiente') {
+                if ($authUser->hasRole('admin')) {
+                    $canCalidad = true;
+                } elseif ($authUser->hasRole('calidad')) {
+                    $idsPermitidos = $this->allowedCentroIds($authUser);
+                    $canCalidad = in_array((int)$orden->id_centrotrabajo, array_map('intval', $idsPermitidos), true);
+                }
+            }
+
+            // Cliente autoriza: dueño de la solicitud (o admin) y calidad validada
+            $canClienteAutorizar = ($authUser->hasRole('admin') || ($orden->solicitud && (int)$orden->solicitud->id_cliente === (int)$authUser->id))
+                && $orden->calidad_resultado === 'validado'
+                && $orden->estatus === 'completada';
+
+            // Facturar: rol facturacion o admin; mantener restricción de estatus
+            // Nota: el acceso al centro ya se valida en authorizeFromCentro (facturacion tiene bypass)
+            $canFacturar = ($authUser->hasAnyRole(['admin','facturacion']))
+                && $orden->estatus === 'autorizada_cliente';
+        }
 
         $teamLeaders = $canAsignar
             ? User::role('team_leader')
@@ -222,10 +323,34 @@ class OrdenController extends Controller
                 ->select('id','name')->orderBy('name')->get()
             : [];
 
+        // Cotización basada en items (usa cantidades reales si existen, si no, planeadas)
+        $ivaRate = 0.16;
+        $lines = [];
+        $sub = 0.0;
+        foreach ($orden->items as $it) {
+            $qty = ($it->cantidad_real ?? 0) > 0 ? (int)$it->cantidad_real : (int)$it->cantidad_planeada;
+            $lineSub = (float)$it->precio_unitario * $qty;
+            $sub += $lineSub;
+            $lines[] = [
+                'label'    => $it->tamano ? ('Tamaño: '.ucfirst($it->tamano)) : ($it->descripcion ?: 'Item'),
+                'cantidad' => $qty,
+                'pu'       => (float)$it->precio_unitario,
+                'subtotal' => $lineSub,
+            ];
+        }
+        $cot = ['lines'=>$lines, 'subtotal'=>$sub, 'iva_rate'=>$ivaRate, 'iva'=>$sub*$ivaRate, 'total'=>$sub*(1+$ivaRate)];
+
         return Inertia::render('Ordenes/Show', [
             'orden'       => $orden,
-            'can'         => ['reportarAvance'=>$canReportar, 'asignar_tl'=>$canAsignar],
+            'can'         => [
+                'reportarAvance'     => $canReportar,
+                'asignar_tl'         => $canAsignar,
+                'calidad_validar'    => $canCalidad,
+                'cliente_autorizar'  => $canClienteAutorizar,
+                'facturar'           => $canFacturar,
+            ],
             'teamLeaders' => $teamLeaders,
+            'cotizacion'  => $cot,
             'urls'        => [
                 'asignar_tl'        => route('ordenes.asignarTL', $orden),
                 'avances_store'     => route('ordenes.avances.store', $orden),
@@ -269,7 +394,11 @@ class OrdenController extends Controller
     /** Listado con filtros */
     public function index(Request $req)
     {
-        $u = $req->user();
+    $u = $req->user();
+    $isAdminOrFact = $u && method_exists($u, 'hasAnyRole') ? $u->hasAnyRole(['admin','facturacion']) : false;
+    $isTL = $u && method_exists($u, 'hasRole') ? $u->hasRole('team_leader') : false;
+    $isCliente = $u && method_exists($u, 'hasRole') ? $u->hasRole('cliente') : false;
+    $isClienteCentro = $u && method_exists($u, 'hasRole') ? $u->hasRole('cliente_centro') : false;
 
         $filters = [
             'estatus'  => $req->string('estatus')->toString(),
@@ -280,10 +409,10 @@ class OrdenController extends Controller
             'id'       => $req->integer('id') ?: null,
         ];
 
-        $q = Orden::with(['servicio','centro','teamLeader','solicitud'])
-            ->when(!$u->hasAnyRole(['admin','facturacion']), fn($qq)=>$qq->where('id_centrotrabajo',$u->centro_trabajo_id))
-            ->when($u->hasRole('team_leader'), fn($qq)=>$qq->where('team_leader_id',$u->id))
-            ->when($u->hasRole('cliente'), fn($qq)=>$qq->whereHas('solicitud', fn($w)=>$w->where('id_cliente',$u->id)))
+    $q = Orden::with(['servicio','centro','teamLeader','solicitud','factura'])
+        ->when(!$isAdminOrFact, fn($qq)=>$qq->where('id_centrotrabajo',$u->centro_trabajo_id))
+        ->when($isTL, fn($qq)=>$qq->where('team_leader_id',$u->id))
+        ->when($isCliente && !$isClienteCentro, fn($qq)=>$qq->whereHas('solicitud', fn($w)=>$w->where('id_cliente',$u->id)))
             ->when($filters['id'], fn($qq,$v)=>$qq->where('id',$v))
             ->when($filters['estatus'], fn($qq,$v)=>$qq->where('estatus',$v))
             ->when($filters['calidad'], fn($qq,$v)=>$qq->where('calidad_resultado',$v))
@@ -296,10 +425,13 @@ class OrdenController extends Controller
         $data = $q->paginate(10)->withQueryString();
 
         $data->getCollection()->transform(function ($o) {
+            // Derivar estatus de facturación: si hay factura vinculada, usar su estatus; si no, "sin_factura".
+            $factStatus = optional($o->factura)->estatus ?? 'sin_factura';
             return [
                 'id' => $o->id,
                 'estatus' => $o->estatus,
                 'calidad_resultado' => $o->calidad_resultado,
+                'facturacion' => $factStatus,
                 'created_at' => $o->created_at,
                 'servicio' => ['nombre' => $o->servicio?->nombre],
                 'centro'   => ['nombre' => $o->centro?->nombre],
@@ -324,12 +456,40 @@ class OrdenController extends Controller
     /** Helpers */
     private function authorizeFromCentro(int $centroId, ?Orden $orden=null): void
     {
-        $u = auth()->user();
-        if ($u->hasAnyRole(['admin','facturacion'])) return;
-        // 👇 Requiere MISMO centro para todos los demás roles
-        if ((int)$u->centro_trabajo_id !== $centroId) abort(403);
-        // Si es TL, solo su propia OT
-        if ($orden && $u->hasRole('team_leader') && $orden->team_leader_id !== $u->id) abort(403);
+        $u = Auth::user();
+        if (!($u instanceof \App\Models\User)) abort(403);
+        if ($u->hasAnyRole(['admin','facturacion'])) return; // acceso amplio
+
+        // Cliente: permitir si es dueño de la solicitud de la OT
+        if ($orden && $u->hasRole('cliente')) {
+            if ($orden->solicitud && (int)$orden->solicitud->id_cliente === (int)$u->id) return;
+        }
+
+        // Calidad o Coordinador: permitir si el centro está en sus centros asignados (pivot) o su principal
+        if ($u->hasAnyRole(['calidad','coordinador'])) {
+            $ids = $this->allowedCentroIds($u);
+            if (in_array((int)$centroId, array_map('intval', $ids), true)) {
+                // Si es TL además, validar que la OT sea suya
+                if ($orden && $u->hasRole('team_leader') && (int)$orden->team_leader_id !== (int)$u->id) {
+                    abort(403);
+                }
+                return;
+            }
+            abort(403);
+        }
+
+        // Team Leader u otros: requerir mismo centro principal
+        if ((int)$u->centro_trabajo_id !== (int)$centroId) abort(403);
+        if ($orden && $u->hasRole('team_leader') && (int)$orden->team_leader_id !== (int)$u->id) abort(403);
+    }
+
+    private function allowedCentroIds(\App\Models\User $u): array
+    {
+        if ($u->hasRole('admin')) return [];
+        $ids = $u->centros()->pluck('centros_trabajo.id')->map(fn($v)=>(int)$v)->all();
+        $primary = (int)($u->centro_trabajo_id ?? 0);
+        if ($primary) $ids[] = $primary;
+        return array_values(array_unique(array_filter($ids)));
     }
 
     private function buildFolioOT(int $centroId): string

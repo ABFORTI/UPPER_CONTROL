@@ -54,11 +54,15 @@ Route::middleware('auth')->group(function () {
 });
 
 /* ==========
- |  PRECIOS
+ |  SERVICIOS (precios)
  * ========== */
 Route::middleware(['auth','role:admin|coordinador'])->group(function () {
-    Route::get('/precios', [PrecioController::class,'index'])->name('precios.index');
-    Route::post('/precios/guardar', [PrecioController::class,'guardar'])->name('precios.guardar');
+    Route::get('/servicios', [PrecioController::class,'index'])->name('servicios.index');
+    Route::get('/servicios/create', [PrecioController::class,'create'])->name('servicios.create');
+    Route::post('/servicios/guardar', [PrecioController::class,'guardar'])->name('servicios.guardar');
+    Route::post('/servicios/crear', [PrecioController::class,'crear'])->name('servicios.crear');
+    Route::post('/servicios/clonar', [PrecioController::class,'clonar'])->name('servicios.clonar');
+    Route::post('/servicios/eliminar', [PrecioController::class,'eliminar'])->name('servicios.eliminar');
 });
 
 /* ===============
@@ -105,6 +109,8 @@ Route::middleware('auth')->group(function () {
  * ========================== */
 Route::middleware('auth')->group(function () {
     // Calidad
+    Route::get('/calidad', [CalidadController::class,'index'])
+        ->middleware('role:calidad|admin')->name('calidad.index');
     Route::get('/ordenes/{orden}/calidad', [CalidadController::class,'show'])
         ->middleware('role:calidad|admin')->name('calidad.show');
     Route::post('/ordenes/{orden}/calidad/validar', [CalidadController::class,'validar'])
@@ -117,6 +123,8 @@ Route::middleware('auth')->group(function () {
         ->name('cliente.autorizar');
 
     // Facturas
+    Route::get('/facturas', [FacturaController::class,'index'])
+        ->middleware('role:facturacion|admin')->name('facturas.index');
     Route::get('/ordenes/{orden}/facturar', [FacturaController::class,'createFromOrden'])
         ->middleware('role:facturacion|admin')->name('facturas.createFromOrden');
     Route::post('/ordenes/{orden}/facturar', [FacturaController::class,'storeFromOrden'])
@@ -128,6 +136,8 @@ Route::middleware('auth')->group(function () {
 
     Route::post('/facturas/{factura}/facturado', [FacturaController::class,'marcarFacturado'])
         ->middleware('role:facturacion|admin')->name('facturas.facturado');
+    Route::post('/facturas/{factura}/xml', [FacturaController::class,'uploadXml'])
+        ->middleware('role:facturacion|admin')->name('facturas.xml');
     Route::post('/facturas/{factura}/cobro', [FacturaController::class,'marcarCobro'])
         ->middleware('role:facturacion|admin')->name('facturas.cobro');
     Route::post('/facturas/{factura}/pagado', [FacturaController::class,'marcarPagado'])

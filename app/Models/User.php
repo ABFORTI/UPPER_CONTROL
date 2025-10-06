@@ -56,7 +56,15 @@ class User extends Authenticatable
     // app/Models/User.php (agrega relación)
     public function centro()
     {
+        // Centro principal (campo legacy)
         return $this->belongsTo(\App\Models\CentroTrabajo::class,'centro_trabajo_id');
+    }
+
+    public function centros()
+    {
+        // Relación many-to-many para múltiples centros asignados
+        return $this->belongsToMany(\App\Models\CentroTrabajo::class, 'centro_trabajo_user')
+            ->withTimestamps();
     }
 
     public function getActivitylogOptions(): LogOptions

@@ -13,12 +13,14 @@
         "laravel/sanctum": "^4.0",
         "laravel/tinker": "^2.10.1",
         "maatwebsite/excel": "^3.1",
+        "simplesoftwareio/simple-qrcode": "^4.2",
         "spatie/laravel-activitylog": "^4.10",
         "spatie/laravel-backup": "^9.3",
         "spatie/laravel-permission": "^6.21",
         "tightenco/ziggy": "^2.5"
     },
     "require-dev": {
+        "doctrine/dbal": "^4.3",
         "fakerphp/faker": "^1.23",
         "laravel/breeze": "^2.3",
         "laravel/pail": "^1.2.2",

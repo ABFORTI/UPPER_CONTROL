@@ -7,13 +7,19 @@ const props = defineProps({
   extra: { type: Object, default: ()=>({}) }, // otros filtros que quieras conservar
 })
 function go(val){
-  let base = props.url
-  // Corrige si la URL base no tiene el prefijo absoluto
-  if (!base.startsWith('/')) base = '/' + base
-  // Si tu app está en una subcarpeta, ajusta aquí:
-  if (!base.startsWith('/upper-control')) base = '/upper-control' + base
-  const q = new URLSearchParams({ ...props.extra, estatus: val || '' })
-  router.get(`${base}?${q.toString()}`, {}, { preserveState:true, replace:true })
+  // Construye URL de forma robusta (acepta absoluta o relativa)
+  const u = new URL(props.url, window.location.origin)
+  const sp = u.searchParams
+  // Copia extra
+  Object.entries(props.extra || {}).forEach(([k,v]) => {
+    if (v === undefined || v === null || v === '') sp.delete(k)
+    else sp.set(k, String(v))
+  })
+  // Estatus actual del tab
+  if (!val) sp.delete('estatus'); else sp.set('estatus', String(val))
+  // Ejecuta navegación (usando pathname + search para evitar issues de origen)
+  const href = `${u.pathname}?${sp.toString()}`
+  router.get(href, {}, { preserveState:true, replace:true })
 }
 </script>
 <template>

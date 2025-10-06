@@ -1,11 +1,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { usePage, router, Link } from '@inertiajs/vue3'
-import ApplicationLogo from '@/Components/ApplicationLogo.vue'
-import Dropdown from '@/Components/Dropdown.vue'
-import DropdownLink from '@/Components/DropdownLink.vue'
-import NavLink from '@/Components/NavLink.vue'
-import ResponsiveNavLink from '@/Components/ResponsiveNavLink.vue'
+import Icon from '@/Components/Icon.vue'
 
 const page  = usePage()
 
@@ -13,168 +9,153 @@ const page  = usePage()
 const url   = computed(() => page.url || '')
 const user  = computed(() => page.props.auth?.user || null)
 const roles = computed(() => user.value?.roles ?? [])
+const mainRole = computed(() => roles.value?.[0] || '')
 
 const isAdmin  = computed(() => roles.value.includes('admin'))
 const isCoord  = computed(() => roles.value.includes('coordinador'))
-const isTL     = computed(() => roles.value.includes('team_leader'))
-const isClient = computed(() => roles.value.includes('cliente'))
+const isCalidad = computed(() => roles.value.includes('calidad'))
+const isOnlyCalidad = computed(() => isCalidad.value && roles.value.length === 1)
 
-const showingNavigationDropdown = ref(false)
 const unread = computed(() => page.props.auth?.user?.unread_count || 0)
-
 function markAll () {
   router.post(route('notificaciones.read_all'), {}, { preserveScroll: true })
 }
 
-// --- Impersonación (usa globals para evitar colisiones con 'urls' de cada página)
+// Impersonación
 const isImpersonating = computed(() => !!page.props.impersonation?.active)
 const leaveUrl = computed(() => page.props.globals?.impersonate_leave ?? 'admin/impersonate/leave')
-
 function leave (e) {
   e?.preventDefault()
-  // IMPORTANTE: pasa una string válida; usa .value del computed
   router.post(leaveUrl.value, {}, { preserveScroll: true, replace: true })
 }
+
 </script>
 
 <template>
-  <div>
+  <div class="min-h-screen bg-gray-50 dark:bg-gray-900">
     <!-- Barra de aviso cuando estás impersonando -->
     <div v-if="isImpersonating" class="bg-yellow-100 text-yellow-900 px-4 py-2 text-sm flex justify-between">
       <div>⚠️ Estás impersonando la sesión de otro usuario.</div>
       <button @click="leave" class="underline">Salir de impersonación</button>
     </div>
 
-    <div class="min-h-screen bg-gray-100">
-      <nav class="border-b border-gray-100 bg-white">
-        <!-- Primary Navigation Menu -->
-        <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div class="flex h-16 justify-between">
-            <div class="flex">
-              <!-- Logo -->
-              <div class="flex shrink-0 items-center">
-                <Link :href="route('dashboard')">
-                  <ApplicationLogo class="block h-9 w-auto fill-current text-gray-800" />
-                </Link>
-              </div>
+    <div class="flex">
+      <!-- Sidebar -->
+  <aside class="group peer fixed top-0 left-0 h-screen bg-white dark:bg-slate-900 border-r border-gray-200 dark:border-slate-800 transition-all duration-200 w-16 hover:w-64 z-30 text-slate-700 dark:text-slate-200">
+        <!-- Header brand -->
+        <div class="h-16 flex items-center px-3 gap-3">
+          <div class="w-8 h-8 bg-blue-500 rounded-md"></div>
+          <div class="overflow-hidden w-0 group-hover:w-auto group-hover:opacity-100 opacity-0 transition-all duration-200 whitespace-nowrap font-semibold">Upper Control</div>
+        </div>
 
-              <!-- Navigation Links -->
-              <div class="hidden space-x-8 sm:-my-px sm:ms-10 sm:flex">
-                <Link :href="route('dashboard')" :class="{ 'text-black font-semibold': url.includes('/dashboard') }">
-                  Dashboard
-                </Link>
-                <Link :href="route('solicitudes.index')">
-                  Solicitudes
-                </Link>
-                <Link v-if="isAdmin || isCoord" :href="route('precios.index')" :class="{ 'text-black font-semibold': url.includes('/precios') }">
-                  Precios
-                </Link>
-                <Link v-if="isAdmin" :href="route('admin.users.index')" :class="{ 'text-black font-semibold': url.includes('/admin/users') }">
-                  Usuarios
-                </Link>
-                <Link v-if="isAdmin" :href="route('admin.centros.index')">Centros</Link> 
-                <Link v-if="$page.props.auth?.user?.roles?.includes('admin')" :href="route('admin.backups.index')">Backups</Link>
-              </div>
+        <!-- Usuario / Rol / Notificaciones -->
+        <div class="px-3 py-2">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-200 font-semibold">
+              {{ (user?.name || '?').slice(0,1).toUpperCase() }}
             </div>
-
-            <div class="hidden sm:ms-6 sm:flex sm:items-center">
-              <!-- Settings Dropdown -->
-              <div class="relative ms-3">
-                <Dropdown align="right" width="48">
-                  <template #trigger>
-                    <span class="inline-flex rounded-md">
-                      <button
-                        type="button"
-                        class="inline-flex items-center rounded-md border border-transparent bg-white px-3 py-2 text-sm font-medium leading-4 text-gray-500 transition duration-150 ease-in-out hover:text-gray-700 focus:outline-none"
-                      >
-                        {{ user?.name }}
-                        <svg class="-me-0.5 ms-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                          <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd"/>
-                        </svg>
-                      </button>
-                    </span>
-                  </template>
-
-                  <template #content>
-                    <DropdownLink :href="route('profile.edit')">Profile</DropdownLink>
-                    <DropdownLink :href="route('logout')" method="post" as="button">Log Out</DropdownLink>
-                  </template>
-                </Dropdown>
-              </div>
+            <div class="overflow-hidden w-0 group-hover:w-auto group-hover:opacity-100 opacity-0 transition-all duration-200">
+              <div class="text-xs text-slate-500 dark:text-slate-400">{{ mainRole || 'Usuario' }}</div>
+              <div class="text-sm font-medium text-slate-800 dark:text-slate-100 truncate max-w-[10rem]">{{ user?.name }}</div>
             </div>
-
-            <!-- Hamburger -->
-            <div class="-me-2 flex items-center sm:hidden">
-              <button
-                @click="showingNavigationDropdown = !showingNavigationDropdown"
-                class="inline-flex items-center justify-center rounded-md p-2 text-gray-400 transition duration-150 ease-in-out hover:bg-gray-100 hover:text-gray-500 focus:bg-gray-100 focus:text-gray-500 focus:outline-none"
-              >
-                <svg class="h-6 w-6" stroke="currentColor" fill="none" viewBox="0 0 24 24">
-                  <path
-                    :class="{ hidden: showingNavigationDropdown, 'inline-flex': !showingNavigationDropdown }"
-                    stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                    d="M4 6h16M4 12h16M4 18h16"
-                  />
-                  <path
-                    :class="{ hidden: !showingNavigationDropdown, 'inline-flex': showingNavigationDropdown }"
-                    stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
-              </button>
-            </div>
+            <!-- Sin botón de notificaciones aquí; se movió al footer -->
           </div>
         </div>
 
-        <!-- Responsive Navigation Menu -->
-        <div :class="{ block: showingNavigationDropdown, hidden: !showingNavigationDropdown }" class="sm:hidden">
-          <div class="space-y-1 pb-3 pt-2">
-            <ResponsiveNavLink :href="route('dashboard')" :active="route().current('dashboard')">
-              Dashboard
-            </ResponsiveNavLink>
-          </div>
+        <!-- Menú -->
+        <nav class="mt-4 flex-1 overflow-y-auto">
+          <ul class="px-2 space-y-1 text-slate-600 dark:text-slate-300">
+            <li v-if="!isOnlyCalidad">
+              <Link :href="route('dashboard')" class="flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-3 p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all" :class="{ 'bg-blue-50 text-blue-700 dark:bg-slate-800': url.includes('/dashboard') }">
+                <Icon name="home" />
+                <span class="w-0 opacity-0 group-hover:w-auto group-hover:opacity-100 overflow-hidden transition-all duration-200">Dashboard</span>
+              </Link>
+            </li>
+            <li v-if="!isOnlyCalidad">
+              <Link :href="route('solicitudes.index')" class="flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-3 p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all" :class="{ 'bg-blue-50 text-blue-700 dark:bg-slate-800': url.includes('/solicitudes') }">
+                <Icon name="document" />
+                <span class="w-0 opacity-0 group-hover:w-auto group-hover:opacity-100 overflow-hidden transition-all duration-200">Solicitudes</span>
+              </Link>
+            </li>
+            <li v-if="!isOnlyCalidad">
+              <Link :href="route('ordenes.index')" class="flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-3 p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all" :class="{ 'bg-blue-50 text-blue-700 dark:bg-slate-800': url.includes('/ordenes') }">
+                <Icon name="clipboard" />
+                <span class="w-0 opacity-0 group-hover:w-auto group-hover:opacity-100 overflow-hidden transition-all duration-200">Órdenes</span>
+              </Link>
+            </li>
+            <!-- Calidad -->
+            <li v-if="isAdmin || isCalidad">
+              <Link :href="route('calidad.index')" class="flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-3 p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all" :class="{ 'bg-blue-50 text-blue-700 dark:bg-slate-800': url.includes('/calidad') }">
+                <Icon name="checkBadge" />
+                <span class="w-0 opacity-0 group-hover:w-auto group-hover:opacity-100 overflow-hidden transition-all duration-200">Calidad</span>
+              </Link>
+            </li>
+            <li v-if="!isOnlyCalidad && (roles.includes('facturacion') || isAdmin)">
+              <Link :href="route('facturas.index')" class="flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-3 p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all" :class="{ 'bg-blue-50 text-blue-700 dark:bg-slate-800': url.includes('/facturas') }">
+                <Icon name="currency" />
+                <span class="w-0 opacity-0 group-hover:w-auto group-hover:opacity-100 overflow-hidden transition-all duration-200">Facturación</span>
+              </Link>
+            </li>
 
-          <!-- Responsive Settings Options -->
-          <div class="border-t border-gray-200 pb-1 pt-4">
-            <div class="px-4">
-              <div class="text-base font-medium text-gray-800">
-                {{ user?.name }}
-              </div>
-              <div class="text-sm font-medium text-gray-500">
-                {{ user?.email }}
-              </div>
-            </div>
+            <li v-if="isAdmin || isCoord">
+              <Link :href="route('servicios.index')" class="flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-3 p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all" :class="{ 'bg-blue-50 text-blue-700 dark:bg-slate-800': url.includes('/servicios') }">
+                <Icon name="dollar" />
+                <span class="w-0 opacity-0 group-hover:w-auto group-hover:opacity-100 overflow-hidden transition-all duration-200">Servicios</span>
+              </Link>
+            </li>
+            <li v-if="isAdmin">
+              <Link :href="route('admin.users.index')" class="flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-3 p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all" :class="{ 'bg-blue-50 text-blue-700 dark:bg-slate-800': url.includes('/admin/users') }">
+                <Icon name="document" />
+                <span class="w-0 opacity-0 group-hover:w-auto group-hover:opacity-100 overflow-hidden transition-all duration-200">Usuarios</span>
+              </Link>
+            </li>
+            <li v-if="isAdmin">
+              <Link :href="route('admin.centros.index')" class="flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-3 p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all">
+                <Icon name="building" />
+                <span class="w-0 opacity-0 group-hover:w-auto group-hover:opacity-100 overflow-hidden transition-all duration-200">Centros</span>
+              </Link>
+            </li>
+            <li v-if="isAdmin">
+              <Link :href="route('admin.backups.index')" class="flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-3 p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all">
+                <Icon name="document" />
+                <span class="w-0 opacity-0 group-hover:w-auto group-hover:opacity-100 overflow-hidden transition-all duration-200">Backups</span>
+              </Link>
+            </li>
+          </ul>
+        </nav>
 
-            <div class="mt-3 space-y-1">
-              <ResponsiveNavLink :href="route('profile.edit')">Profile</ResponsiveNavLink>
-              <ResponsiveNavLink :href="route('logout')" method="post" as="button">Log Out</ResponsiveNavLink>
-            </div>
-          </div>
+        <!-- Footer del sidebar -->
+        <div class="absolute bottom-0 left-0 right-0 p-3 space-y-2">
+          <!-- Notificaciones arriba de Logout -->
+          <Link :href="route('notificaciones.index')" class="w-full relative flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-3 p-3 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 transition-all">
+            <span class="relative inline-flex">
+              <Icon name="bell" />
+              <span v-if="unread" class="absolute -top-1 -right-1 text-[10px] leading-none bg-red-600 text-white rounded-full px-1">{{ unread }}</span>
+            </span>
+            <span class="w-0 opacity-0 group-hover:w-auto group-hover:opacity-100 overflow-hidden transition-all duration-200">Notificaciones</span>
+          </Link>
+          <form :action="route('logout')" method="post" class="hidden"></form>
+          <Link :href="route('logout')" method="post" as="button" class="w-full flex items-center gap-3 p-3 rounded-md bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 hover:bg-slate-300">
+            <Icon name="logout" />
+            <span class="opacity-0 group-hover:opacity-100 transition-opacity duration-200">Logout</span>
+          </Link>
         </div>
-      </nav>
+      </aside>
 
-      <!-- Page Heading -->
-      <header class="bg-white shadow" v-if="$slots.header">
-        <div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-          <slot name="header" />
-        </div>
-      </header>
+      <!-- Overlay sobre el contenido cuando el sidebar está desplegado -->
+      <div class="fixed inset-0 left-16 bg-black/20 opacity-0 transition-opacity duration-200 pointer-events-none peer-hover:opacity-100 z-10"></div>
 
-      <!-- Page Content -->
-      <main>
-        <slot />
-      </main>
+      <!-- Contenido principal -->
+      <div class="flex-1 min-h-screen ml-16 transition-all duration-200 text-slate-800 dark:text-slate-100 relative z-0">
+        <header v-if="$slots.header" class="sticky top-0 z-10 bg-white/70 dark:bg-slate-900/70 backdrop-blur border-b border-gray-200 dark:border-slate-800 text-slate-800 dark:text-slate-100">
+          <div class="px-4 py-4">
+            <slot name="header" />
+          </div>
+        </header>
+        <main class="p-4 md:p-6 text-slate-800 dark:text-slate-100">
+          <slot />
+        </main>
+      </div>
     </div>
   </div>
-
-  <!-- Notificaciones -->
-  <nav class="flex items-center gap-4">
-    <a :href="route('notificaciones.index')" class="relative inline-flex items-center">
-      🔔
-      <span v-if="unread" class="absolute -top-2 -right-2 text-xs bg-red-600 text-white rounded-full px-1">
-        {{ unread }}
-      </span>
-    </a>
-    <button v-if="unread" @click="markAll" class="text-xs underline">Marcar leídas</button>
-  </nav>
 </template>

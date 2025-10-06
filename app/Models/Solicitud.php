@@ -11,7 +11,7 @@ class Solicitud extends Model {
   protected $table='solicitudes';
   protected $fillable=[
     'folio','id_cliente','id_centrotrabajo','id_servicio',
-    'tamano','descripcion','cantidad','notas','estatus','aprobada_por','aprobada_at'
+    'tamano','descripcion','cantidad','subtotal','iva','total','notas','estatus','aprobada_por','aprobada_at'
   ];
   public function cliente(){ return $this->belongsTo(User::class,'id_cliente'); }
   public function centro(){ return $this->belongsTo(CentroTrabajo::class,'id_centrotrabajo'); }
@@ -25,5 +25,14 @@ class Solicitud extends Model {
           ->logFillable()
           ->logOnlyDirty()
           ->dontSubmitEmptyLogs();
+  }
+  public function tamanos()
+  {
+      return $this->hasMany(\App\Models\SolicitudTamano::class, 'id_solicitud');
+  }
+
+  public function ordenes()
+  {
+      return $this->hasMany(\App\Models\Orden::class, 'id_solicitud');
   }
 }

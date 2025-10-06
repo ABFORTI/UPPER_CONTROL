@@ -10,6 +10,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Notification;
 use Inertia\Inertia;
 use App\Services\Notifier;
+use Illuminate\Support\Facades\Auth;
 
 class CalidadController extends Controller
 {
@@ -98,21 +99,68 @@ class CalidadController extends Controller
   }
 
   private function authCalidad(Orden $orden): void {
-    $u = auth()->user();
+    $u = Auth::user();
     if ($u->hasRole('admin')) return;
     if (!$u->hasRole('calidad')) abort(403);
-    if ((int)$u->centro_trabajo_id !== (int)$orden->id_centrotrabajo) abort(403);
+    $ids = $this->allowedCentroIds($u);
+    if (!in_array((int)$orden->id_centrotrabajo, array_map('intval', $ids), true)) abort(403);
   }
   // app/Http/Controllers/CalidadController.php
   public function index(\Illuminate\Http\Request $req) {
-    $u = $req->user();
-    $q = \App\Models\Orden::with('servicio','centro')
-        ->when(!$u->hasRole('admin'), fn($qq)=>$qq->where('id_centrotrabajo',$u->centro_trabajo_id))
-        ->where('estatus','completada')
-        ->where('calidad_resultado','pendiente')
-        ->orderByDesc('id')->paginate(10)->withQueryString();
+  $u = $req->user();
+  $estado = $req->string('estado')->toString(); // 'todos' | pendiente | validado | rechazado | ''
+  // Aceptar 'todos' como "sin filtro"; si viene vacío o distinto, usar 'todos' por defecto
+  $estadoNorm = in_array($estado, ['pendiente','validado','rechazado','todos'], true)
+    ? $estado
+    : 'todos';
 
-    return \Inertia\Inertia::render('Calidad/Index', ['data'=>$q]);
+  $q = \App\Models\Orden::with('servicio','centro')
+    ->when(!$u->hasRole('admin'), function($qq) use ($u) {
+      $ids = $this->allowedCentroIds($u);
+      if (!empty($ids)) { $qq->whereIn('id_centrotrabajo', $ids); }
+      else { $qq->whereRaw('1=0'); }
+    })
+    // Lógica de filtrado:
+    // - Pendientes: sólo OTs completadas y calidad pendiente
+    // - Validadas/Rechazadas: mostrar independientemente de si pasaron a 'autorizada_cliente'
+    ->when($estadoNorm === 'pendiente', function($qq){
+      $qq->where('estatus','completada')->where('calidad_resultado','pendiente');
+    })
+    ->when($estadoNorm !== 'pendiente' && $estadoNorm !== 'todos', function($qq) use ($estadoNorm){
+      $qq->where('calidad_resultado',$estadoNorm);
+    })
+    ->orderByDesc('id');
+
+  $data = $q->paginate(10)->withQueryString();
+  $data->getCollection()->transform(function($o){
+    return [
+      'id' => $o->id,
+      'servicio' => ['nombre' => $o->servicio?->nombre],
+      'centro'   => ['nombre' => $o->centro?->nombre],
+      'estatus'  => $o->estatus,
+      'calidad_resultado' => $o->calidad_resultado,
+      'created_at' => $o->created_at,
+      'urls' => [
+        'review' => route('calidad.show', $o),
+        'show'   => route('ordenes.show', $o),
+      ],
+    ];
+  });
+
+  return \Inertia\Inertia::render('Calidad/Index', [
+    'data'   => $data,
+    'estado' => $estadoNorm,
+    'urls'   => [ 'index' => route('calidad.index') ],
+  ]);
+  }
+
+  private function allowedCentroIds(\App\Models\User $u): array
+  {
+    if ($u->hasRole('admin')) return [];
+    $ids = $u->centros()->pluck('centros_trabajo.id')->map(fn($v)=>(int)$v)->all();
+    $primary = (int)($u->centro_trabajo_id ?? 0);
+    if ($primary) $ids[] = $primary;
+    return array_values(array_unique(array_filter($ids)));
   }
 
 }

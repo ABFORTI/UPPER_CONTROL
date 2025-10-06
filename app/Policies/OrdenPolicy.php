@@ -13,9 +13,22 @@ class OrdenPolicy
 
     public function view(User $u, Orden $o): bool {
         if ($u->hasAnyRole(['admin','facturacion'])) return true;
+        // Cliente con alcance a todo el centro (rol opcional 'cliente_centro')
+        if ($u->hasRole('cliente_centro')) {
+            return (int)$o->id_centrotrabajo === (int)$u->centro_trabajo_id;
+        }
+        // Cliente estándar: sólo sus propias OTs (las de sus solicitudes)
         if ($u->hasRole('cliente')) return $o->solicitud?->id_cliente === $u->id;
         if ($u->hasRole('team_leader')) return $o->team_leader_id === $u->id;
-        // resto por centro
+        // calidad o coordinador: permitir centros asignados (pivot) + principal
+        if ($u->hasAnyRole(['calidad','coordinador'])) {
+            $ids = $u->centros()->pluck('centros_trabajo.id')->map(fn($v)=>(int)$v)->all();
+            $primary = (int)($u->centro_trabajo_id ?? 0);
+            if ($primary) $ids[] = $primary;
+            $ids = array_values(array_unique($ids));
+            return in_array((int)$o->id_centrotrabajo, $ids, true);
+        }
+        // resto por centro (solo principal)
         return (int)$u->centro_trabajo_id === (int)$o->id_centrotrabajo;
     }
 
@@ -37,8 +50,14 @@ class OrdenPolicy
 
     // calidad (solo calidad/admin del mismo centro)
     public function calidad(User $u, Orden $o): bool {
-        return $u->hasRole('admin') ||
-               ($u->hasRole('calidad') && (int)$u->centro_trabajo_id === (int)$o->id_centrotrabajo);
+        if ($u->hasRole('admin')) return true;
+        if (!$u->hasRole('calidad')) return false;
+        // Permitimos centros asignados por pivot más el centro principal
+        $ids = $u->centros()->pluck('centros_trabajo.id')->map(fn($v)=>(int)$v)->all();
+        $primary = (int)($u->centro_trabajo_id ?? 0);
+        if ($primary) $ids[] = $primary;
+        $ids = array_values(array_unique($ids));
+        return in_array((int)$o->id_centrotrabajo, $ids, true);
     }
 
     // cliente autoriza
