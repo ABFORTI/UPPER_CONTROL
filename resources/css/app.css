@@ -17,6 +17,9 @@ html, body {
   background: var(--c-surface);
 }
 
+/* Compat util: si tailwind no cargara aún, asegurar degradado básico del splash */
+#app-splash { background: radial-gradient(1200px 600px at 50% -20%, #0b2840 0%, #0a1a24 60%); }
+
 /* headings - Poppins */
 h1, h2, h3, .heading {
   font-family: 'Poppins', system-ui, -apple-system, Segoe UI, Arial, sans-serif;

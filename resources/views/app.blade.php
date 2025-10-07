@@ -16,6 +16,57 @@
         @inertiaHead
     </head>
     <body class="font-sans antialiased">
+        <div id="app-splash" class="fixed inset-0 z-[9999] select-none text-white bg-gradient-to-br from-[#0a1a24] via-[#0b1f2b] to-[#0b2330]" style="display:block; opacity:1;">
+            <!-- Glow superior -->
+            <div class="pointer-events-none absolute -top-20 left-1/2 -translate-x-1/2 w-[110%] h-40 bg-cyan-500/10 blur-2xl"></div>
+            <!-- Red de puntos decorativos -->
+            <div class="pointer-events-none absolute inset-0">
+                <div class="absolute top-6 left-6 w-2 h-2 bg-orange-400 rounded-full"></div>
+                <div class="absolute top-10 left-48 w-[2px] h-[2px] bg-cyan-400 rounded-full"></div>
+                <div class="absolute bottom-10 right-10 w-2 h-2 bg-orange-400 rounded-full"></div>
+                <div class="absolute bottom-20 right-32 w-[2px] h-[2px] bg-cyan-400 rounded-full"></div>
+                <!-- extras naranja -->
+                <div class="absolute rounded-full bg-orange-400" style="top:8%; left:12%; width:6px; height:6px"></div>
+                <div class="absolute rounded-full bg-orange-400" style="top:14%; left:28%; width:4px; height:4px"></div>
+                <div class="absolute rounded-full bg-orange-400" style="top:22%; left:42%; width:5px; height:5px"></div>
+                <div class="absolute rounded-full bg-orange-400" style="top:12%; right:14%; width:6px; height:6px"></div>
+                <div class="absolute rounded-full bg-orange-400" style="top:30%; right:8%; width:4px; height:4px"></div>
+                <div class="absolute rounded-full bg-orange-400" style="top:46%; left:10%; width:5px; height:5px"></div>
+                <div class="absolute rounded-full bg-orange-400" style="bottom:28%; left:18%; width:6px; height:6px"></div>
+                <div class="absolute rounded-full bg-orange-400" style="bottom:22%; right:22%; width:4px; height:4px"></div>
+                <div class="absolute rounded-full bg-orange-400" style="bottom:30%; right:36%; width:5px; height:5px"></div>
+                <div class="absolute rounded-full bg-orange-400" style="bottom:36%; left:38%; width:4px; height:4px"></div>
+                <div class="absolute rounded-full bg-orange-400" style="bottom:10%; left:12%; width:6px; height:6px"></div>
+                <div class="absolute rounded-full bg-orange-400" style="bottom:14%; right:12%; width:5px; height:5px"></div>
+            </div>
+            <!-- Contenido centrado -->
+            <div class="w-full h-full flex items-center justify-center p-6">
+                <div class="w-full max-w-5xl mx-auto">
+                    <!-- Imagen del dron + globo proporcionada -->
+                    <img src="{{ asset('img/upper-drone.png') }}" alt="Upper Logistics Drone" class="mx-auto w-[min(88vw,500px)] h-auto select-none pointer-events-none drop-shadow-[0_20px_60px_rgba(0,0,0,0.45)]" />
+                    <!-- Título y subtítulo -->
+                    <div class="text-center mt-2">
+                        <div class="text-[26px] md:text-[32px] font-bold tracking-[0.22em]">UPPER CONTROL</div>
+                        <div class="mt-1 text-sm md:text-base tracking-[0.35em] text-white/80">BY UPPER LOGISTICS</div>
+                    </div>
+                    <!-- Barra de carga -->
+                    <div class="mt-6 flex flex-col items-center">
+                        <div class="hidden md:block h-3 mb-1">
+                            <div class="flex gap-2 opacity-70">
+                                @for($i=0; $i<24; $i++)
+                                    <div class="w-1 h-1 rounded-full" style="background:rgba(255,255,255,0.4)"></div>
+                                @endfor
+                            </div>
+                        </div>
+                        <div class="w-full max-w-2xl h-3 bg-white/10 rounded-full overflow-hidden border border-white/10">
+                            <div id="app-splash-bar" class="h-full rounded-full" style="width:14%; background: linear-gradient(90deg, #ff8a00 0%, #22d3ee 100%);"></div>
+                        </div>
+                        <div id="app-splash-text" class="mt-3 text-[11px] tracking-widest text-white/80">CARGANDO... POR FAVOR ESPERE</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         @inertia
     </body>
 </html>

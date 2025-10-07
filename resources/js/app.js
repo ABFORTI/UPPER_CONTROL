@@ -13,6 +13,43 @@ import AuthenticatedLayout from './Layouts/AuthenticatedLayout.vue';
 
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
 
+// Simple gestor del splash
+function splashShow() {
+    const el = document.getElementById('app-splash');
+    if (el) {
+        el.style.display = 'block';
+        requestAnimationFrame(() => { el.style.opacity = 1; el.style.pointerEvents = 'auto'; });
+    }
+}
+function splashHide() {
+    const el = document.getElementById('app-splash');
+    if (!el) return;
+    el.style.transition = 'opacity .35s ease';
+    el.style.opacity = 0;
+    setTimeout(() => {
+        el.style.display = 'none';
+        // borrar cookie splash_mode para evitar reaparición en refresh
+        try { document.cookie = 'splash_mode=; Max-Age=0; path=/;'; } catch (e) {}
+    }, 380);
+}
+function splashProgress(pct = 100) {
+    const bar = document.getElementById('app-splash-bar');
+    if (bar) bar.style.width = `${Math.max(0, Math.min(100, pct))}%`;
+}
+// Arranca el splash progresivo básico
+let splashTimer = null;
+function splashTickStart() {
+    clearInterval(splashTimer);
+    let w = 12;
+    splashProgress(w);
+    splashTimer = setInterval(() => {
+        // crece suavemente sin llegar al 100 hasta montar
+        w = Math.min(92, w + Math.random() * 8);
+        splashProgress(w);
+    }, 400);
+}
+function splashTickStop() { clearInterval(splashTimer); splashProgress(100); }
+
 createInertiaApp({
     title: (title) => `${title} - ${appName}`,
     resolve: async (name) => {
@@ -34,10 +71,34 @@ createInertiaApp({
     return component;
     },
     setup({ el, App, props, plugin }) {
-        return createApp({ render: () => h(App, props) })
+        // Mostrar SIEMPRE el splash como pantalla de carga inicial
+        splashShow();
+        splashTickStart();
+        const app = createApp({ render: () => h(App, props) })
             .use(plugin)
             .use(ZiggyVue)
-            .mount(el);
+        
+        // Eventos de progreso de Inertia
+        document.addEventListener('inertia:progress', (e) => {
+            const p = e?.detail?.progress?.percentage;
+            if (typeof p === 'number') splashProgress(10 + (p * 0.9));
+        });
+
+        // Cuando esté montado, ocultar splash
+        app.mount(el);
+        splashTickStop();
+        setTimeout(splashHide, 250);
+        
+        // Mostrar splash en cada navegación
+        document.addEventListener('inertia:start', () => {
+            splashShow();
+            splashTickStart();
+        });
+        document.addEventListener('inertia:finish', () => {
+            splashTickStop();
+            setTimeout(splashHide, 150);
+        });
+        return app;
     },
     progress: {
         color: '#4B5563',

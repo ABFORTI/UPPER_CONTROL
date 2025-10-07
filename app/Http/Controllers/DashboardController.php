@@ -67,11 +67,19 @@ class DashboardController extends Controller
         $calidadTotalEvaluables = array_sum($calidadMap);
         $tasaValidacion = $calidadTotalEvaluables > 0 ? round(($calidadMap['validado'] / $calidadTotalEvaluables) * 100,1) : 0.0;
 
-        // Quitar cálculos y series relacionados con dinero/facturación del dashboard
-        $factPendientes = 0;
-        $montoFacturado = 0.0;
-        $factMap = ['pendiente'=>0,'facturado'=>0,'cobrado'=>0,'pagado'=>0];
-        $ingresosDiarios = collect();
+        // Facturación breakdown (estado de factura por OT en el periodo/centro)
+        // Nota: usamos un subquery para evitar ambigüedad de 'created_at' al unir con facturas
+        $otsSub = (clone $otsQuery)->select('ordenes_trabajo.id');
+        $factDistrib = DB::query()
+            ->fromSub($otsSub, 'ot')
+            ->leftJoin('facturas as f', 'f.id_orden', '=', 'ot.id')
+            ->selectRaw("COALESCE(f.estatus,'sin_factura') as est, COUNT(*) c")
+            ->groupBy('est')
+            ->pluck('c','est');
+        $factMap = ['sin_factura'=>0,'pendiente'=>0,'facturado'=>0,'cobrado'=>0,'pagado'=>0];
+        foreach ($factDistrib as $k=>$v) { if(array_key_exists($k,$factMap)) $factMap[$k]=(int)$v; }
+
+        // Se eliminan cálculos monetarios; mantenemos distribución para visualización
 
         // --- Serie: OTs por día por estatus (tabla simple)
         $porDia = (clone $otsQuery)
@@ -143,6 +151,7 @@ class DashboardController extends Controller
             'distribuciones' => [
                 'estatus_ots' => $estatusMap,
                 'calidad'     => $calidadMap,
+                'facturacion' => $factMap,
                 // quitar: 'facturas'
             ],
             'filters' => [

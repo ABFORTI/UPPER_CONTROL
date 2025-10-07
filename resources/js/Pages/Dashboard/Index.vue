@@ -25,13 +25,22 @@ function qs(obj){
   return p.toString()
 }
 
-const urlOtsXlsx = `/dashboard/export/ots?${qs({...filters, format:'xlsx'})}`
-const urlOtsCsv  = `/dashboard/export/ots?${qs({...filters, format:'csv'})}`
+// Base path (cuando la app corre en subcarpeta, p.ej. /UPPER_CONTROL/public)
+const basePath = computed(() => {
+  const p = window.location.pathname || ''
+  // quitar /dashboard y lo que siga para obtener la base
+  const m = p.match(/^(.*)\/dashboard(\/.*)?$/)
+  return m ? m[1] : p.replace(/\/?[^\/]*$/, '')
+})
+
+const urlOtsXlsx = computed(() => `${basePath.value}/dashboard/export/ots?${qs({...filters, format:'xlsx'})}`)
+const urlOtsCsv  = computed(() => `${basePath.value}/dashboard/export/ots?${qs({...filters, format:'csv'})}`)
 
 function submit(e){
   const form = new FormData(e.target)
   const params = Object.fromEntries(form.entries())
-  router.get(props.urls.index, params, { preserveState:true, replace:true })
+  // construir URL relativa a la base
+  router.get(`${basePath.value}/dashboard`, params, { preserveState:true, replace:true })
 }
 
 // Helpers para minigráficos
@@ -46,13 +55,22 @@ const calidadProg = computed(()=> ({
   total: (props.distribuciones.calidad?.pendiente||0)+(props.distribuciones.calidad?.validado||0)+(props.distribuciones.calidad?.rechazado||0)
 }))
 
+// Navegación desde cards
+function nav(path){
+  if (!path) return
+  // normalizar (soportar rutas absolutas http y relativas)
+  if (/^https?:\/\//i.test(path)) return router.get(path, {}, { preserveState: false })
+  const p = String(path).replace(/^\/+/, '')
+  router.get(`${basePath.value}/${p}`, {}, { preserveState: false })
+}
+
 </script>
 
 <template>
   <div class="p-6 max-w-7xl mx-auto space-y-8">
     <div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
       <div>
-        <h1 class="text-3xl font-bold flex items-center gap-3 tracking-tight">Panel de control</h1>
+        <h1 class="text-3xl font-bold flex items-center gap-3 tracking-tight">Dashboard</h1>
         <p class="text-slate-600">Resumen operativo del periodo seleccionado.</p>
       </div>
       <form @submit.prevent="submit" class="flex flex-wrap items-end gap-4">
@@ -93,35 +111,48 @@ const calidadProg = computed(()=> ({
      </form>
     </div>
     
-   <!-- KPIs principales (sin dinero) -->
+   <!-- KPIs principales (colores y navegación) -->
     <div class="grid md:grid-cols-4 gap-4">
-      <div class="bg-white shadow-sm rounded-lg p-4 border">
-        <div class="text-xs uppercase tracking-wide text-slate-500">Solicitudes</div>
+      <!-- Solicitudes -->
+  <div role="button" @click="nav('solicitudes')" title="Ver solicitudes"
+           class="cursor-pointer bg-gradient-to-br from-sky-500 to-cyan-600 text-white shadow-sm rounded-lg p-4 hover:shadow-md active:scale-[0.99] transition">
+        <div class="text-xs uppercase tracking-wide opacity-90">Solicitudes</div>
         <div class="mt-1 text-3xl font-semibold">{{ kpis.solicitudes ?? 0 }}</div>
       </div>
-      <div class="bg-white shadow-sm rounded-lg p-4 border">
-        <div class="text-xs uppercase tracking-wide text-slate-500">OTs Totales</div>
+
+      <!-- OTs Totales -->
+  <div role="button" @click="nav('ordenes')" title="Ver órdenes de trabajo"
+           class="cursor-pointer bg-gradient-to-br from-violet-600 to-fuchsia-600 text-white shadow-sm rounded-lg p-4 hover:shadow-md active:scale-[0.99] transition">
+        <div class="text-xs uppercase tracking-wide opacity-90">OTs Totales</div>
         <div class="mt-1 text-3xl font-semibold">{{ kpis.ots ?? 0 }}</div>
-        <div class="text-[11px] mt-1 text-slate-500">Completadas: {{ kpis.ots_completadas ?? 0 }} · Aut Cliente: {{ kpis.ots_aut_cliente ?? 0 }}</div>
+        <div class="text-[11px] mt-1 opacity-90">Completadas: {{ kpis.ots_completadas ?? 0 }} · Aut Cliente: {{ kpis.ots_aut_cliente ?? 0 }}</div>
       </div>
-      <div class="bg-white shadow-sm rounded-lg p-4 border">
-        <div class="text-xs uppercase tracking-wide text-slate-500">Calidad Pendiente</div>
+
+      <!-- Calidad Pendiente -->
+  <div role="button" @click="nav('calidad')" title="Ir a Calidad"
+           class="cursor-pointer bg-gradient-to-br from-amber-500 to-rose-500 text-white shadow-sm rounded-lg p-4 hover:shadow-md active:scale-[0.99] transition">
+        <div class="text-xs uppercase tracking-wide opacity-90">Calidad Pendiente</div>
         <div class="mt-1 text-3xl font-semibold">{{ kpis.ots_cal_pend ?? 0 }}</div>
-        <div class="mt-2 h-2 bg-slate-200 rounded overflow-hidden">
-          <div class="h-2 bg-amber-500" :style="{ width: (kpis.ots_completadas>0 ? ((kpis.ots_cal_pend / kpis.ots_completadas)*100).toFixed(1) : 0)+'%' }"></div>
+        <div class="mt-2 h-2 bg-white/30 rounded overflow-hidden">
+          <div class="h-2 bg-white/80" :style="{ width: (kpis.ots_completadas>0 ? ((kpis.ots_cal_pend / kpis.ots_completadas)*100).toFixed(1) : 0)+'%' }"></div>
         </div>
-  <div class="text-[11px] mt-1 text-slate-500">{{ kpis.ots_completadas > 0 ? ((kpis.ots_cal_pend / kpis.ots_completadas) * 100).toFixed(1) : 0 }}% de OTs completas</div>
+        <div class="text-[11px] mt-1 opacity-90">{{ kpis.ots_completadas > 0 ? ((kpis.ots_cal_pend / kpis.ots_completadas) * 100).toFixed(1) : 0 }}% de OTs completas</div>
       </div>
-      <div class="bg-gradient-to-br from-indigo-600 to-fuchsia-600 text-white shadow-sm rounded-lg p-4">
+
+      <!-- Tasa Validación -->
+  <div role="button" @click="nav('calidad')" title="Ir a Calidad"
+           class="cursor-pointer bg-gradient-to-br from-indigo-600 to-fuchsia-600 text-white shadow-sm rounded-lg p-4 hover:shadow-md active:scale-[0.99] transition">
         <div class="text-xs uppercase tracking-wide opacity-90">Tasa Validación</div>
         <div class="mt-1 text-3xl font-semibold">{{ kpis.tasa_validacion }}%</div>
         <div class="text-[11px] mt-1 opacity-90">OTs completadas evaluables</div>
       </div>
     </div>
 
-    <!-- Distribuciones y progreso calidad -->
+    <!-- Distribuciones: OTs + Calidad + Facturación en tarjetas -->
     <div class="grid lg:grid-cols-3 gap-6">
-      <div class="bg-white border rounded p-4">
+      <!-- Distribución OTs -->
+  <div role="button" @click="nav('ordenes')" title="Ver órdenes"
+           class="cursor-pointer bg-white border rounded p-4 hover:shadow-md transition">
         <h2 class="font-semibold mb-3 text-sm tracking-wide uppercase">Distribución OTs</h2>
         <div class="space-y-2 text-sm">
           <div v-for="(val,label) in distribuciones.estatus_ots" :key="label" class="flex items-center gap-2">
@@ -133,21 +164,61 @@ const calidadProg = computed(()=> ({
           </div>
         </div>
       </div>
+
+      <!-- Calidad + Facturación combinadas -->
       <div class="bg-white border rounded p-4">
-        <h2 class="font-semibold mb-3 text-sm tracking-wide uppercase">Calidad</h2>
-        <div class="text-sm mb-2">Tasa Validación: <strong>{{ kpis.tasa_validacion }}%</strong></div>
-        <div class="flex gap-2 text-xs mb-3">
-          <div class="flex-1"><div class="h-2 bg-amber-400" :style="{ width: calidadProg.total? ( (calidadProg.pend / calidadProg.total) * 100)+'%' : '0%' }"></div></div>
-          <div class="flex-1"><div class="h-2 bg-emerald-500" :style="{ width: calidadProg.total? ( (calidadProg.val / calidadProg.total) * 100)+'%' : '0%' }"></div></div>
-          <div class="flex-1"><div class="h-2 bg-rose-500" :style="{ width: calidadProg.total? ( (calidadProg.rech / calidadProg.total) * 100)+'%' : '0%' }"></div></div>
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="font-semibold text-sm tracking-wide uppercase">Calidad y Facturación</h2>
+          <div class="flex items-center gap-2 text-xs">
+            <button type="button" @click="nav('calidad')" class="px-2 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100">Calidad</button>
+            <button type="button" @click="nav('facturas')" class="px-2 py-1 rounded-full bg-fuchsia-50 text-fuchsia-700 border border-fuchsia-200 hover:bg-fuchsia-100">Facturas</button>
+          </div>
         </div>
-        <ul class="text-sm space-y-1">
-          <li>Pendiente: <strong>{{ calidadProg.pend }}</strong></li>
-          <li>Validado: <strong>{{ calidadProg.val }}</strong></li>
-          <li>Rechazado: <strong>{{ calidadProg.rech }}</strong></li>
-        </ul>
+        <!-- Calidad barras -->
+        <div class="space-y-2 text-sm mb-4">
+          <div class="flex items-center gap-2">
+            <span class="w-28 text-slate-600">Calidad Pend.</span>
+            <div class="flex-1 h-2 bg-slate-200 rounded overflow-hidden">
+              <div class="h-2 bg-amber-500" :style="{ width: calidadProg.total? ( (calidadProg.pend / calidadProg.total) * 100)+'%' : '0%' }"></div>
+            </div>
+            <span class="w-10 text-right tabular-nums">{{ calidadProg.pend }}</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="w-28 text-slate-600">Calidad Val.</span>
+            <div class="flex-1 h-2 bg-slate-200 rounded overflow-hidden">
+              <div class="h-2 bg-emerald-500" :style="{ width: calidadProg.total? ( (calidadProg.val / calidadProg.total) * 100)+'%' : '0%' }"></div>
+            </div>
+            <span class="w-10 text-right tabular-nums">{{ calidadProg.val }}</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="w-28 text-slate-600">Calidad Rech.</span>
+            <div class="flex-1 h-2 bg-slate-200 rounded overflow-hidden">
+              <div class="h-2 bg-rose-500" :style="{ width: calidadProg.total? ( (calidadProg.rech / calidadProg.total) * 100)+'%' : '0%' }"></div>
+            </div>
+            <span class="w-10 text-right tabular-nums">{{ calidadProg.rech }}</span>
+          </div>
+        </div>
+        <!-- Facturación barras -->
+        <div class="space-y-2 text-sm">
+          <div class="flex items-center gap-2" v-for="(val,label) in distribuciones.facturacion" :key="label">
+            <span class="w-28 capitalize text-slate-600">{{ label.replace('_',' ') }}</span>
+            <div class="flex-1 h-2 bg-slate-200 rounded overflow-hidden">
+              <div class="h-2" :class="{
+                    'bg-slate-500': label==='sin_factura',
+                    'bg-amber-500': label==='pendiente',
+                    'bg-blue-600':  label==='facturado',
+                    'bg-purple-600':label==='cobrado',
+                    'bg-emerald-600':label==='pagado',
+                }" :style="{ width: pct(val, (kpis.ots||1))+'%' }"></div>
+            </div>
+            <span class="w-10 text-right tabular-nums">{{ val }}</span>
+          </div>
+        </div>
       </div>
-      <div class="bg-white border rounded p-4">
+
+      <!-- Usuarios del centro -->
+  <div role="button" @click="nav('admin/users')" title="Administrar usuarios"
+     class="cursor-pointer bg-white border rounded p-4 hover:shadow-md transition">
         <h2 class="font-semibold mb-3 text-sm tracking-wide uppercase">Usuarios del centro</h2>
         <div v-if="!usuarios_centro.length" class="text-sm text-slate-500">Selecciona un centro para ver sus usuarios.</div>
         <ul v-else class="divide-y">
@@ -164,47 +235,6 @@ const calidadProg = computed(()=> ({
       </div>
     </div>
 
-    <!-- Series principales -->
-    <div class="grid lg:grid-cols-2 gap-6">
-      <div class="bg-white border rounded p-4 overflow-auto">
-        <h2 class="font-semibold mb-3 text-sm tracking-wide uppercase">OTs por día</h2>
-        <table class="w-full text-xs border">
-          <thead>
-            <tr class="bg-gray-50 text-left">
-              <th class="p-2">Fecha</th>
-              <th class="p-2">Gen</th>
-              <th class="p-2">Asig</th>
-              <th class="p-2">Proc</th>
-              <th class="p-2">Comp</th>
-              <th class="p-2">AutCli</th>
-              <th class="p-2">Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="r in (series.ots_por_dia || [])" :key="r.fecha" class="border-t">
-              <td class="p-2">{{ r.fecha }}</td>
-              <td class="p-2">{{ r.generada }}</td>
-              <td class="p-2">{{ r.asignada }}</td>
-              <td class="p-2">{{ r.en_proceso }}</td>
-              <td class="p-2">{{ r.completada }}</td>
-              <td class="p-2">{{ r.autorizada_cliente }}</td>
-              <td class="p-2 font-medium">{{ r.total }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <div class="bg-white border rounded p-4">
-        <h2 class="font-semibold mb-3 text-sm tracking-wide uppercase">Top servicios</h2>
-        <div class="space-y-2 text-xs">
-            <div v-for="s in (series.top_servicios||[])" :key="s.servicio" class="flex items-center gap-2">
-              <span class="w-40 truncate" :title="s.servicio">{{ s.servicio }}</span>
-              <div class="flex-1 h-2 bg-slate-200 rounded overflow-hidden">
-                <div class="h-2 bg-emerald-600" :style="{ width: pct(Number(s.completadas||0), maxTopServ)+'%' }"></div>
-              </div>
-              <span class="w-10 text-right tabular-nums">{{ s.completadas }}</span>
-            </div>
-        </div>
-      </div>
-    </div>
+    <!-- Se removieron las dos tarjetas inferiores (OTs por día y Top servicios) -->
   </div>
 </template>
