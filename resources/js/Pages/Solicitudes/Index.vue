@@ -25,13 +25,15 @@ function toPage(link){ if(link.url){ router.get(link.url, {}, {preserveState:tru
 
 // Exportar/Copy (cliente) - similar a Facturas
 function toCsv(items){
-  const headers = ['Folio','Usuario','Servicio','Centro','Cantidad','Estatus','Fecha']
+  const headers = ['Folio','Usuario','Servicio','Centro','Área','Cantidad','Archivo','Estatus','Fecha']
   const rows = items.map(s => [
     s.folio || s.id,
     s.cliente?.name || '-',
     s.servicio?.nombre || '-',
     s.centro?.nombre || '-',
+    s.area?.nombre || '-',
     s.cantidad ?? '',
+    s.archivos?.length > 0 ? 'Sí' : 'No',
     s.estatus ?? '',
     s.fecha ?? ''
   ])
@@ -50,7 +52,7 @@ function downloadExcel(){
 }
 async function copyTable(){
   try{
-    const tsv = (props.data?.data||[]).map(s => [s.folio||s.id, s.cliente?.name||'-', s.servicio?.nombre||'-', s.centro?.nombre||'-', s.cantidad??'', s.estatus??'', s.fecha??''].join('\t')).join('\n')
+    const tsv = (props.data?.data||[]).map(s => [s.folio||s.id, s.cliente?.name||'-', s.servicio?.nombre||'-', s.centro?.nombre||'-', s.area?.nombre||'-', s.cantidad??'', s.archivos?.length > 0 ? 'Sí' : 'No', s.estatus??'', s.fecha??''].join('\t')).join('\n')
     await navigator.clipboard.writeText(tsv)
   }catch(e){ console.warn('No se pudo copiar:', e) }
 }
@@ -101,7 +103,9 @@ async function copyTable(){
                 <th class="p-2">Usuario</th>
                 <th class="p-2">Servicio</th>
                 <th class="p-2">Centro</th>
+                <th class="p-2">Área</th>
                 <th class="p-2">Cantidad</th>
+                <th class="p-2">Archivo</th>
                 <th class="p-2">Estatus</th>
                 <th class="p-2">Fecha</th>
                 <th class="p-2">Acciones</th>
@@ -113,7 +117,17 @@ async function copyTable(){
                 <td class="px-4 py-3">{{ s.cliente?.name || '-' }}</td>
                 <td class="px-4 py-3">{{ s.servicio?.nombre || '-' }}</td>
                 <td class="px-4 py-3">{{ s.centro?.nombre || '-' }}</td>
+                <td class="px-4 py-3">{{ s.area?.nombre || '-' }}</td>
                 <td class="px-4 py-3">{{ s.cantidad }}</td>
+                <td class="px-4 py-3 text-center">
+                  <span v-if="s.archivos?.length > 0" class="inline-flex items-center gap-1 text-green-600">
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                    </svg>
+                    {{ s.archivos.length }}
+                  </span>
+                  <span v-else class="text-gray-400">-</span>
+                </td>
                 <td class="px-4 py-3">
                   <span class="px-2 py-1 rounded text-xs leading-none font-medium whitespace-nowrap"
                         :class="{

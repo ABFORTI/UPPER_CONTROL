@@ -13,7 +13,7 @@ import AuthenticatedLayout from './Layouts/AuthenticatedLayout.vue';
 
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
 
-// Simple gestor del splash
+// Simple gestor del splash principal (login/logout)
 function splashShow() {
     const el = document.getElementById('app-splash');
     if (el) {
@@ -30,6 +30,7 @@ function splashHide() {
         el.style.display = 'none';
         // borrar cookie splash_mode para evitar reaparición en refresh
         try { document.cookie = 'splash_mode=; Max-Age=0; path=/;'; } catch (e) {}
+        try { if (typeof window !== 'undefined') window.__SPLASH_MODE__ = null; } catch (e) {}
     }, 380);
 }
 function splashProgress(pct = 100) {
@@ -49,6 +50,40 @@ function splashTickStart() {
     }, 400);
 }
 function splashTickStop() { clearInterval(splashTimer); splashProgress(100); }
+
+// Loader ligero para procesos/navegación
+const proc = {
+    el: null,
+    timer: null,
+    ensure() { this.el = this.el || document.getElementById('process-loader'); return this.el; },
+    show() { if (!this.ensure()) return; this.el.classList.remove('hidden'); this.el.classList.add('flex'); },
+    hide() { if (!this.ensure()) return; this.el.classList.add('hidden'); this.el.classList.remove('flex'); }
+}
+
+function setProcText(msg = 'Procesando...') {
+    try {
+        const t = document.getElementById('process-loader-text');
+        if (t) t.textContent = msg;
+    } catch {}
+}
+
+function guessProcessText(method = 'get', path = '') {
+    const m = String(method || 'get').toLowerCase();
+    const p = String(path || '').toLowerCase();
+    const isGet = m === 'get';
+    if (!isGet) {
+        if (m === 'delete') return 'Eliminando...';
+        if (/autor|valid|aprob/.test(p)) return 'Autorizando...';
+        if (/upload|subir|archivo|evidenc|adjunt|cargar/.test(p)) return 'Subiendo archivo...';
+        if (/factur/.test(p)) return 'Procesando factura...';
+        if (/crear|store|create|nuevo|registr/.test(p)) return 'Creando...';
+        if (/actualiz|update|editar|modific/.test(p)) return 'Guardando cambios...';
+        return 'Procesando...';
+    }
+    // GET lento (>3s)
+    if (/export|reporte|descarga|download/.test(p)) return 'Preparando descarga...';
+    return 'Cargando...';
+}
 
 createInertiaApp({
     title: (title) => `${title} - ${appName}`,
@@ -71,9 +106,11 @@ createInertiaApp({
     return component;
     },
     setup({ el, App, props, plugin }) {
-        // Mostrar SIEMPRE el splash como pantalla de carga inicial
-        splashShow();
-        splashTickStart();
+    // Mostrar splash principal SOLO si se detecta modo (cookie o variable global)
+    const hasSplashCookie = /(?:^|; )splash_mode=/.test(document.cookie);
+    const splashMode = (typeof window !== 'undefined') ? (window.__SPLASH_MODE__ || null) : null;
+    const isAuthSplash = !!(hasSplashCookie || splashMode);
+    if (isAuthSplash) { splashShow(); splashTickStart(); }
         const app = createApp({ render: () => h(App, props) })
             .use(plugin)
             .use(ZiggyVue)
@@ -85,19 +122,162 @@ createInertiaApp({
         });
 
         // Cuando esté montado, ocultar splash
-        app.mount(el);
-        splashTickStop();
-        setTimeout(splashHide, 250);
+    app.mount(el);
+    if (isAuthSplash) { splashTickStop(); setTimeout(splashHide, 250); }
         
-        // Mostrar splash en cada navegación
-        document.addEventListener('inertia:start', () => {
-            splashShow();
-            splashTickStart();
+    // Navegaciones internas: loader ligero
+    // - GET (cambio de página): solo si tarda > 3000 ms
+    // - Mutaciones (POST/PUT/PATCH/DELETE): si tarda > 160 ms
+    let navTimer = null;
+    const THRESHOLD_MUTATION = 160; // ms
+    const THRESHOLD_GET = 3000; // ms
+
+        function extractPath(v) {
+            let raw = v?.url ?? v?.href ?? '';
+            let path = '';
+            try {
+                const u = typeof raw === 'string' ? new URL(raw, window.location.origin) : raw;
+                path = u?.pathname || '';
+            } catch (_) { path = String(raw || ''); }
+            return path;
+        }
+
+        function maybeShowAuthSplash(v) {
+            const method = String(v?.method || '').toLowerCase();
+            const path = extractPath(v);
+            const cookieAuth = /(?:^|; )splash_mode=/.test(document.cookie);
+            const flagAuth = !!window.__SPLASH_MODE__;
+            const isAuthPath = /\/(login|logout)(\/)?$/i.test(path) || /\/(login|logout)(\b|\/)/i.test(path);
+            const postAuth = (method === 'post') && isAuthPath;
+            const shouldAuthSplashNow = cookieAuth || flagAuth || postAuth;
+
+            if (postAuth && !flagAuth) {
+                window.__SPLASH_MODE__ = /logout/i.test(path) ? 'logout' : 'login';
+            }
+
+            if (shouldAuthSplashNow) {
+                proc.hide();
+                splashShow();
+                splashTickStart();
+                return true;
+            }
+            return false;
+        }
+
+        // Mostrar splash lo antes posible en la visita (solo auth). Para mutaciones no-auth, usar loader ligero.
+        document.addEventListener('inertia:visit', (e) => {
+            const v = e?.detail?.visit || {};
+            if (maybeShowAuthSplash(v)) return;
+            const m = String(v?.method || 'get').toLowerCase();
+            const path = extractPath(v);
+            setProcText(guessProcessText(m, path));
+            clearTimeout(navTimer);
+            const wait = (m !== 'get') ? THRESHOLD_MUTATION : THRESHOLD_GET;
+            navTimer = setTimeout(() => proc.show(), wait);
         });
+
+        // Respaldo también en start por compatibilidad
+        document.addEventListener('inertia:start', (e) => {
+            const v = e?.detail?.visit || {};
+            if (maybeShowAuthSplash(v)) return;
+            const m = String(v?.method || 'get').toLowerCase();
+            const path = extractPath(v);
+            setProcText(guessProcessText(m, path));
+            clearTimeout(navTimer);
+            const wait = (m !== 'get') ? THRESHOLD_MUTATION : THRESHOLD_GET;
+            navTimer = setTimeout(() => proc.show(), wait);
+        });
+
+        // Interceptar envío de formularios tradicionales (no-Inertia)
+        document.addEventListener('submit', (e) => {
+            try {
+                const form = e.target;
+                if (!(form instanceof HTMLFormElement)) return;
+                const method = String(form.method || 'get').toLowerCase();
+                const action = form.getAttribute('action') || '';
+                const path = (() => { try { return new URL(action, window.location.origin).pathname; } catch { return action; } })();
+                const isAuthPath = /(\/login|\/logout)(\b|\/)?$/i.test(path);
+                // Para login/logout: splash grande
+                if (isAuthPath && (method === 'post' || method === 'delete')) {
+                    window.__SPLASH_MODE__ = /logout/i.test(path) ? 'logout' : 'login';
+                    try { document.cookie = `splash_mode=${window.__SPLASH_MODE__}; Max-Age=15; path=/; SameSite=Lax`; } catch {}
+                    splashShow();
+                    splashTickStart();
+                    proc.hide();
+                    return;
+                }
+                // Para mutaciones no-auth: solo loader ligero
+                if (method !== 'get') {
+                    const submitter = e.submitter || null;
+                    const custom = submitter?.dataset?.processText || submitter?.dataset?.loadingText || form?.dataset?.processText || form?.dataset?.loadingText;
+                    setProcText(String(custom || guessProcessText(method, path)));
+                    proc.show();
+                }
+            } catch {}
+        }, true);
         document.addEventListener('inertia:finish', () => {
-            splashTickStop();
-            setTimeout(splashHide, 150);
+            const cookieAuth = /(?:^|; )splash_mode=/.test(document.cookie);
+            const flagAuth = !!window.__SPLASH_MODE__;
+            if (cookieAuth || flagAuth) {
+                splashTickStop();
+                setTimeout(splashHide, 150);
+                return;
+            }
+            clearTimeout(navTimer);
+            proc.hide();
         });
+
+        // Interceptores Axios: mostrar loader ligero solo en mutaciones (POST/PUT/PATCH/DELETE)
+        if (window.axios) {
+            let pendingMut = 0;
+            let reqTimer = null;
+            const startProc = () => {
+                clearTimeout(reqTimer);
+                reqTimer = setTimeout(() => proc.show(), THRESHOLD_MUTATION);
+            };
+            const stopProc = () => {
+                clearTimeout(reqTimer);
+                proc.hide();
+            };
+            window.axios.interceptors.request.use((config) => {
+                try {
+                    const method = String(config.method || 'get').toLowerCase();
+                    if (method !== 'get' && !window.__SPLASH_MODE__) {
+                        const url = (() => { try { return new URL(config.url, window.location.origin).pathname; } catch { return config.url; } })();
+                        setProcText(guessProcessText(method, url));
+                        pendingMut++;
+                        if (pendingMut === 1) startProc();
+                    }
+                } catch {}
+                return config;
+            }, (error) => {
+                try {
+                    stopProc();
+                } catch {}
+                return Promise.reject(error);
+            });
+            window.axios.interceptors.response.use((response) => {
+                try {
+                    const method = String(response?.config?.method || 'get').toLowerCase();
+                    if (method !== 'get') {
+                        pendingMut = Math.max(0, pendingMut - 1);
+                        if (pendingMut === 0) stopProc();
+                    }
+                } catch {}
+                return response;
+            }, (error) => {
+                try {
+                    const method = String(error?.config?.method || 'get').toLowerCase();
+                    if (method !== 'get') {
+                        pendingMut = Math.max(0, pendingMut - 1);
+                        if (pendingMut === 0) stopProc();
+                    } else {
+                        stopProc();
+                    }
+                } catch { stopProc(); }
+                return Promise.reject(error);
+            });
+        }
         return app;
     },
     progress: {

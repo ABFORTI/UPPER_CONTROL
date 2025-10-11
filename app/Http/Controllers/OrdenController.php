@@ -140,6 +140,7 @@ class OrdenController extends Controller
                 'id_solicitud'     => $solicitud->id,
                 'id_centrotrabajo' => $solicitud->id_centrotrabajo,
                 'id_servicio'      => $solicitud->id_servicio,
+                'id_area'          => $solicitud->id_area,
                 'team_leader_id'   => $data['team_leader_id'] ?? null,
                 'estatus'          => !empty($data['team_leader_id']) ? 'asignada' : 'generada',
                 'total_planeado'   => $totalPlan,
@@ -279,7 +280,7 @@ class OrdenController extends Controller
         $this->authorizeFromCentro($orden->id_centrotrabajo, $orden);
 
         $orden->load([
-            'solicitud','servicio','centro','items','teamLeader','avances.usuario',
+            'solicitud.archivos','servicio','centro','area','items','teamLeader','avances.usuario',
             // Deja la línea de abajo SOLO si existe la relación:
             // 'items.evidencias',
             'evidencias' => fn($q)=>$q->with('usuario')->orderByDesc('id'),
@@ -409,7 +410,7 @@ class OrdenController extends Controller
             'id'       => $req->integer('id') ?: null,
         ];
 
-    $q = Orden::with(['servicio','centro','teamLeader','solicitud','factura'])
+    $q = Orden::with(['servicio','centro','teamLeader','solicitud','factura','area'])
         ->when(!$isAdminOrFact, fn($qq)=>$qq->where('id_centrotrabajo',$u->centro_trabajo_id))
         ->when($isTL, fn($qq)=>$qq->where('team_leader_id',$u->id))
         ->when($isCliente && !$isClienteCentro, fn($qq)=>$qq->whereHas('solicitud', fn($w)=>$w->where('id_cliente',$u->id)))
@@ -435,6 +436,7 @@ class OrdenController extends Controller
                 'created_at' => $o->created_at,
                 'servicio' => ['nombre' => $o->servicio?->nombre],
                 'centro'   => ['nombre' => $o->centro?->nombre],
+                'area'     => ['nombre' => $o->area?->nombre],
                 'team_leader' => ['name' => $o->teamLeader?->name],
                 'urls' => [
                     'show'     => route('ordenes.show', $o),

@@ -108,6 +108,16 @@ class DashboardController extends Controller
                 return ['servicio'=>$nombre, 'completadas'=>$r->c];
             });
 
+        // --- Notificaciones no leídas del usuario actual
+        $notificacionesNoLeidas = 0;
+        try {
+            if (method_exists($u, 'unreadNotifications')) {
+                $notificacionesNoLeidas = (int) $u->unreadNotifications()->count();
+            }
+        } catch (\Throwable $e) {
+            $notificacionesNoLeidas = 0; // fallback silencioso
+        }
+
         // Centros para filtro (solo admins/facturación)
         $centros = $u->hasAnyRole(['admin','facturacion'])
             ? DB::table('centros_trabajo')->select('id','nombre')->orderBy('nombre')->get()
@@ -142,6 +152,7 @@ class DashboardController extends Controller
                 'ots_aut_cliente' => $otsAutCliente,
                 // quitar: 'fact_pendientes', 'monto_facturado'
                 'tasa_validacion' => $tasaValidacion,
+                'notificaciones'  => $notificacionesNoLeidas,
             ],
             'series' => [
                 'ots_por_dia'   => $porDia,

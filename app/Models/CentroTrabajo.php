@@ -17,5 +17,10 @@ class CentroTrabajo extends Model
         return $this->belongsToMany(User::class, 'centro_trabajo_user')
             ->withTimestamps();
     }
+
+    public function areas()
+    {
+        return $this->hasMany(Area::class, 'id_centrotrabajo');
+    }
 }
 

@@ -12,6 +12,8 @@ const props = defineProps({
   selectedCentroId: { type: Number, required: false, default: null },
   iva:       { type: Number, required: false, default: 0.16 },
   urls:      { type: Object, required: true }, // { store }
+  areas:     { type: Array, required: false, default: () => ([]) },
+  areasPorCentro: { type: Object, required: false, default: () => ({}) },
 })
 
 
@@ -19,9 +21,11 @@ const form = useForm({
 id_centrotrabajo: null,
 id_servicio: '',
 descripcion: '',
+id_area: null,
 cantidad: 1,
 tamanos: { chico:0, mediano:0, grande:0, jumbo:0 },
 notas: '',
+archivos: [],
 })
 // Inicializar centro si aplica
 if (props.canChooseCentro) {
@@ -39,6 +43,15 @@ const filteredServicios = computed(() => {
   }
   const ids = Object.keys(props.precios || {}).map(n => Number(n))
   return props.servicios.filter(s => ids.includes(Number(s.id)))
+})
+
+// Áreas disponibles según el centro
+const filteredAreas = computed(() => {
+  if (props.canChooseCentro) {
+    const cid = Number(form.id_centrotrabajo)
+    return props.areasPorCentro?.[cid] || []
+  }
+  return props.areas || []
 })
 
 const servicio = computed(() => filteredServicios.value.find(s => s.id === Number(form.id_servicio)) || null)
@@ -102,7 +115,9 @@ const payload = {
 id_centrotrabajo: form.id_centrotrabajo,
 id_servicio: form.id_servicio,
 descripcion: form.descripcion,
+id_area: form.id_area,
 notas: form.notas,
+archivos: form.archivos,
 }
 if (usaTamanos.value) payload.tamanos = {
   chico:  +form.tamanos.chico  || 0,
@@ -113,7 +128,14 @@ if (usaTamanos.value) payload.tamanos = {
 else payload.cantidad = +form.cantidad||0
 
 
-form.transform(() => payload).post(props.urls.store, { preserveScroll:true })
+form.transform(() => payload).post(props.urls.store, { 
+  preserveScroll:true,
+  forceFormData: true, // Para enviar archivos
+})
+}
+
+function handleFiles(e) {
+  form.archivos = Array.from(e.target.files || [])
 }
 </script>
 
@@ -149,6 +171,40 @@ form.transform(() => payload).post(props.urls.store, { preserveScroll:true })
                 <label class="block text-sm mb-1">Descripción del producto</label>
                 <input v-model="form.descripcion" class="border p-2 rounded w-full" placeholder="Ej. Monitores / Teléfonos" />
                 <p v-if="form.errors.descripcion" class="text-red-600 text-sm">{{ form.errors.descripcion }}</p>
+              </div>
+            </div>
+            <!-- Área -->
+            <div class="grid md:grid-cols-3 gap-3">
+              <div class="md:col-span-1">
+                <label class="block text-sm mb-1">Área</label>
+                <select v-model="form.id_area" class="border p-2 rounded w-full">
+                  <option :value="null">— Selecciona área (opcional) —</option>
+                  <option v-for="area in filteredAreas" :key="area.id" :value="area.id">
+                    {{ area.nombre }}
+                  </option>
+                </select>
+                <p v-if="form.errors.id_area" class="text-red-600 text-sm">{{ form.errors.id_area }}</p>
+              </div>
+              <div class="md:col-span-2">
+                <label class="block text-sm mb-1">Archivos adjuntos</label>
+                <input 
+                  type="file" 
+                  @change="handleFiles"
+                  multiple
+                  accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xlsx,.xls"
+                  class="border p-2 rounded w-full text-sm file:mr-4 file:py-1 file:px-3 file:rounded file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                />
+                <p class="text-xs text-gray-500 mt-1">Máximo 10 MB por archivo. Formatos: PDF, imágenes, Word, Excel</p>
+                <p v-if="form.errors.archivos" class="text-red-600 text-sm">{{ form.errors.archivos }}</p>
+                <div v-if="form.archivos.length" class="mt-2 text-sm space-y-1">
+                  <div v-for="(file, i) in form.archivos" :key="i" class="flex items-center gap-2 text-gray-600">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                    </svg>
+                    <span class="flex-1 truncate">{{ file.name }}</span>
+                    <span class="text-xs text-gray-400">{{ (file.size / 1024).toFixed(0) }} KB</span>
+                  </div>
+                </div>
               </div>
             </div>
             <!-- Cantidad por pieza -->

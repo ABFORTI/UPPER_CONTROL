@@ -37,11 +37,12 @@ function factBadgeClass(v){
 
 // Exportar/Copy (cliente)
 function toCsv(items){
-  const headers = ['ID','Servicio','Centro','Estatus','Calidad','Facturación','TL','Fecha']
+  const headers = ['ID','Servicio','Centro','Área','Estatus','Calidad','Facturación','TL','Fecha']
   const rows = items.map(o => [
     o.id,
     o.servicio?.nombre || '-',
     o.centro?.nombre || '-',
+    o.area?.nombre || '-',
     o.estatus || '-',
     o.calidad_resultado || '-',
     o.facturacion || '-',
@@ -63,7 +64,7 @@ function downloadExcel(){
 }
 async function copyTable(){
   try{
-    const tsv = (rows.value||[]).map(o => [o.id, o.servicio?.nombre||'-', o.centro?.nombre||'-', o.estatus||'-', o.calidad_resultado||'-', o.facturacion||'-', o.team_leader?.name||'—', o.created_at||''].join('\t')).join('\n')
+    const tsv = (rows.value||[]).map(o => [o.id, o.servicio?.nombre||'-', o.centro?.nombre||'-', o.area?.nombre||'-', o.estatus||'-', o.calidad_resultado||'-', o.facturacion||'-', o.team_leader?.name||'—', o.created_at||''].join('\t')).join('\n')
     await navigator.clipboard.writeText(tsv)
   }catch(e){ console.warn('No se pudo copiar:', e) }
 }
@@ -98,6 +99,7 @@ async function copyTable(){
             <th class="p-2">ID</th>
             <th class="p-2">Servicio</th>
             <th class="p-2">Centro</th>
+            <th class="p-2">Área</th>
             <th class="p-2">Estatus</th>
             <th class="p-2">Calidad</th>
             <th class="p-2">Facturación</th>
@@ -111,6 +113,7 @@ async function copyTable(){
                 <td class="px-4 py-3 font-mono">#{{ o.id }}</td>
                 <td class="px-4 py-3">{{ o.servicio?.nombre }}</td>
                 <td class="px-4 py-3">{{ o.centro?.nombre }}</td>
+                <td class="px-4 py-3">{{ o.area?.nombre || '-' }}</td>
                 <td class="px-4 py-3">{{ o.estatus }}</td>
                 <td class="px-4 py-3">{{ o.calidad_resultado }}</td>
                 <td class="px-4 py-3">

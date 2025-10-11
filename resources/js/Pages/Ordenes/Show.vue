@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { router, useForm } from '@inertiajs/vue3'
+import FilePreview from '@/Components/FilePreview.vue'
 
 const props = defineProps({
   orden:       { type: Object, required: true },
@@ -62,6 +63,12 @@ function borrarEvidencia(id){
   const url = props.urls.evidencias_destroy.replace(/\/0$/, '/'+id)
   router.delete(url, { preserveScroll:true })
 }
+
+// ----- Preview de archivos de solicitud -----
+const archivoPreview = ref(null)
+const canPreview = (mime) => mime?.startsWith('image/') || mime === 'application/pdf'
+const openPreview = (archivo) => { archivoPreview.value = archivo }
+const closePreview = () => { archivoPreview.value = null }
 </script>
 
 <template>
@@ -70,6 +77,7 @@ function borrarEvidencia(id){
     <div class="opacity-70">
       Centro: {{ orden?.centro?.nombre }} |
       TL: {{ orden?.team_leader?.name ?? 'No asignado' }}
+      <span v-if="orden?.area"> | Área: {{ orden.area.nombre }}</span>
     </div>
     <div class="mt-2 flex flex-wrap items-center gap-2">
       <a :href="urls.pdf" class="px-3 py-2 rounded bg-gray-700 text-white inline-block" target="_blank">
@@ -206,6 +214,43 @@ function borrarEvidencia(id){
       <p v-if="evForm.errors.evidencias" class="text-red-600 text-sm mt-2">{{ evForm.errors.evidencias }}</p>
     </div>
 
+    <!-- Archivos de la Solicitud -->
+    <div v-if="orden?.solicitud?.archivos?.length" class="mt-6">
+      <h2 class="font-semibold mb-3">Archivos de la Solicitud</h2>
+      <div class="border rounded divide-y">
+        <div v-for="archivo in orden.solicitud.archivos" :key="archivo.id" 
+             class="p-3 flex items-center justify-between hover:bg-gray-50">
+          <div class="flex items-center gap-3">
+            <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+            </svg>
+            <div>
+              <div class="font-medium text-sm">{{ archivo.nombre_original || archivo.path?.split('/').pop() || 'Archivo' }}</div>
+              <div class="text-xs text-gray-500">
+                {{ archivo.size ? (archivo.size / 1024).toFixed(0) : '0' }} KB
+                <span v-if="archivo.mime"> • {{ archivo.mime }}</span>
+              </div>
+            </div>
+          </div>
+          <div class="flex gap-2">
+            <button v-if="canPreview(archivo.mime)"
+                    @click="openPreview(archivo)"
+                    class="px-3 py-1 rounded text-sm bg-gray-600 text-white hover:bg-gray-700">
+              <svg class="w-4 h-4 inline-block mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+              </svg>
+              Ver
+            </button>
+            <a :href="route('archivos.download', archivo.id)" 
+               class="px-3 py-1 rounded text-sm bg-blue-600 text-white hover:bg-blue-700">
+              Descargar
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Evidencias: galería -->
     <h2 class="font-semibold mt-6 mb-2">Evidencias</h2>
     <div v-if="vistaEvidencias.length" class="grid md:grid-cols-4 gap-3">
@@ -272,5 +317,8 @@ function borrarEvidencia(id){
         <span v-if="a && a.id_item"> (ítem #{{ a.id_item }})</span>
       </li>
     </ul>
+
+    <!-- Modal de preview de archivos -->
+    <FilePreview v-if="archivoPreview" :archivo="archivoPreview" @close="closePreview" />
   </div>
 </template>

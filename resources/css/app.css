@@ -50,3 +50,55 @@ h1, h2, h3, .heading {
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Loader ligero: barra transportadora */
+.conveyor-wrapper{ width: 420px; max-width: 92vw; }
+.conveyor-belt{
+  position: relative;
+  width: 100%;
+  height: 110px;
+  background: linear-gradient(180deg, rgba(17,24,39,0.06), rgba(17,24,39,0.02));
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: inset 0 2px 6px rgba(0,0,0,0.06);
+}
+.conveyor-belt .roller{
+  position: absolute;
+  top: 50%; transform: translateY(-50%);
+  width: 24px; height: 24px; border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, #9ca3af, #6b7280);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.25), inset 0 2px 3px rgba(255,255,255,0.35);
+}
+.conveyor-belt .roller.left{ left: 8px; }
+.conveyor-belt .roller.right{ right: 8px; }
+.conveyor-belt .belt-track{
+  position: absolute; left: 28px; right: 28px; top: 50%; transform: translateY(-50%);
+  height: 36px; border-radius: 8px;
+  background:
+    repeating-linear-gradient(90deg, #e5e7eb 0 22px, #cbd5e1 22px 24px),
+    linear-gradient(180deg, #f3f4f6, #e5e7eb);
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.08);
+}
+@keyframes beltMove {
+  0% { background-position: 0 0, 0 0; }
+  100% { background-position: 44px 0, 0 0; }
+}
+.conveyor-belt .belt-track{ animation: beltMove 0.9s linear infinite; }
+
+.conveyor-belt .box{
+  position: absolute; bottom: 30px; width: 36px; height: 26px; border-radius: 4px;
+  background: linear-gradient(180deg, #f59e0b, #ea580c);
+  box-shadow: 0 6px 10px rgba(0,0,0,0.15);
+}
+.conveyor-belt .box::after{
+  content:''; position: absolute; inset: 2px; border-radius: 3px;
+  background: repeating-linear-gradient(90deg, rgba(255,255,255,0.35) 0 8px, rgba(255,255,255,0.1) 8px 16px);
+  mix-blend-mode: overlay;
+}
+@keyframes boxMove {
+  0% { left: 30px; }
+  100% { left: calc(100% - 66px); }
+}
+.conveyor-belt .box1{ animation: boxMove 2.8s linear infinite; }
+.conveyor-belt .box2{ animation: boxMove 2.8s linear infinite; animation-delay: 0.6s; }
+.conveyor-belt .box3{ animation: boxMove 2.8s linear infinite; animation-delay: 1.2s; }

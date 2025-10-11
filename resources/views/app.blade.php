@@ -12,11 +12,15 @@
 
         <!-- Scripts -->
         @routes
+        <script>
+            window.__SPLASH_MODE__ = @json(request()->cookie('splash_mode'));
+        </script>
         @vite(['resources/js/app.js', "resources/js/Pages/{$page['component']}.vue"])
         @inertiaHead
     </head>
     <body class="font-sans antialiased">
-        <div id="app-splash" class="fixed inset-0 z-[9999] select-none text-white bg-gradient-to-br from-[#0a1a24] via-[#0b1f2b] to-[#0b2330]" style="display:block; opacity:1;">
+    <!-- Splash principal: solo login/logout (oculto por defecto; lo controla app.js) -->
+    <div id="app-splash" class="fixed inset-0 z-[9999] select-none text-white bg-gradient-to-br from-[#0a1a24] via-[#0b1f2b] to-[#0b2330]" style="display:none; opacity:0;">
             <!-- Glow superior -->
             <div class="pointer-events-none absolute -top-20 left-1/2 -translate-x-1/2 w-[110%] h-40 bg-cyan-500/10 blur-2xl"></div>
             <!-- Red de puntos decorativos -->
@@ -63,6 +67,21 @@
                         </div>
                         <div id="app-splash-text" class="mt-3 text-[11px] tracking-widest text-white/80">CARGANDO... POR FAVOR ESPERE</div>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Loader de procesos: para navegaciones y tareas (ligero) -->
+        <div id="process-loader" class="fixed inset-0 z-[9998] hidden items-center justify-center bg-black/30">
+            <div class="conveyor-wrapper p-6 rounded-xl bg-white/95 text-slate-800 shadow-xl backdrop-blur">
+                <div id="process-loader-text" class="text-xs tracking-wider uppercase text-slate-600 text-center mb-3">Procesando...</div>
+                <div class="conveyor-belt">
+                    <div class="roller left"></div>
+                    <div class="roller right"></div>
+                    <div class="belt-track"></div>
+                    <div class="box box1"></div>
+                    <div class="box box2"></div>
+                    <div class="box box3"></div>
                 </div>
             </div>
         </div>

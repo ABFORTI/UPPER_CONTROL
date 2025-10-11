@@ -51,6 +51,16 @@ Route::middleware('auth')->group(function () {
         auth()->user()->unreadNotifications->markAsRead();
         return back();
     })->name('notificaciones.read_all');
+
+    Route::post('/notificaciones/{notification}/read', function ($notificationId) {
+        $user = request()->user();
+        $notification = $user->notifications()->whereKey($notificationId)->firstOrFail();
+        if (is_null($notification->read_at)) {
+            $notification->markAsRead();
+        }
+        // Devolvemos 204 para que el front pueda continuar con la navegación deseada
+        return response()->noContent();
+    })->name('notificaciones.read');
 });
 
 /* ==========
@@ -63,6 +73,16 @@ Route::middleware(['auth','role:admin|coordinador'])->group(function () {
     Route::post('/servicios/crear', [PrecioController::class,'crear'])->name('servicios.crear');
     Route::post('/servicios/clonar', [PrecioController::class,'clonar'])->name('servicios.clonar');
     Route::post('/servicios/eliminar', [PrecioController::class,'eliminar'])->name('servicios.eliminar');
+});
+
+/* ==========
+ |  ÁREAS
+ * ========== */
+Route::middleware(['auth','role:admin|coordinador'])->group(function () {
+    Route::get('/areas', [\App\Http\Controllers\AreaController::class,'index'])->name('areas.index');
+    Route::post('/areas', [\App\Http\Controllers\AreaController::class,'store'])->name('areas.store');
+    Route::put('/areas/{area}', [\App\Http\Controllers\AreaController::class,'update'])->name('areas.update');
+    Route::delete('/areas/{area}', [\App\Http\Controllers\AreaController::class,'destroy'])->name('areas.destroy');
 });
 
 /* ===============
@@ -84,6 +104,14 @@ Route::middleware('auth')->group(function () {
         ->name('ordenes.createFromSolicitud');
     Route::post('/solicitudes/{solicitud}/generar-ot', [OrdenController::class,'storeFromSolicitud'])
         ->name('ordenes.storeFromSolicitud');
+});
+
+/* ===============
+ |  ARCHIVOS
+ * =============== */
+Route::middleware('auth')->group(function () {
+    Route::get('/archivos/{archivo}/download', [\App\Http\Controllers\ArchivoController::class,'download'])->name('archivos.download');
+    Route::get('/archivos/{archivo}/view', [\App\Http\Controllers\ArchivoController::class,'view'])->name('archivos.view');
 });
 
 /* ==========

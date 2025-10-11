@@ -48,7 +48,7 @@ class SolicitudController extends Controller
         $data = $q->paginate(10)->withQueryString();
 
         return Inertia::render('Solicitudes/Index', [
-            'data' => $q->with(['servicio','centro','cliente'])->paginate(10)->withQueryString(),
+            'data' => $q->with(['servicio','centro','cliente','area','archivos'])->paginate(10)->withQueryString(),
             'filters' => $req->only(['estatus','servicio','folio','desde','hasta']),
             'servicios'=> ServicioEmpresa::select('id','nombre')->orderBy('nombre')->get(),
             'urls' => ['index' => route('solicitudes.index')],
@@ -59,6 +59,17 @@ class SolicitudController extends Controller
     {
         /** @var \App\Models\User $u */
         $u = \Illuminate\Support\Facades\Auth::user();
+        
+        // Verificar bloqueo por OTs vencidas sin autorizar
+        $bloqueo = $this->verificarBloqueoOTsVencidas($u);
+        if ($bloqueo) {
+            return Inertia::render('Solicitudes/Bloqueada', [
+                'mensaje' => $bloqueo['mensaje'],
+                'ordenes_vencidas' => $bloqueo['ordenes'],
+                'tiempo_limite' => $bloqueo['tiempo_limite_texto'],
+            ]);
+        }
+        
         $servicios = \App\Models\ServicioEmpresa::select('id','nombre','usa_tamanos')
             ->orderBy('nombre')->get();
 
@@ -132,13 +143,30 @@ class SolicitudController extends Controller
             'selectedCentroId'  => $selectedCentroId,
             'iva'               => 0.16,
             'urls' => ['store' => route('solicitudes.store')],
+            'areas'             => $u->centro_trabajo_id 
+                ? \App\Models\Area::where('id_centrotrabajo', $u->centro_trabajo_id)->activas()->orderBy('nombre')->get()
+                : [],
+            'areasPorCentro'    => $canChooseCentro 
+                ? \App\Models\Area::activas()->get()->groupBy('id_centrotrabajo')->map(function($items) {
+                    return $items->sortBy('nombre')->values();
+                  })
+                : [],
         ]);
     }
 
     public function store(Request $req)
     {
+        $u = $req->user();
+        
+        // Verificar bloqueo por OTs vencidas sin autorizar
+        $bloqueo = $this->verificarBloqueoOTsVencidas($u);
+        if ($bloqueo) {
+            return back()->withErrors([
+                'bloqueo' => $bloqueo['mensaje']
+            ])->withInput();
+        }
+        
         $serv = ServicioEmpresa::findOrFail($req->id_servicio);
-        $u    = $req->user();
 
         // Determinar centro a usar
         $canChooseCentro = $u && $u->hasAnyRole(['admin','facturacion','calidad']);
@@ -206,6 +234,7 @@ class SolicitudController extends Controller
                     'id_centrotrabajo' => $centroId,
                     'id_servicio'      => $serv->id,
                     'descripcion'      => $req->descripcion,
+                    'id_area'          => $req->id_area,
                     'cantidad'         => $total,
                     'subtotal'         => $subtotal,
                     'iva'              => $iva,
@@ -249,6 +278,7 @@ class SolicitudController extends Controller
                         'id_centrotrabajo' => $centroId,
                         'id_servicio'      => $serv->id,
                         'descripcion'      => $req->descripcion,
+                        'id_area'          => $req->id_area,
                         'cantidad'         => (int)$req->cantidad,
                         'subtotal'         => $subtotal,
                         'iva'              => $iva,
@@ -277,6 +307,25 @@ class SolicitudController extends Controller
             throw $lastException ?? new \RuntimeException('No fue posible generar un folio único');
         }
 
+        // Manejar archivos adjuntos
+        if ($req->hasFile('archivos')) {
+            $archivos = $req->file('archivos');
+            // Filtrar archivos válidos (a veces vienen elementos vacíos en el array)
+            if (is_array($archivos)) {
+                foreach ($archivos as $file) {
+                    if ($file && $file->isValid()) {
+                        $path = $file->store('solicitudes/' . $sol->id, 'public');
+                        $sol->archivos()->create([
+                            'path'             => $path,
+                            'nombre_original'  => $file->getClientOriginalName(),
+                            'mime'             => $file->getClientMimeType(),
+                            'size'             => $file->getSize(),
+                            'subtipo'          => 'adjunto',
+                        ]);
+                    }
+                }
+            }
+        }
 
         // Notificar a coordinador del centro
         Notifier::toRoleInCentro(
@@ -379,7 +428,7 @@ class SolicitudController extends Controller
 
     public function show(Request $req, Solicitud $solicitud)
     {
-    $solicitud->load(['cliente','servicio','centro','archivos','tamanos','ordenes']);
+    $solicitud->load(['cliente','servicio','centro','area','archivos','tamanos','ordenes']);
         $user = $req->user();
 
         $canAprobar = $user->hasAnyRole(['coordinador','admin'])
@@ -462,5 +511,95 @@ class SolicitudController extends Controller
             'iva'       => $iva,
             'total'     => $total,
         ];
+    }
+
+    /**
+     * Verifica si hay OTs completadas sin autorizar que hayan excedido el tiempo límite.
+     * Si encuentra alguna en el centro del usuario, bloquea la creación de nuevas solicitudes.
+     * 
+     * @param \App\Models\User $user
+     * @return array|null ['mensaje' => string, 'ordenes' => array, 'tiempo_limite_texto' => string] o null si no hay bloqueo
+     */
+    private function verificarBloqueoOTsVencidas($user): ?array
+    {
+        // Solo aplicar a usuarios tipo cliente (no admin/coordinador/etc)
+        if (!$user || $user->hasAnyRole(['admin', 'coordinador', 'facturacion', 'calidad'])) {
+            return null;
+        }
+
+        // Verificar si el feature está habilitado
+        if (!config('business.bloquear_solicitudes_por_ots_vencidas', true)) {
+            return null;
+        }
+
+        $centroId = (int)($user->centro_trabajo_id ?? 0);
+        if (!$centroId) {
+            return null; // Sin centro asignado, no aplicar bloqueo
+        }
+
+        // Obtener tiempo límite en minutos desde config
+        // PARA PRUEBAS: 1 minuto
+        // PARA PRODUCCIÓN: 4320 minutos (72 horas)
+        $timeoutMinutos = (int)config('business.ot_autorizacion_timeout_minutos', 1);
+        $limiteTimestamp = now()->subMinutes($timeoutMinutos);
+
+        // Buscar OTs completadas sin autorizar que hayan excedido el tiempo
+        $otsVencidas = \App\Models\Orden::where('id_centrotrabajo', $centroId)
+            ->where('estatus', 'completada')
+            ->where('updated_at', '<=', $limiteTimestamp) // completada hace más de X tiempo
+            ->whereDoesntHave('aprobaciones', function($q) {
+                $q->where('tipo', 'cliente')->where('resultado', 'autorizado');
+            })
+            ->with('solicitud:id,folio')
+            ->orderBy('updated_at', 'asc')
+            ->get(['id', 'updated_at', 'id_solicitud']);
+
+        if ($otsVencidas->isEmpty()) {
+            return null; // No hay bloqueo
+        }
+
+        // Construir mensaje de bloqueo
+        $tiempoTexto = $timeoutMinutos >= 60 
+            ? round($timeoutMinutos / 60) . ' hora(s)'
+            : $timeoutMinutos . ' minuto(s)';
+
+        $ordenesDetalle = $otsVencidas->map(function($ot) use ($timeoutMinutos) {
+            $transcurrido = now()->diffInMinutes($ot->updated_at);
+            $folio = $ot->solicitud ? $ot->solicitud->folio : 'OT-' . $ot->id;
+            return [
+                'id' => $ot->id,
+                'folio' => $folio,
+                'completada_hace' => $this->formatearTiempo($transcurrido),
+                'url' => route('ordenes.show', $ot->id),
+            ];
+        })->toArray();
+
+        $mensaje = sprintf(
+            'No puedes crear nuevas solicitudes. Hay %d orden(es) de trabajo completada(s) hace más de %s sin autorización del cliente. Por favor, autoriza las órdenes pendientes antes de continuar.',
+            $otsVencidas->count(),
+            $tiempoTexto
+        );
+
+        return [
+            'mensaje' => $mensaje,
+            'ordenes' => $ordenesDetalle,
+            'tiempo_limite_texto' => $tiempoTexto,
+        ];
+    }
+
+    /**
+     * Formatea minutos en texto legible
+     */
+    private function formatearTiempo(int $minutos): string
+    {
+        if ($minutos < 60) {
+            return $minutos . ' minuto(s)';
+        }
+        if ($minutos < 1440) { // < 24h
+            $horas = round($minutos / 60, 1);
+            return $horas . ' hora(s)';
+        }
+        $dias = round($minutos / 1440, 1);
+        return $dias . ' día(s)';
     }
 }
