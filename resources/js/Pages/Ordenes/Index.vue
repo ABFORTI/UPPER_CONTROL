@@ -13,6 +13,8 @@ const rows = computed(()=> props.data?.data ?? [])
 
 // Filtros unificados por estatus (píldoras) con conjunto fijo
 const sel = ref(props.filters?.estatus || '')
+const yearSel = ref(props.filters?.year || new Date().getFullYear())
+const weekSel = ref(props.filters?.week || '')
 const estatuses = computed(() => [
   'generada',
   'asignada',
@@ -23,6 +25,8 @@ const estatuses = computed(() => [
 function applyFilter(){
   const params = {}
   if (sel.value) params.estatus = sel.value
+  if (yearSel.value) params.year = yearSel.value
+  if (weekSel.value) params.week = weekSel.value
   router.get(props.urls.index, params, { preserveState: true, replace: true })
 }
 
@@ -83,9 +87,20 @@ async function copyTable(){
         </div>
 
         <div class="flex flex-wrap items-center gap-2 w-full lg:w-auto justify-end">
+          <!-- Año -->
+          <select v-model="yearSel" @change="applyFilter" class="border p-2 rounded min-w-[100px]">
+            <option v-for="y in [yearSel-2, yearSel-1, yearSel, yearSel+1]" :key="y" :value="y">{{ y }}</option>
+          </select>
+          
+          <!-- Semana -->
+          <select v-model="weekSel" @change="applyFilter" class="border p-2 rounded min-w-[120px]">
+            <option value="">Periodos</option>
+            <option v-for="w in 53" :key="w" :value="w">Periodo {{ w }}</option>
+          </select>
+          
           <div class="flex flex-wrap items-center gap-2">
-            <button @click="sel=''; applyFilter()" :class="['px-3 py-1 rounded-full text-sm border', sel==='' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-700 border-slate-300']">Todos</button>
-            <button v-for="e in estatuses" :key="e" @click="sel=e; applyFilter()" :class="['px-3 py-1 rounded-full text-sm border capitalize', sel===e ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-700 border-slate-300']">{{ e }}</button>
+            <button @click="sel=''; applyFilter()" :class="['px-4 py-2 rounded-full text-base border', sel==='' ? 'text-white border-[#1A73E8]' : 'bg-white text-slate-700 border-slate-300']" :style="sel==='' ? 'background-color: #1A73E8' : ''">Todos</button>
+            <button v-for="e in estatuses" :key="e" @click="sel=e; applyFilter()" :class="['px-4 py-2 rounded-full text-base border capitalize', sel===e ? 'text-white border-[#1A73E8]' : 'bg-white text-slate-700 border-slate-300']" :style="sel===e ? 'background-color: #1A73E8' : ''">{{ e }}</button>
           </div>
         </div>
       </div>
@@ -114,21 +129,51 @@ async function copyTable(){
                 <td class="px-4 py-3">{{ o.servicio?.nombre }}</td>
                 <td class="px-4 py-3">{{ o.centro?.nombre }}</td>
                 <td class="px-4 py-3">{{ o.area?.nombre || '-' }}</td>
-                <td class="px-4 py-3">{{ o.estatus }}</td>
-                <td class="px-4 py-3">{{ o.calidad_resultado }}</td>
                 <td class="px-4 py-3">
-                  <span class="px-2 py-1 rounded text-xs font-medium" :class="factBadgeClass(o.facturacion)">{{ o.facturacion }}</span>
+                  <span class="px-3 py-1.5 rounded-full text-xs font-semibold uppercase tracking-wide"
+                        :class="{
+                          'bg-blue-100 text-blue-700': o.estatus==='generada',
+                          'bg-indigo-100 text-indigo-700': o.estatus==='asignada',
+                          'bg-yellow-100 text-yellow-700': o.estatus==='en_proceso',
+                          'bg-green-100 text-green-700': o.estatus==='completada',
+                          'bg-emerald-100 text-emerald-700': o.estatus==='autorizada_cliente'
+                        }">{{ o.estatus }}</span>
+                </td>
+                <td class="px-4 py-3">
+                  <span class="px-3 py-1.5 rounded-full text-xs font-semibold uppercase tracking-wide"
+                        :class="{
+                          'bg-amber-100 text-amber-700': o.calidad_resultado==='pendiente',
+                          'bg-green-100 text-green-700': o.calidad_resultado==='validado',
+                          'bg-red-100 text-red-700': o.calidad_resultado==='rechazado'
+                        }">{{ o.calidad_resultado }}</span>
+                </td>
+                <td class="px-4 py-3">
+                  <span class="px-3 py-1.5 rounded-full text-xs font-semibold uppercase tracking-wide" :class="factBadgeClass(o.facturacion)">{{ o.facturacion }}</span>
                 </td>
                 <td class="px-4 py-3">{{ o.team_leader?.name || '—' }}</td>
                 <td class="px-4 py-3">{{ o.created_at }}</td>
-                <td class="px-4 py-3 space-x-2">
-                  <a :href="o.urls.show" class="text-blue-600 underline">Ver</a>
-                  <span v-if="o.estatus==='completada' && o.calidad_resultado==='pendiente'">
-                    · <a :href="o.urls.calidad" class="text-emerald-700 underline">Calidad</a>
-                  </span>
-                  <span v-if="o.estatus==='autorizada_cliente'">
-                    · <a :href="o.urls.facturar" class="text-indigo-700 underline">Facturar</a>
-                  </span>
+                <td class="px-4 py-3">
+                  <div class="flex items-center gap-2">
+                    <a :href="o.urls.show" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg transition-colors">
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                      </svg>
+                      Ver
+                    </a>
+                    <a v-if="o.estatus==='completada' && o.calidad_resultado==='pendiente'" :href="o.urls.calidad" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium rounded-lg transition-colors">
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                      </svg>
+                      Calidad
+                    </a>
+                    <a v-if="o.estatus==='autorizada_cliente'" :href="o.urls.facturar" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-lg transition-colors">
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                      </svg>
+                      Facturar
+                    </a>
+                  </div>
                 </td>
               </tr>
             </tbody>

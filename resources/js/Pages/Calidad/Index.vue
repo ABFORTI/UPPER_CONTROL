@@ -6,6 +6,7 @@ import { router, Link } from '@inertiajs/vue3'
 const props = defineProps({
   data: Object,
   estado: String,
+  filters: Object,
   urls: Object,
 })
 
@@ -13,9 +14,13 @@ const rows = computed(()=> props.data?.data ?? [])
 
 // Filtros unificados por estatus (píldoras) con conjunto fijo
 const sel = ref((props.estado && props.estado !== 'todos') ? props.estado : '')
+const yearSel = ref(props.filters?.year || new Date().getFullYear())
+const weekSel = ref(props.filters?.week || '')
 const estatuses = computed(() => ['pendiente', 'validado', 'rechazado'])
 function applyFilter(){
   const params = { estado: sel.value || 'todos' }
+  if (yearSel.value) params.year = yearSel.value
+  if (weekSel.value) params.week = weekSel.value
   router.get(props.urls.index, params, { preserveState:true, preserveScroll:true, replace:true })
 }
 
@@ -63,9 +68,20 @@ async function copyTable(){
         </div>
 
         <div class="flex flex-wrap items-center gap-2 w-full lg:w-auto justify-end">
+          <!-- Año -->
+          <select v-model="yearSel" @change="applyFilter" class="border p-2 rounded min-w-[100px]">
+            <option v-for="y in [yearSel-2, yearSel-1, yearSel, yearSel+1]" :key="y" :value="y">{{ y }}</option>
+          </select>
+          
+          <!-- Semana -->
+          <select v-model="weekSel" @change="applyFilter" class="border p-2 rounded min-w-[120px]">
+            <option value="">Periodos</option>
+            <option v-for="w in 53" :key="w" :value="w">Periodo {{ w }}</option>
+          </select>
+          
           <div class="flex flex-wrap items-center gap-2">
-            <button @click="sel=''; applyFilter()" :class="['px-3 py-1 rounded-full text-sm border', sel==='' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-700 border-slate-300']">Todos</button>
-            <button v-for="e in estatuses" :key="e" @click="sel=e; applyFilter()" :class="['px-3 py-1 rounded-full text-sm border capitalize', sel===e ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-700 border-slate-300']">{{ e }}</button>
+            <button @click="sel=''; applyFilter()" :class="['px-4 py-2 rounded-full text-base border', sel==='' ? 'text-white border-[#1A73E8]' : 'bg-white text-slate-700 border-slate-300']" :style="sel==='' ? 'background-color: #1A73E8' : ''">Todos</button>
+            <button v-for="e in estatuses" :key="e" @click="sel=e; applyFilter()" :class="['px-4 py-2 rounded-full text-base border capitalize', sel===e ? 'text-white border-[#1A73E8]' : 'bg-white text-slate-700 border-slate-300']" :style="sel===e ? 'background-color: #1A73E8' : ''">{{ e }}</button>
           </div>
         </div>
       </div>
@@ -89,10 +105,23 @@ async function copyTable(){
                 <td class="px-4 py-3 font-mono">#{{ o.id }}</td>
                 <td class="px-4 py-3">{{ o.servicio?.nombre }}</td>
                 <td class="px-4 py-3">{{ o.centro?.nombre }}</td>
-                <td class="px-4 py-3">{{ o.calidad_resultado }}</td>
+                <td class="px-4 py-3">
+                  <span class="px-3 py-1.5 rounded-full text-xs font-semibold uppercase tracking-wide"
+                        :class="{
+                          'bg-amber-100 text-amber-700': o.calidad_resultado==='pendiente',
+                          'bg-green-100 text-green-700': o.calidad_resultado==='validado',
+                          'bg-red-100 text-red-700': o.calidad_resultado==='rechazado'
+                        }">{{ o.calidad_resultado }}</span>
+                </td>
                 <td class="px-4 py-3">{{ o.created_at }}</td>
                 <td class="px-4 py-3">
-                  <a :href="o.urls.show" class="text-blue-600 underline">Ver OT</a>
+                  <a :href="o.urls.show" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                    </svg>
+                    Ver OT
+                  </a>
                 </td>
               </tr>
               <tr v-if="rows.length===0">

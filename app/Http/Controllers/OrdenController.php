@@ -16,6 +16,8 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 use Barryvdh\DomPDF\Facade\Pdf as PDF;
 use App\Notifications\OtAsignada;
+use App\Notifications\OtListaParaCalidad;
+use Illuminate\Support\Facades\Notification;
 use App\Services\Notifier;
 use App\Jobs\GenerateOrdenPdf;
 
@@ -177,14 +179,12 @@ class OrdenController extends Controller
             ->withProperties(['team_leader_id' => $orden->team_leader_id])
             ->log("OT #{$orden->id} generada desde solicitud {$solicitud->folio}");
 
-        // Notificar a TL si existe
+        // Notificar al TL si fue asignado
         if ($orden->team_leader_id) {
-            Notifier::toUser(
-                $orden->team_leader_id,
-                'OT asignada',
-                "Se te asignó la OT #{$orden->id}.",
-                route('ordenes.show',$orden->id)
-            );
+            $teamLeader = User::find($orden->team_leader_id);
+            if ($teamLeader) {
+                $teamLeader->notify(new OtAsignada($orden));
+            }
         }
         // Notificar a calidad del centro
         Notifier::toRoleInCentro(
@@ -244,14 +244,21 @@ class OrdenController extends Controller
                 $orden->estatus = 'completada';
                 $orden->save();
 
-                // Notificar a calidad del centro
-                Notifier::toRoleInCentro(
-                    'calidad',
-                    $orden->id_centrotrabajo,
-                    'OT lista para calidad',
-                    "La OT #{$orden->id} quedó completada y espera validación.",
-                    route('calidad.show',$orden->id)
-                );
+                // Notificar a calidad del centro con notificación específica
+                // Buscar usuarios con rol 'calidad' que tengan asignado este centro
+                // Ya sea como centro principal O en centros adicionales
+                $usuariosCalidad = User::role('calidad')
+                    ->where(function($query) use ($orden) {
+                        $query->where('centro_trabajo_id', $orden->id_centrotrabajo)
+                              ->orWhereHas('centros', function($q) use ($orden) {
+                                  $q->where('centro_trabajo_id', $orden->id_centrotrabajo);
+                              });
+                    })
+                    ->get();
+                
+                if ($usuariosCalidad->isNotEmpty()) {
+                    Notification::send($usuariosCalidad, new OtListaParaCalidad($orden));
+                }
             } else {
                 $orden->save();
             }
@@ -380,6 +387,10 @@ class OrdenController extends Controller
         $orden->team_leader_id = $data['team_leader_id'];
         if ($orden->estatus === 'generada') $orden->estatus = 'asignada';
         $orden->save();
+        
+        // Recargar la relación teamLeader para que esté disponible
+        $orden->load('teamLeader');
+        
         $this->act('ordenes')
             ->performedOn($orden)
             ->event('asignar_tl')
@@ -387,7 +398,9 @@ class OrdenController extends Controller
             ->log("OT #{$orden->id}: asignado TL {$req->team_leader_id}");
 
         // Notificar al TL asignado
-        optional($orden->teamLeader)->notify(new OtAsignada($orden));
+        if ($orden->teamLeader) {
+            $orden->teamLeader->notify(new OtAsignada($orden));
+        }
 
         return back()->with('ok','Team Leader asignado');
     }
@@ -408,6 +421,8 @@ class OrdenController extends Controller
             'desde'    => $req->date('desde'),
             'hasta'    => $req->date('hasta'),
             'id'       => $req->integer('id') ?: null,
+            'year'     => $req->integer('year') ?: null,
+            'week'     => $req->integer('week') ?: null,
         ];
 
     $q = Orden::with(['servicio','centro','teamLeader','solicitud','factura','area'])
@@ -421,6 +436,12 @@ class OrdenController extends Controller
             ->when($filters['desde'] && $filters['hasta'], fn($qq)=>$qq->whereBetween('created_at', [
                 request()->date('desde')->startOfDay(), request()->date('hasta')->endOfDay(),
             ]))
+            ->when($filters['year'] && $filters['week'], function($qq) use ($filters) {
+                $qq->whereRaw('YEAR(created_at) = ? AND WEEK(created_at, 1) = ?', [$filters['year'], $filters['week']]);
+            })
+            ->when($filters['year'] && !$filters['week'], function($qq) use ($filters) {
+                $qq->whereYear('created_at', $filters['year']);
+            })
             ->orderByDesc('id');
 
         $data = $q->paginate(10)->withQueryString();
@@ -449,7 +470,7 @@ class OrdenController extends Controller
 
         return Inertia::render('Ordenes/Index', [
             'data'      => $data,
-            'filters'   => $req->only(['id','estatus','calidad','servicio','desde','hasta']),
+            'filters'   => $req->only(['id','estatus','calidad','servicio','desde','hasta','year','week']),
             'servicios' => \App\Models\ServicioEmpresa::select('id','nombre')->orderBy('nombre')->get(),
             'urls'      => ['index' => route('ordenes.index')],
         ]);

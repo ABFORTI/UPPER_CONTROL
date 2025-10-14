@@ -11,9 +11,13 @@ const props = defineProps({
 
 // Filtros
 const sel = ref(props.filtros?.estatus || '')
+const yearSel = ref(props.filtros?.year || new Date().getFullYear())
+const weekSel = ref(props.filtros?.week || '')
 function applyFilter(){
   const params = {}
   if (sel.value) params.estatus = sel.value
+  if (yearSel.value) params.year = yearSel.value
+  if (weekSel.value) params.week = weekSel.value
   currentPage.value = 1
   router.get(props.urls.base, params, { preserveState: true, replace: true })
 }
@@ -107,10 +111,21 @@ function goToPage(p){
         </div>
 
         <div class="flex flex-wrap items-center gap-2 w-full lg:w-auto">
+          <!-- Año -->
+          <select v-model="yearSel" @change="applyFilter" class="border p-2 rounded min-w-[100px]">
+            <option v-for="y in [yearSel-2, yearSel-1, yearSel, yearSel+1]" :key="y" :value="y">{{ y }}</option>
+          </select>
+          
+          <!-- Semana -->
+          <select v-model="weekSel" @change="applyFilter" class="border p-2 rounded min-w-[120px]">
+            <option value="">Periodos</option>
+            <option v-for="w in 53" :key="w" :value="w">Periodo {{ w }}</option>
+          </select>
+          
           <!-- Filtros de estatus (píldoras) -->
           <div class="flex flex-wrap items-center gap-2">
-            <button @click="sel=''; applyFilter()" :class="['px-3 py-1 rounded-full text-sm border', sel==='' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-700 border-slate-300']">Todos</button>
-            <button v-for="e in estatuses" :key="e" @click="sel=e; applyFilter()" :class="['px-3 py-1 rounded-full text-sm border capitalize', sel===e ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-700 border-slate-300']">{{ e }}</button>
+            <button @click="sel=''; applyFilter()" :class="['px-4 py-2 rounded-full text-base border', sel==='' ? 'text-white border-[#1A73E8]' : 'bg-white text-slate-700 border-slate-300']" :style="sel==='' ? 'background-color: #1A73E8' : ''">Todos</button>
+            <button v-for="e in estatuses" :key="e" @click="sel=e; applyFilter()" :class="['px-4 py-2 rounded-full text-base border capitalize', sel===e ? 'text-white border-[#1A73E8]' : 'bg-white text-slate-700 border-slate-300']" :style="sel===e ? 'background-color: #1A73E8' : ''">{{ e }}</button>
           </div>
         </div>
       </div>

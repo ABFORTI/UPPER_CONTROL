@@ -78,8 +78,8 @@ function nav (path) {
         :style="{ background: 'linear-gradient(135deg,#0ea5e9,#006657)' }"
       ></span>
       <div>
-        <p class="text-[11px] uppercase tracking-[0.2em] text-slate-500">Upper Logistics</p>
-        <h1 class="text-[22px] leading-6 font-semibold text-slate-900">Panel Operativo</h1>
+        <p class="text-[11px] uppercase tracking-[0.2em] text-slate-500">Upper Control</p>
+        <h1 class="text-[22px] leading-6 font-semibold text-slate-900">Dashboard</h1>
       </div>
     </div>
 

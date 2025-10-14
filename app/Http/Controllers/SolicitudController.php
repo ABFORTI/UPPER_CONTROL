@@ -27,6 +27,8 @@ class SolicitudController extends Controller
             'folio'    => $req->string('folio')->toString(),
             'desde'    => $req->date('desde'),
             'hasta'    => $req->date('hasta'),
+            'year'     => $req->integer('year') ?: null,
+            'week'     => $req->integer('week') ?: null,
         ];
 
         $q = Solicitud::with(['servicio','centro'])
@@ -43,13 +45,19 @@ class SolicitudController extends Controller
             ->when($filters['desde'] && $filters['hasta'], fn($qq)=>$qq->whereBetween(
                 'created_at', [$filters['desde']->startOfDay(), $filters['hasta']->endOfDay()]
             ))
+            ->when($filters['year'] && $filters['week'], function($qq) use ($filters) {
+                $qq->whereRaw('YEAR(created_at) = ? AND WEEK(created_at, 1) = ?', [$filters['year'], $filters['week']]);
+            })
+            ->when($filters['year'] && !$filters['week'], function($qq) use ($filters) {
+                $qq->whereYear('created_at', $filters['year']);
+            })
             ->orderByDesc('id');
 
         $data = $q->paginate(10)->withQueryString();
 
         return Inertia::render('Solicitudes/Index', [
             'data' => $q->with(['servicio','centro','cliente','area','archivos'])->paginate(10)->withQueryString(),
-            'filters' => $req->only(['estatus','servicio','folio','desde','hasta']),
+            'filters' => $req->only(['estatus','servicio','folio','desde','hasta','year','week']),
             'servicios'=> ServicioEmpresa::select('id','nombre')->orderBy('nombre')->get(),
             'urls' => ['index' => route('solicitudes.index')],
             ]);

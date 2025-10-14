@@ -49,14 +49,9 @@ class CalidadController extends Controller
     $orden->calidad_resultado = 'validado';
     $orden->save();
 
-  // notificar al cliente (dueño de la solicitud)
+  // Notificar al cliente (dueño de la solicitud)
   optional($orden->solicitud?->cliente)->notify(new \App\Notifications\OtValidadaParaCliente($orden));
-  Notifier::toUser(
-    $orden->solicitud->id_cliente,
-    'Calidad validada',
-    "La OT #{$orden->id} fue validada. Autoriza para facturación.",
-    route('ordenes.show',$orden->id)
-  );
+  
     $this->act('ordenes')
       ->performedOn($orden)
       ->event('calidad_validar')
@@ -114,6 +109,12 @@ class CalidadController extends Controller
     ? $estado
     : 'todos';
 
+  $filters = [
+    'estado' => $estadoNorm,
+    'year' => $req->integer('year') ?: null,
+    'week' => $req->integer('week') ?: null,
+  ];
+
   $q = \App\Models\Orden::with('servicio','centro')
     ->when(!$u->hasRole('admin'), function($qq) use ($u) {
       $ids = $this->allowedCentroIds($u);
@@ -128,6 +129,13 @@ class CalidadController extends Controller
     })
     ->when($estadoNorm !== 'pendiente' && $estadoNorm !== 'todos', function($qq) use ($estadoNorm){
       $qq->where('calidad_resultado',$estadoNorm);
+    })
+    // Filtros de año y semana
+    ->when($filters['year'] && $filters['week'], function($qq) use ($filters) {
+      $qq->whereRaw('YEAR(created_at) = ? AND WEEK(created_at, 1) = ?', [$filters['year'], $filters['week']]);
+    })
+    ->when($filters['year'] && !$filters['week'], function($qq) use ($filters) {
+      $qq->whereYear('created_at', $filters['year']);
     })
     ->orderByDesc('id');
 
@@ -148,9 +156,9 @@ class CalidadController extends Controller
   });
 
   return \Inertia\Inertia::render('Calidad/Index', [
-    'data'   => $data,
-    'estado' => $estadoNorm,
-    'urls'   => [ 'index' => route('calidad.index') ],
+    'data'    => $data,
+    'filters' => $filters,
+    'urls'    => [ 'index' => route('calidad.index') ],
   ]);
   }
 

@@ -4,7 +4,7 @@ import { ref, computed } from 'vue'
 
 const props = defineProps({
   data: Object, // paginator
-  filters: Object, // { estatus, servicio }
+  filters: Object, // { estatus, servicio, year, week }
   servicios: Array,
   urls: Object // { index }
 })
@@ -15,9 +15,14 @@ const sel = ref(props.filters?.estatus || '')
 const estatuses = computed(() => ['pendiente', 'aprobada', 'rechazada'])
 // Filtro avanzado único: servicio
 const servicioSel = ref(props.filters?.servicio || '')
+const yearSel = ref(props.filters?.year || new Date().getFullYear())
+const weekSel = ref(props.filters?.week || '')
+
 function applyFilter(){
   const params = { estatus: sel.value }
   if (servicioSel.value) params.servicio = servicioSel.value
+  if (yearSel.value) params.year = yearSel.value
+  if (weekSel.value) params.week = weekSel.value
   router.get(props.urls.index, params, { preserveState: true, replace: true })
 }
 
@@ -78,10 +83,21 @@ async function copyTable(){
         </div>
 
         <div class="flex flex-wrap items-center gap-2 w-full lg:w-auto justify-end">
+          <!-- Año -->
+          <select v-model="yearSel" @change="applyFilter" class="border p-2 rounded min-w-[100px]">
+            <option v-for="y in [yearSel-2, yearSel-1, yearSel, yearSel+1]" :key="y" :value="y">{{ y }}</option>
+          </select>
+          
+          <!-- Semana -->
+          <select v-model="weekSel" @change="applyFilter" class="border p-2 rounded min-w-[120px]">
+            <option value="">Periodos</option>
+            <option v-for="w in 53" :key="w" :value="w">Periodo {{ w }}</option>
+          </select>
+          
           <!-- Píldoras de estatus -->
           <div class="flex flex-wrap items-center gap-2">
-            <button @click="sel=''; applyFilter()" :class="['px-3 py-1 rounded-full text-sm border', sel==='' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-700 border-slate-300']">Todos</button>
-            <button v-for="e in estatuses" :key="e" @click="sel=e; applyFilter()" :class="['px-3 py-1 rounded-full text-sm border capitalize', sel===e ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-700 border-slate-300']">{{ e }}</button>
+            <button @click="sel=''; applyFilter()" :class="['px-4 py-2 rounded-full text-base border', sel==='' ? 'text-white border-[#1A73E8]' : 'bg-white text-slate-700 border-slate-300']" :style="sel==='' ? 'background-color: #1A73E8' : ''">Todos</button>
+            <button v-for="e in estatuses" :key="e" @click="sel=e; applyFilter()" :class="['px-4 py-2 rounded-full text-base border capitalize', sel===e ? 'text-white border-[#1A73E8]' : 'bg-white text-slate-700 border-slate-300']" :style="sel===e ? 'background-color: #1A73E8' : ''">{{ e }}</button>
           </div>
           <!-- Select de servicio -->
           <div>
@@ -129,7 +145,7 @@ async function copyTable(){
                   <span v-else class="text-gray-400">-</span>
                 </td>
                 <td class="px-4 py-3">
-                  <span class="px-2 py-1 rounded text-xs leading-none font-medium whitespace-nowrap"
+                  <span class="px-3 py-1.5 rounded-full text-xs font-semibold uppercase tracking-wide"
                         :class="{
                           'bg-green-100 text-green-700': s.estatus==='aprobada',
                           'bg-amber-100 text-amber-700': s.estatus==='pendiente',
@@ -138,7 +154,13 @@ async function copyTable(){
                 </td>
                 <td class="px-4 py-3">{{ s.fecha }}</td>
                 <td class="px-4 py-3">
-                  <a :href="`./solicitudes/${s.id}`" class="text-blue-600 underline">Ver</a>
+                  <a :href="`./solicitudes/${s.id}`" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                    </svg>
+                    Ver
+                  </a>
                 </td>
               </tr>
             </tbody>

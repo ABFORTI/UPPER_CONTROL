@@ -15,7 +15,7 @@ return [
     //
     // PARA PRUEBAS: 1 (1 minuto)
     // PARA PRODUCCIÓN: 4320 (72 horas = 3 días)
-    'ot_autorizacion_timeout_minutos' => env('OT_AUTORIZACION_TIMEOUT_MINUTOS', 1),
+    'ot_autorizacion_timeout_minutos' => env('OT_AUTORIZACION_TIMEOUT_MINUTOS', 5),
 
     // Si true, aplica el bloqueo de solicitudes por OTs vencidas sin autorizar
     'bloquear_solicitudes_por_ots_vencidas' => env('BLOQUEAR_SOLICITUDES_OTS_VENCIDAS', true),

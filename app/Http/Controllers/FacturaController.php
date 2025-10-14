@@ -21,6 +21,8 @@ class FacturaController extends Controller
     if (!$u->hasRole('admin') && !$u->hasRole('facturacion')) abort(403);
 
     $estatus = $request->get('estatus'); // opcional
+    $year = $request->integer('year') ?: null;
+    $week = $request->integer('week') ?: null;
 
   // 1) Facturas existentes
   $qFact = Factura::query()->with(['orden.servicio','orden.centro']);
@@ -36,6 +38,12 @@ class FacturaController extends Controller
   // Si el filtro es un estatus de factura, aplicarlo
   if ($estatus && in_array($estatus, ['pendiente','facturado','por_pagar','pagado'], true)) {
     $qFact->where('estatus', $estatus);
+  }
+  // Filtros de año y semana
+  if ($year && $week) {
+    $qFact->whereRaw('YEAR(created_at) = ? AND WEEK(created_at, 1) = ?', [$year, $week]);
+  } elseif ($year) {
+    $qFact->whereYear('created_at', $year);
   }
   $facturas = $qFact->latest('id')->limit(100)->get()->map(function($f){
     return [
@@ -70,6 +78,12 @@ class FacturaController extends Controller
         $qq->whereIn('id_centrotrabajo', $ids);
       })
       ->whereNotIn('id', $ordenesConFactura)
+      ->when($year && $week, function($qq) use ($year, $week) {
+        $qq->whereRaw('YEAR(created_at) = ? AND WEEK(created_at, 1) = ?', [$year, $week]);
+      })
+      ->when($year && !$week, function($qq) use ($year) {
+        $qq->whereYear('created_at', $year);
+      })
       ->with(['servicio','centro'])
       ->latest('id')
       ->limit(100);
@@ -103,7 +117,7 @@ class FacturaController extends Controller
 
   return Inertia::render('Facturas/Index', [
     'items' => $items,
-    'filtros' => [ 'estatus' => $estatus ],
+    'filtros' => [ 'estatus' => $estatus, 'year' => $year, 'week' => $week ],
     'urls' => [ 'base' => route('facturas.index') ],
     'estatuses' => ['autorizada_cliente','pendiente','facturado','por_pagar','pagado'],
   ]);
