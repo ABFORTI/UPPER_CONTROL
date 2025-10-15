@@ -7,155 +7,294 @@ Sistema de gestión de órdenes de trabajo y facturación para control de calida
 ## 📋 Diagrama de Casos de Uso
 
 ```mermaid
-graph TB
-    %% Actores
-    Cliente([👤 Cliente])
-    Coordinador([👤 Coordinador])
-    TeamLeader([👤 Team Leader])
-    Calidad([👤 Calidad])
-    Facturacion([👤 Facturación])
-    Admin([👤 Administrador])
+graph LR
+    %% Actores principales a la izquierda
+    Cliente([👤<br/>Cliente])
+    Coordinador([👤<br/>Coordinador])
+    TeamLeader([👤<br/>Team Leader])
+    Calidad([👤<br/>Calidad])
+    Facturacion([👤<br/>Facturación])
+    Admin([👤<br/>Admin])
 
-    %% Módulo de Solicitudes
-    subgraph Solicitudes[📝 Módulo de Solicitudes]
-        UC1[Crear Solicitud]
-        UC2[Ver Solicitudes]
-        UC3[Aprobar Solicitud]
-        UC4[Rechazar Solicitud]
+    %% Módulos de casos de uso (más compactos)
+    subgraph S1[" 📝 Solicitudes "]
+        UC1[Crear/Ver<br/>Solicitudes]
+        UC2[Aprobar/<br/>Rechazar]
     end
 
-    %% Módulo de Órdenes de Trabajo
-    subgraph Ordenes[📋 Módulo de Órdenes]
-        UC5[Generar OT desde Solicitud]
-        UC6[Asignar Team Leader]
-        UC7[Registrar Avances]
-        UC8[Subir Evidencias]
-        UC9[Ver OT]
-        UC10[Generar PDF OT]
+    subgraph S2[" 📋 Órdenes de Trabajo "]
+        UC3[Generar OT]
+        UC4[Asignar<br/>Team Leader]
+        UC5[Avances y<br/>Evidencias]
     end
 
-    %% Módulo de Calidad
-    subgraph ModCalidad[✅ Módulo de Calidad]
-        UC11[Revisar OT Completadas]
-        UC12[Validar Calidad]
-        UC13[Rechazar por Calidad]
+    subgraph S3[" ✅ Validación "]
+        UC6[Revisión<br/>Calidad]
+        UC7[Autorización<br/>Cliente]
     end
 
-    %% Módulo de Cliente
-    subgraph ModCliente[👥 Validación Cliente]
-        UC14[Revisar OT Validada]
-        UC15[Autorizar OT]
+    subgraph S4[" 💰 Facturación "]
+        UC8[Crear y<br/>Gestionar]
+        UC9[Subir XML<br/>y Marcar Estados]
     end
 
-    %% Módulo de Facturación
-    subgraph ModFacturacion[💰 Módulo de Facturación]
-        UC16[Ver Facturas]
-        UC17[Crear Factura desde OT]
-        UC18[Subir XML Factura]
-        UC19[Marcar como Facturado]
-        UC20[Marcar Cobro]
-        UC21[Marcar Pagado]
-        UC22[Generar PDF Factura]
-        UC23[Enviar Factura por Email]
+    subgraph S5[" ⚙️ Admin y Reportes "]
+        UC10[Gestión de<br/>Catálogos]
+        UC11[Dashboard y<br/>Exportación]
+        UC12[Backups y<br/>Seguridad]
     end
 
-    %% Módulo de Administración
-    subgraph ModAdmin[⚙️ Módulo de Administración]
-        UC24[Gestionar Usuarios]
-        UC25[Gestionar Centros de Trabajo]
-        UC26[Gestionar Servicios/Precios]
-        UC27[Gestionar Áreas]
-        UC28[Ver Actividad del Sistema]
-        UC29[Hacer Backups]
-        UC30[Impersonar Usuarios]
-    end
-
-    %% Módulo de Dashboard
-    subgraph ModDashboard[📊 Dashboard & Reportes]
-        UC31[Ver Dashboard]
-        UC32[Exportar OTs a Excel]
-        UC33[Exportar Facturas a Excel]
-        UC34[Ver Notificaciones]
-    end
-
-    %% Relaciones Cliente
-    Cliente --> UC1
-    Cliente --> UC2
-    Cliente --> UC14
-    Cliente --> UC15
+    %% Relaciones Cliente (simplificadas)
+    Cliente -.-> UC1
+    Cliente -.-> UC7
 
     %% Relaciones Coordinador
+    Coordinador --> UC1
     Coordinador --> UC2
     Coordinador --> UC3
     Coordinador --> UC4
-    Coordinador --> UC5
-    Coordinador --> UC6
-    Coordinador --> UC9
-    Coordinador --> UC26
-    Coordinador --> UC27
-    Coordinador --> UC31
+    Coordinador --> UC11
 
     %% Relaciones Team Leader
-    TeamLeader --> UC7
-    TeamLeader --> UC8
-    TeamLeader --> UC9
-    TeamLeader --> UC10
+    TeamLeader --> UC5
+    TeamLeader -.-> UC11
 
     %% Relaciones Calidad
-    Calidad --> UC11
-    Calidad --> UC12
-    Calidad --> UC13
-    Calidad --> UC31
+    Calidad --> UC6
+    Calidad -.-> UC11
 
     %% Relaciones Facturación
-    Facturacion --> UC16
-    Facturacion --> UC17
-    Facturacion --> UC18
-    Facturacion --> UC19
-    Facturacion --> UC20
-    Facturacion --> UC21
-    Facturacion --> UC22
-    Facturacion --> UC23
-    Facturacion --> UC31
+    Facturacion --> UC8
+    Facturacion --> UC9
+    Facturacion -.-> UC11
 
-    %% Relaciones Administrador (acceso total)
-    Admin --> UC24
-    Admin --> UC25
-    Admin --> UC26
-    Admin --> UC27
-    Admin --> UC28
-    Admin --> UC29
-    Admin --> UC30
-    Admin --> UC31
-    Admin --> UC32
-    Admin --> UC33
+    %% Relaciones Admin (líneas punteadas para no saturar)
+    Admin ==> UC2
+    Admin ==> UC10
+    Admin ==> UC11
+    Admin ==> UC12
+    Admin -.-> UC8
+    Admin -.-> UC9
+
+    %% Estilos modernos y limpios
+    classDef actorStyle fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    classDef moduloStyle fill:#fff,stroke:#666,stroke-width:1px
+    
+    class Cliente,Coordinador,TeamLeader,Calidad,Facturacion,Admin actorStyle
+    
+    style S1 fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    style S2 fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    style S3 fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
+    style S4 fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    style S5 fill:#ffebee,stroke:#d32f2f,stroke-width:2px
+```
+
+### 📖 Leyenda del Diagrama
+
+**Tipos de Líneas:**
+- **Línea sólida (→)**: Interacción principal del rol
+- **Línea punteada (-·->)**: Acceso de consulta o secundario
+- **Línea gruesa (==>)**: Acceso administrativo completo
+
+**Roles y Responsabilidades:**
+
+| Rol | Casos de Uso Principales |
+|-----|-------------------------|
+| 👤 **Cliente** | Crear solicitudes, Autorizar OT validadas |
+| 👤 **Coordinador** | Aprobar solicitudes, Generar y asignar OT, Gestionar catálogos |
+| 👤 **Team Leader** | Registrar avances y evidencias de trabajo |
+| 👤 **Calidad** | Validar calidad de OT completadas |
+| 👤 **Facturación** | Crear facturas, Subir XML, Gestionar cobros |
+| 👤 **Admin** | Acceso completo + Backups, Seguridad, Impersonación |
+
+---
+
+## 📋 Diagrama de Casos de Uso Detallado (Por Módulo)
+
+### Módulo 1: Solicitudes 📝
+
+```mermaid
+graph LR
+    Cliente([👤 Cliente])
+    Coord([👤 Coordinador])
+    Admin([👤 Admin])
+    
+    subgraph " Solicitudes "
+        UC1[Crear<br/>Solicitud]
+        UC2[Ver<br/>Solicitudes]
+        UC3[Aprobar<br/>Solicitud]
+        UC4[Rechazar<br/>Solicitud]
+    end
+    
+    Cliente --> UC1
+    Cliente --> UC2
+    Coord --> UC2
+    Coord --> UC3
+    Coord --> UC4
+    Admin -.-> UC3
+    Admin -.-> UC4
+    
+    style Cliente fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    style Coord fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    style Admin fill:#ffebee,stroke:#d32f2f,stroke-width:2px
+```
+
+### Módulo 2: Órdenes de Trabajo 📋
+
+```mermaid
+graph LR
+    Coord([👤 Coordinador])
+    TL([👤 Team Leader])
+    
+    subgraph " Órdenes de Trabajo "
+        UC1[Generar OT<br/>desde Solicitud]
+        UC2[Asignar<br/>Team Leader]
+        UC3[Registrar<br/>Avances]
+        UC4[Subir<br/>Evidencias]
+        UC5[Generar<br/>PDF OT]
+    end
+    
+    Coord --> UC1
+    Coord --> UC2
+    TL --> UC3
+    TL --> UC4
+    TL --> UC5
+    
+    style Coord fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    style TL fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+```
+
+### Módulo 3: Validación (Calidad y Cliente) ✅
+
+```mermaid
+graph LR
+    Calidad([👤 Calidad])
+    Cliente([👤 Cliente])
+    Admin([👤 Admin])
+    
+    subgraph " Validación de Calidad "
+        UC1[Revisar OT<br/>Completadas]
+        UC2[Validar<br/>Calidad]
+        UC3[Rechazar por<br/>Calidad]
+    end
+    
+    subgraph " Autorización Cliente "
+        UC4[Revisar OT<br/>Validada]
+        UC5[Autorizar<br/>OT]
+    end
+    
+    Calidad --> UC1
+    Calidad --> UC2
+    Calidad --> UC3
+    
+    Cliente --> UC4
+    Cliente --> UC5
+    
+    Admin -.-> UC2
+    Admin -.-> UC3
+    
+    style Calidad fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
+    style Cliente fill:#fce4ec,stroke:#c2185b,stroke-width:2px
+    style Admin fill:#ffebee,stroke:#d32f2f,stroke-width:2px
+```
+
+### Módulo 4: Facturación 💰
+
+```mermaid
+graph LR
+    Fact([👤 Facturación])
+    Admin([👤 Admin])
+    
+    subgraph " Gestión de Facturas "
+        UC1[Ver<br/>Facturas]
+        UC2[Crear Factura<br/>desde OT]
+        UC3[Subir XML<br/>Factura]
+        UC4[Marcar como<br/>Facturado]
+        UC5[Registrar<br/>Cobro]
+        UC6[Marcar como<br/>Pagado]
+    end
+    
+    Fact --> UC1
+    Fact --> UC2
+    Fact --> UC3
+    Fact --> UC4
+    Fact --> UC5
+    Fact --> UC6
+    
+    Admin -.-> UC1
+    Admin -.-> UC2
+    Admin -.-> UC4
+    Admin -.-> UC5
+    Admin -.-> UC6
+    
+    style Fact fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    style Admin fill:#ffebee,stroke:#d32f2f,stroke-width:2px
+```
+
+### Módulo 5: Administración ⚙️
+
+```mermaid
+graph LR
+    Admin([👤 Admin])
+    Coord([👤 Coordinador])
+    
+    subgraph " Catálogos "
+        UC1[Gestionar<br/>Usuarios]
+        UC2[Gestionar Centros<br/>de Trabajo]
+        UC3[Gestionar<br/>Servicios/Precios]
+        UC4[Gestionar<br/>Áreas]
+    end
+    
+    subgraph " Sistema "
+        UC5[Ver Actividad<br/>del Sistema]
+        UC6[Hacer<br/>Backups]
+        UC7[Impersonar<br/>Usuarios]
+    end
+    
+    Admin --> UC1
+    Admin --> UC2
     Admin --> UC3
     Admin --> UC4
     Admin --> UC5
-    Admin --> UC12
-    Admin --> UC13
-    Admin --> UC16
-    Admin --> UC17
-    Admin --> UC18
-    Admin --> UC19
-    Admin --> UC20
-    Admin --> UC21
+    Admin --> UC6
+    Admin --> UC7
+    
+    Coord -.-> UC2
+    Coord -.-> UC3
+    Coord -.-> UC4
+    
+    style Admin fill:#ffebee,stroke:#d32f2f,stroke-width:2px
+    style Coord fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+```
 
-    %% Todos ven notificaciones y dashboard básico
-    Cliente --> UC34
-    Coordinador --> UC34
-    TeamLeader --> UC34
-    Calidad --> UC34
-    Facturacion --> UC34
-    Admin --> UC34
+### Módulo 6: Dashboard y Reportes 📊
 
-    style Solicitudes fill:#e3f2fd,stroke:#1976d2
-    style Ordenes fill:#fff3e0,stroke:#f57c00
-    style ModCalidad fill:#e8f5e9,stroke:#388e3c
-    style ModCliente fill:#fce4ec,stroke:#c2185b
-    style ModFacturacion fill:#f3e5f5,stroke:#7b1fa2
-    style ModAdmin fill:#ffebee,stroke:#d32f2f
-    style ModDashboard fill:#e0f2f1,stroke:#00796b
+```mermaid
+graph LR
+    Coord([👤 Coordinador])
+    Admin([👤 Admin])
+    Fact([👤 Facturación])
+    Todos([👥 Todos<br/>los Roles])
+    
+    subgraph " Dashboard y Reportes "
+        UC1[Ver<br/>Dashboard]
+        UC2[Exportar OTs<br/>a Excel]
+        UC3[Exportar Facturas<br/>a Excel]
+        UC4[Ver<br/>Notificaciones]
+    end
+    
+    Coord --> UC1
+    Admin --> UC1
+    Admin --> UC2
+    Admin --> UC3
+    Fact --> UC1
+    
+    Todos --> UC4
+    
+    style Coord fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    style Admin fill:#ffebee,stroke:#d32f2f,stroke-width:2px
+    style Fact fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    style Todos fill:#e0f2f1,stroke:#00796b,stroke-width:2px
 ```
 
 ---
