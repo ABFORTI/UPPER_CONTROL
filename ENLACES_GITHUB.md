@@ -13,6 +13,9 @@ https://github.com/ABFORTI/UPPER_CONTROL/blob/Diseno/INDICE_DIAGRAMAS.md
 **Documentación General del Proyecto**  
 https://github.com/ABFORTI/UPPER_CONTROL/blob/Diseno/DOCUMENTACION.md
 
+**📤 Guía de Exportación de Diagramas** ⭐ NUEVO  
+https://github.com/ABFORTI/UPPER_CONTROL/blob/Diseno/GUIA_EXPORTACION_DIAGRAMAS.md
+
 ---
 
 ### 📋 Archivos de Diagramas
