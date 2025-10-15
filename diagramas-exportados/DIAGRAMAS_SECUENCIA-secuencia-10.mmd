@@ -1,0 +1,47 @@
+﻿sequenceDiagram
+    participant Scheduler
+    participant Command
+    participant DB
+    participant Notification
+    participant Mail
+    actor Cliente
+
+    Note over Scheduler: Cron ejecuta cada hora
+
+    Scheduler->>Command: recordatorios:validacion-ot
+    Command->>DB: Query OTs validada_calidad<br/>sin autorizar por más de X horas
+    DB-->>Command: Lista de OTs pendientes
+    
+    loop Para cada OT pendiente
+        Command->>DB: Check si ya se envió recordatorio
+        
+        alt No se ha enviado
+            Command->>DB: Get cliente de la OT
+            DB-->>Command: Cliente data
+            
+            Command->>Notification: SystemEventNotification
+            Notification->>Mail: Enviar recordatorio
+            Mail->>Cliente: 📧 "Recordatorio: OT pendiente"
+            
+            Command->>DB: Registrar recordatorio enviado
+            DB-->>Command: Saved
+            
+            Command->>Command: Log: "Recordatorio enviado"
+        else Ya enviado
+            Command->>Command: Skip OT
+        end
+    end
+    
+    Command-->>Scheduler: Command completed
+    
+    Note over Scheduler: Espera siguiente ejecución
+    
+    Scheduler->>Command: recordatorios:limpiar
+    Command->>DB: Query recordatorios antiguos<br/>(más de 30 días)
+    DB-->>Command: Lista de recordatorios viejos
+    
+    Command->>DB: DELETE recordatorios antiguos
+    DB-->>Command: Deleted count
+    
+    Command->>Command: Log: "X recordatorios eliminados"
+    Command-->>Scheduler: Cleanup completed

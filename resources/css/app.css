@@ -86,7 +86,7 @@ h1, h2, h3, .heading {
 .conveyor-belt .belt-track{ animation: beltMove 0.9s linear infinite; }
 
 .conveyor-belt .box{
-  position: absolute; bottom: 30px; width: 36px; height: 26px; border-radius: 4px;
+  position: absolute; top: 50%; transform: translateY(-50%); width: 36px; height: 26px; border-radius: 4px;
   background: linear-gradient(180deg, #f59e0b, #ea580c);
   box-shadow: 0 6px 10px rgba(0,0,0,0.15);
 }

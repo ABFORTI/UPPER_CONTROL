@@ -789,19 +789,17 @@ private function xmlElementToArray(\SimpleXMLElement $element): array
       'fecha_facturado' => now()->toDateString(),
       'xml_path' => $xmlPath,
     ]);
-    // Notificar al cliente
-    Notifier::toUser(
-        $orden->solicitud->id_cliente,
-        'Factura generada',
-        "Se generó la factura de la OT #{$orden->id}.",
-        route('facturas.show',$factura->id)
-    );
-        $this->act('facturas')
-            ->performedOn($factura)
-            ->event('crear_factura')
-            ->withProperties(['orden_id' => $orden->id, 'total' => $factura->total])
-            ->log("Factura #{$factura->id} creada para OT #{$orden->id}");
-        GenerateFacturaPdf::dispatch($factura->id);
+    
+    // Registrar actividad
+    $this->act('facturas')
+        ->performedOn($factura)
+        ->event('crear_factura')
+        ->withProperties(['orden_id' => $orden->id, 'total' => $factura->total])
+        ->log("Factura #{$factura->id} creada para OT #{$orden->id}");
+    
+    // Generar PDF y enviar notificación al cliente con el PDF adjunto
+    GenerateFacturaPdf::dispatch($factura->id, true);
+    
     return redirect()->route('facturas.show',$factura->id)->with('ok','Factura registrada');
   }
 

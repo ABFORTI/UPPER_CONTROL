@@ -62,8 +62,20 @@ Tu aplicación ya tiene estas notificaciones listas para enviar correos:
 6. ✅ `ClienteAutorizoNotification` - Confirmación de autorización
 7. ✅ `CalidadResultadoNotification` - Resultado de inspección de calidad
 8. ✅ `SystemEventNotification` - Eventos del sistema
+9. ✅ `RecordatorioValidacionOt` - **NUEVO**: Recordatorios automáticos de validación
 
 **Todas ya tienen soporte de correo configurado** - Solo necesitas configurar el servicio SMTP.
+
+### ✅ Recordatorios Automáticos (Nuevo)
+
+El sistema ahora envía **recordatorios automáticos** a clientes con órdenes pendientes de autorización:
+
+- ⏰ **Intervalo configurable**: 1 minuto (pruebas) o 6 horas (producción)
+- 📧 **Correo + Notificación**: Dual channel
+- 🎯 **Inteligente**: No envía spam, respeta intervalos
+- 📊 **Trazable**: Registra todos los recordatorios
+
+Para más información, consulta: [RECORDATORIOS_VALIDACION.md](./RECORDATORIOS_VALIDACION.md)
 
 ---
 

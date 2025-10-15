@@ -1,0 +1,55 @@
+﻿sequenceDiagram
+    participant System
+    participant Event
+    participant Notification
+    participant DB
+    participant Mail
+    participant User
+    participant Browser
+    participant NotifController
+
+    System->>Event: Trigger evento<br/>(ej: OT asignada)
+    Event->>Notification: Create notification instance
+    
+    Notification->>Notification: Define via() channels
+    Notification->>Notification: Define toDatabase() data
+    Notification->>Notification: Define toMail() message
+    
+    par Guardar en BD
+        Notification->>DB: INSERT into notifications
+        DB-->>Notification: Notification saved
+    and Enviar Email
+        Notification->>Mail: Queue email
+        Mail->>Mail: Build email template
+        Mail->>User: 📧 Send email
+    end
+    
+    Note over User: Usuario recibe email
+    
+    User->>Browser: Accede a la aplicación
+    Browser->>NotifController: GET /dashboard
+    NotifController->>DB: Query unread notifications
+    DB-->>NotifController: Lista notificaciones
+    NotifController-->>Browser: Inertia props
+    Browser-->>User: Mostrar campana 🔔 con badge
+    
+    User->>Browser: Click en campana
+    Browser->>NotifController: GET /notificaciones
+    NotifController->>DB: Query last 50 notifications
+    DB-->>NotifController: Notifications list
+    NotifController-->>Browser: Render lista
+    Browser-->>User: Mostrar notificaciones
+    
+    User->>Browser: Click en notificación
+    Browser->>NotifController: POST /notificaciones/{id}/read
+    NotifController->>DB: UPDATE read_at = NOW()
+    DB-->>NotifController: Updated
+    NotifController-->>Browser: 204 No Content
+    Browser->>Browser: Navigate to resource
+    
+    User->>Browser: Click "Marcar todas leídas"
+    Browser->>NotifController: POST /notificaciones/read-all
+    NotifController->>DB: UPDATE all unread
+    DB-->>NotifController: Updated count
+    NotifController-->>Browser: Redirect back
+    Browser-->>User: Campana sin badge

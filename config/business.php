@@ -19,4 +19,12 @@ return [
 
     // Si true, aplica el bloqueo de solicitudes por OTs vencidas sin autorizar
     'bloquear_solicitudes_por_ots_vencidas' => env('BLOQUEAR_SOLICITUDES_OTS_VENCIDAS', true),
+
+    // Intervalo de tiempo (en minutos) entre recordatorios de validación de OT
+    // para clientes que tienen órdenes completadas y validadas por calidad
+    // pero pendientes de autorización.
+    //
+    // PARA PRUEBAS: 1 (1 minuto)
+    // PARA PRODUCCIÓN: 360 (6 horas)
+    'recordatorio_validacion_intervalo_minutos' => env('RECORDATORIO_VALIDACION_INTERVALO', 360),
 ];

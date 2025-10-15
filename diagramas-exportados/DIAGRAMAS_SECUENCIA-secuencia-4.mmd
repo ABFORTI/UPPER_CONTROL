@@ -1,0 +1,58 @@
+﻿sequenceDiagram
+    actor Calidad
+    participant Browser
+    participant CalidadController
+    participant Orden
+    participant DB
+    participant Notification
+    actor Cliente
+    actor TeamLeader
+
+    Calidad->>Browser: Accede a /calidad
+    Browser->>CalidadController: GET index()
+    CalidadController->>DB: Query ordenes estado='completada'
+    DB-->>CalidadController: Lista OTs completadas
+    CalidadController-->>Browser: Render lista
+    Browser-->>Calidad: Mostrar OTs pendientes
+    
+    Calidad->>Browser: Click en OT para revisar
+    Browser->>CalidadController: GET show(orden)
+    CalidadController->>DB: Cargar orden completa
+    DB-->>CalidadController: Orden con evidencias y avances
+    CalidadController-->>Browser: Render vista detalle
+    Browser-->>Calidad: Mostrar detalles + evidencias
+    
+    Calidad->>Calidad: Revisa evidencias y avances
+    
+    alt Aprobar
+        Calidad->>Browser: Click "Validar"
+        Browser->>CalidadController: POST validar(orden, request)
+        
+        CalidadController->>Orden: Update estado = 'validada_calidad'
+        Orden->>DB: UPDATE orden
+        
+        CalidadController->>Notification: OtValidadaParaCliente
+        Notification->>Cliente: 📧 Email "OT validada"
+        Notification->>DB: Guardar notificación
+        
+        CalidadController-->>Browser: Success
+        Browser-->>Calidad: "OT validada exitosamente"
+        
+        Note over Cliente: Recibe email para<br/>revisar y autorizar
+    else Rechazar
+        Calidad->>Browser: Click "Rechazar" + motivo
+        Browser->>CalidadController: POST rechazar(orden, request)
+        
+        CalidadController->>Orden: Update estado = 'rechazada_calidad'
+        CalidadController->>Orden: Save motivo_rechazo
+        Orden->>DB: UPDATE orden
+        
+        CalidadController->>Notification: Notificar TL (Team Leader)
+        Notification->>TeamLeader: 📧 Email "OT rechazada"
+        Notification->>DB: Guardar notificación
+        
+        CalidadController-->>Browser: Success
+        Browser-->>Calidad: "OT rechazada"
+        
+        Note over TeamLeader: Recibe email con<br/>motivo de rechazo
+    end

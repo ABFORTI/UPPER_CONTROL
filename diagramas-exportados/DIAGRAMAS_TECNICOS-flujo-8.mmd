@@ -1,0 +1,47 @@
+﻿flowchart TD
+    Start([Inicio Generación PDF]) --> Type{Tipo de PDF}
+    
+    Type -->|Factura| LoadFactura[Cargar Factura<br/>con relaciones]
+    Type -->|Orden| LoadOrden[Cargar Orden<br/>con relaciones]
+    
+    LoadFactura --> ParseXML{¿Existe XML?}
+    ParseXML -->|Sí| ExtractCFDI[Extraer datos CFDI<br/>parseCfdi method]
+    ParseXML -->|No| DefaultData[Usar datos de BD]
+    
+    ExtractCFDI --> ProcessData[Procesar datos:<br/>- Emisor<br/>- Receptor<br/>- Conceptos<br/>- Impuestos<br/>- Timbre<br/>- UUID]
+    DefaultData --> PrepareView
+    ProcessData --> GenQR[Generar QR SAT]
+    
+    GenQR --> TryPNG{¿Imagick<br/>disponible?}
+    TryPNG -->|Sí| QRPng[QR formato PNG]
+    TryPNG -->|No| QRSvg[QR formato SVG]
+    
+    QRPng --> PrepareView[Preparar datos para vista]
+    QRSvg --> PrepareView
+    
+    LoadOrden --> PrepareView
+    
+    PrepareView --> SelectView{Seleccionar vista}
+    SelectView -->|Factura| ViewFactura[pdf.factura]
+    SelectView -->|Orden| ViewOrden[pdf.orden]
+    
+    ViewFactura --> LoadView[Dompdf::loadView]
+    ViewOrden --> LoadView
+    
+    LoadView --> SetPaper[setPaper('letter')]
+    SetPaper --> RenderPDF[Renderizar PDF]
+    
+    RenderPDF --> SaveStorage[Guardar en Storage]
+    SaveStorage --> UpdateDB[Actualizar path en BD]
+    
+    UpdateDB --> CheckNotify{¿Enviar<br/>notificación?}
+    CheckNotify -->|Sí| SendMail[Enviar Email<br/>con PDF adjunto]
+    CheckNotify -->|No| End
+    
+    SendMail --> End([PDF Generado])
+    
+    style Start fill:#4caf50,stroke:#2e7d32,color:#fff
+    style End fill:#4caf50,stroke:#2e7d32,color:#fff
+    style GenQR fill:#ff9800,stroke:#e65100,color:#fff
+    style RenderPDF fill:#2196f3,stroke:#1565c0,color:#fff
+    style SendMail fill:#9c27b0,stroke:#6a1b9a,color:#fff
