@@ -1,4 +1,4 @@
-# ✅ Diagramas Subidos Exitosamente a GitHub
+﻿# ✅ Diagramas Subidos Exitosamente a GitHub
 
 ## 🎉 ¡Felicidades! Tu documentación ya está en línea
 
@@ -30,7 +30,7 @@ https://github.com/ABFORTI/UPPER_CONTROL/blob/Diseno/DOCUMENTACION.md
 - ✅ Base de Datos (ER Diagram)
 - ✅ Stack Tecnológico
 
-#### 2. Diagramas Técnicos
+#### 2. Diagramas Team Leaders
 **URL**: https://github.com/ABFORTI/UPPER_CONTROL/blob/Diseno/DIAGRAMAS_TECNICOS.md
 
 **Contiene:**

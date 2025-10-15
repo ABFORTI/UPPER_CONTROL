@@ -1,4 +1,4 @@
-# 📚 Documentación - UPPER_CONTROL
+﻿# 📚 Documentación - UPPER_CONTROL
 
 Sistema de gestión de órdenes de trabajo y facturación para control de calidad.
 
@@ -42,7 +42,7 @@ Este índice visual te guiará a todos los diagramas según tu rol y necesidad.
 - ✅ Tecnologías Utilizadas
 
 ### 🔧 [DIAGRAMAS_TECNICOS.md](./DIAGRAMAS_TECNICOS.md)
-**Diagramas Técnicos y Arquitectura**
+**Diagramas Team Leaders y Arquitectura**
 - ✅ Arquitectura del Sistema
 - ✅ Flujo de Procesamiento de Factura (Job)
 - ✅ Flujo de Datos Completo
@@ -190,7 +190,7 @@ Los diagramas Mermaid se renderizan automáticamente al abrir los archivos `.md`
 │   ├── 🗺️ INDICE_DIAGRAMAS.md (EMPIEZA AQUÍ)
 │   ├── 📚 DIAGRAMAS_README.md (Guía de uso)
 │   ├── 📋 DIAGRAMAS.md (Generales)
-│   ├── 🔧 DIAGRAMAS_TECNICOS.md (Técnicos)
+│   ├── 🔧 DIAGRAMAS_TECNICOS.md (Team Leaders)
 │   └── 🔄 DIAGRAMAS_SECUENCIA.md (Casos de uso)
 │
 ├── 💰 FACTURACIÓN/
@@ -210,7 +210,7 @@ Los diagramas Mermaid se renderizan automáticamente al abrir los archivos `.md`
 
 ### Gestión de Órdenes de Trabajo
 - ✅ Creación desde solicitudes
-- ✅ Asignación de técnicos
+- ✅ Asignación de Team Leaders
 - ✅ Registro de avances (0-100%)
 - ✅ Evidencias fotográficas
 - ✅ Generación de PDF

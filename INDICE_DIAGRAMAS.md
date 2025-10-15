@@ -1,4 +1,4 @@
-# 🗺️ Índice Visual de Diagramas - UPPER_CONTROL
+﻿# 🗺️ Índice Visual de Diagramas - UPPER_CONTROL
 
 Navegación rápida a todos los diagramas del sistema.
 
@@ -10,7 +10,7 @@ Navegación rápida a todos los diagramas del sistema.
 |---------|------|-------------|------------|
 | **[DIAGRAMAS_README.md](./DIAGRAMAS_README.md)** | 📚 Guía | Cómo usar los diagramas | Todos |
 | **[DIAGRAMAS.md](./DIAGRAMAS.md)** | 📊 General | Casos de uso y flujos | Product Owners, Managers |
-| **[DIAGRAMAS_TECNICOS.md](./DIAGRAMAS_TECNICOS.md)** | 🔧 Técnico | Arquitectura y componentes | Desarrolladores, DevOps |
+| **[DIAGRAMAS_TECNICOS.md](./DIAGRAMAS_TECNICOS.md)** | 🔧 Team Leader | Arquitectura y componentes | Desarrolladores, DevOps |
 | **[DIAGRAMAS_SECUENCIA.md](./DIAGRAMAS_SECUENCIA.md)** | 🔄 Secuencia | Interacciones paso a paso | Developers, QA |
 
 ---
@@ -281,7 +281,7 @@ Navegación rápida a todos los diagramas del sistema.
 
 ### Quiero Implementar una Feature (10 minutos)
 1. Busca el módulo en **DIAGRAMAS.md** → Casos de Uso
-2. Revisa el diagrama técnico en **DIAGRAMAS_TECNICOS.md**
+2. Revisa el diagrama Team Leader en **DIAGRAMAS_TECNICOS.md**
 3. Estudia la secuencia en **DIAGRAMAS_SECUENCIA.md**
 4. Consulta el modelo de datos si necesario
 
@@ -344,7 +344,7 @@ Navegación rápida a todos los diagramas del sistema.
 | Término | Significado |
 |---------|-------------|
 | **OT** | Orden de Trabajo |
-| **TL** | Técnico Líder |
+| **TL (Team Leader)** | Team Leader |
 | **CFDI** | Comprobante Fiscal Digital por Internet |
 | **SAT** | Servicio de Administración Tributaria |
 | **UUID** | Folio fiscal único de factura |

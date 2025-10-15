@@ -1,6 +1,6 @@
-# Diagramas Técnicos - UPPER_CONTROL
+﻿# Diagramas team leaders - UPPER_CONTROL
 
-Diagramas detallados de arquitectura, flujos técnicos y procesos internos.
+Diagramas detallados de arquitectura, flujos team leaders y procesos internos.
 
 ---
 
@@ -146,12 +146,12 @@ graph LR
         O1[Seleccionar Servicio]
         O1 --> O2[Seleccionar Centro]
         O2 --> O3[Definir Items]
-        O3 --> O4[Asignar Técnico]
+        O3 --> O4[Asignar Team Leader]
         O4 --> O5[Crear OT]
     end
     
     subgraph Ejecucion["⚙️ Ejecución"]
-        E1[Técnico registra avances]
+        E1[Team Leader registra avances]
         E1 --> E2[Sube evidencias]
         E2 --> E3[Progreso alcanza 100%]
         E3 --> E4[Estado: completada]
@@ -215,7 +215,7 @@ flowchart TD
     
     RoleCheck -->|admin| AdminAccess[✅ Acceso total<br/>+ Impersonación]
     RoleCheck -->|coordinador| CoordAccess[✅ Gestión de<br/>Solicitudes y OTs]
-    RoleCheck -->|tecnico_lider| TLAccess[✅ OTs asignadas<br/>Avances y evidencias]
+    RoleCheck -->|team_leader| TLAccess[✅ OTs asignadas<br/>Avances y evidencias]
     RoleCheck -->|calidad| CalAccess[✅ Validación<br/>de calidad]
     RoleCheck -->|facturacion| FactAccess[✅ Gestión de<br/>facturas]
     RoleCheck -->|cliente| ClienteAccess[✅ Solicitudes<br/>Autorización OTs]
@@ -254,7 +254,7 @@ flowchart TD
 ```mermaid
 graph TB
     subgraph Triggers["🎯 Eventos que Disparan Notificaciones"]
-        T1[OT Asignada a TL]
+        T1[OT Asignada a TL (Team Leader)]
         T2[OT Lista para Calidad]
         T3[OT Validada para Cliente]
         T4[Cliente Autorizó OT]
@@ -466,7 +466,7 @@ erDiagram
     
     USERS ||--o{ SOLICITUDES : "crea (cliente)"
     USERS ||--o{ SOLICITUDES : "aprueba (coordinador)"
-    USERS ||--o{ ORDENES : "asignado (TL)"
+    USERS ||--o{ ORDENES : "asignado (TL (Team Leader))"
     USERS ||--o{ AVANCES : "registra"
     USERS ||--o{ EVIDENCIAS : "sube"
     USERS ||--o{ NOTIFICATIONS : "recibe"

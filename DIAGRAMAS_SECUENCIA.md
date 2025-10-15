@@ -1,4 +1,4 @@
-# Diagramas de Secuencia - UPPER_CONTROL
+﻿# Diagramas de Secuencia - UPPER_CONTROL
 
 Diagramas de secuencia detallados de los casos de uso principales del sistema.
 
@@ -77,7 +77,7 @@ sequenceDiagram
     participant DB
     participant Notification
     participant PDF
-    actor TecnicoLider
+    actor TeamLeader
 
     Coordinador->>Browser: Click "Generar OT"
     Browser->>OrdenController: GET createFromSolicitud(solicitud)
@@ -85,7 +85,7 @@ sequenceDiagram
     OrdenController->>DB: Cargar solicitud con relaciones
     OrdenController->>DB: Cargar servicios activos
     OrdenController->>DB: Cargar centros activos
-    OrdenController->>DB: Cargar técnicos líderes
+    OrdenController->>DB: Cargar team leaders líderes
     DB-->>OrdenController: Todos los datos
     
     OrdenController-->>Browser: Render formulario OT
@@ -98,7 +98,7 @@ sequenceDiagram
     OrdenController-->>Browser: JSON precios
     Browser-->>Coordinador: Actualizar opciones
     
-    Coordinador->>Browser: Completa formulario:<br/>- Servicio<br/>- Centro<br/>- Items<br/>- Técnico Líder
+    Coordinador->>Browser: Completa formulario:<br/>- Servicio<br/>- Centro<br/>- Items<br/>- Team Leader
     Browser->>OrdenController: POST storeFromSolicitud(solicitud, request)
     
     OrdenController->>DB: BEGIN TRANSACTION
@@ -115,7 +115,7 @@ sequenceDiagram
     OrdenController->>DB: COMMIT TRANSACTION
     
     OrdenController->>Notification: OtAsignada notification
-    Notification->>TecnicoLider: 📧 Email "OT asignada"
+    Notification->>TeamLeader: 📧 Email "OT asignada"
     Notification->>DB: Guardar notificación
     
     OrdenController->>PDF: GenerateOrdenPdf::dispatch(orden.id)
@@ -124,7 +124,7 @@ sequenceDiagram
     OrdenController-->>Browser: Redirect a orden
     Browser-->>Coordinador: "OT creada exitosamente"
     
-    Note over TecnicoLider: Recibe notificación<br/>de OT asignada
+    Note over TeamLeader: Recibe notificación<br/>de OT asignada
 ```
 
 ---
@@ -133,7 +133,7 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    actor TecnicoLider
+    actor TeamLeader
     participant Browser
     participant OrdenController
     participant EvidenciaController
@@ -145,14 +145,14 @@ sequenceDiagram
     participant Notification
     actor Calidad
 
-    TecnicoLider->>Browser: Accede a /ordenes/{id}
+    TeamLeader->>Browser: Accede a /ordenes/{id}
     Browser->>OrdenController: GET show(orden)
     OrdenController->>DB: Cargar orden completa
     DB-->>OrdenController: Orden con avances y evidencias
     OrdenController-->>Browser: Render vista orden
-    Browser-->>TecnicoLider: Mostrar detalles OT
+    Browser-->>TeamLeader: Mostrar detalles OT
     
-    TecnicoLider->>Browser: Completar formulario avance:<br/>- Porcentaje<br/>- Descripción
+    TeamLeader->>Browser: Completar formulario avance:<br/>- Porcentaje<br/>- Descripción
     Browser->>OrdenController: POST registrarAvance(orden, request)
     
     OrdenController->>Avance: Create avance
@@ -172,9 +172,9 @@ sequenceDiagram
     end
     
     OrdenController-->>Browser: Success response
-    Browser-->>TecnicoLider: "Avance registrado"
+    Browser-->>TeamLeader: "Avance registrado"
     
-    TecnicoLider->>Browser: Seleccionar archivos evidencia
+    TeamLeader->>Browser: Seleccionar archivos evidencia
     Browser->>EvidenciaController: POST store(orden, files)
     
     loop Para cada archivo
@@ -186,7 +186,7 @@ sequenceDiagram
     end
     
     EvidenciaController-->>Browser: Success
-    Browser-->>TecnicoLider: "Evidencias subidas"
+    Browser-->>TeamLeader: "Evidencias subidas"
     
     Note over Calidad: Recibe notificación cuando<br/>progreso llega a 100%
 ```
@@ -204,7 +204,7 @@ sequenceDiagram
     participant DB
     participant Notification
     actor Cliente
-    actor TecnicoLider
+    actor TeamLeader
 
     Calidad->>Browser: Accede a /calidad
     Browser->>CalidadController: GET index()
@@ -245,14 +245,14 @@ sequenceDiagram
         CalidadController->>Orden: Save motivo_rechazo
         Orden->>DB: UPDATE orden
         
-        CalidadController->>Notification: Notificar TL
-        Notification->>TecnicoLider: 📧 Email "OT rechazada"
+        CalidadController->>Notification: Notificar TL (Team Leader)
+        Notification->>TeamLeader: 📧 Email "OT rechazada"
         Notification->>DB: Guardar notificación
         
         CalidadController-->>Browser: Success
         Browser-->>Calidad: "OT rechazada"
         
-        Note over TecnicoLider: Recibe email con<br/>motivo de rechazo
+        Note over TeamLeader: Recibe email con<br/>motivo de rechazo
     end
 ```
 
@@ -311,7 +311,7 @@ sequenceDiagram
 
 ---
 
-## 💰 Caso de Uso 6: Proceso Completo de Facturación
+## 💰 Caso de Uso 6: Proceso Completo de Facturación (Solo Sistema)
 
 ```mermaid
 sequenceDiagram
@@ -320,13 +320,7 @@ sequenceDiagram
     participant FacturaController
     participant Factura
     participant DB
-    participant Queue
-    participant Job
-    participant PDF
-    participant QR
     participant Storage
-    participant Mail
-    actor Cliente
 
     Facturacion->>Browser: Accede a /facturas
     Browser->>FacturaController: GET index()
@@ -349,55 +343,8 @@ sequenceDiagram
     Factura->>DB: INSERT factura
     DB-->>Factura: ID factura
     
-    FacturaController->>Queue: GenerateFacturaPdf::dispatch(id, true)
-    
-    par Proceso en Background
-        Queue->>Job: Execute job
-        Job->>DB: Load factura con relaciones
-        DB-->>Job: Factura completa
-        
-        Job->>Job: parseCfdi() - Parse XML
-        
-        alt XML existe
-            Job->>Job: Extract CFDI data
-            Job->>Job: Emisor, Receptor, UUID, etc.
-        else No XML
-            Job->>Job: Usar datos de BD
-        end
-        
-        Job->>QR: generateQrCode()
-        QR->>QR: Construir URL SAT
-        
-        alt Imagick disponible
-            QR->>QR: Generate PNG
-        else Fallback
-            QR->>QR: Generate SVG
-        end
-        
-        QR-->>Job: QR code data
-        
-        Job->>PDF: loadView('pdf.factura', data)
-        PDF->>PDF: Render HTML con:<br/>- Datos XML<br/>- QR code<br/>- Conceptos<br/>- Totales
-        PDF-->>Job: PDF binary
-        
-        Job->>Storage: Guardar PDF
-        Storage-->>Job: Path guardado
-        
-        Job->>DB: Update pdf_path
-        
-        Job->>Mail: FacturaGeneradaNotification
-        Mail->>Storage: Read PDF file
-        Storage-->>Mail: PDF binary
-        Mail->>Cliente: 📧 Email con PDF adjunto
-        Mail->>DB: Save notification
-        
-        Job-->>Queue: Job completed
-    end
-    
     FacturaController-->>Browser: Redirect a factura
     Browser-->>Facturacion: "Factura creada"
-    
-    Note over Cliente: Recibe email con<br/>PDF de factura adjunto
     
     Facturacion->>Browser: Accede a factura
     Browser->>FacturaController: GET show(factura)
@@ -414,7 +361,7 @@ sequenceDiagram
         Storage-->>FacturaController: Path
         FacturaController->>DB: Update xml_path
         FacturaController-->>Browser: Success
-        Browser-->>Facturacion: "XML subido"
+        Browser-->>Facturacion: "XML subido y parseado"
     else XML inválido
         FacturaController-->>Browser: Error
         Browser-->>Facturacion: "XML inválido"
@@ -439,7 +386,7 @@ sequenceDiagram
     FacturaController-->>Browser: Success
     Browser-->>Facturacion: "Factura completada"
     
-    Note over Facturacion,Cliente: Proceso de facturación<br/>completado exitosamente
+    Note over Facturacion: Proceso de facturación<br/>completado exitosamente
 ```
 
 ---
@@ -585,7 +532,7 @@ sequenceDiagram
     
     alt Admin/Coordinador
         DB-->>DashboardController: Todas las OTs
-    else Técnico Líder
+    else Team Leader
         DB-->>DashboardController: Solo OTs asignadas
     else Cliente
         DB-->>DashboardController: Solo OTs de sus solicitudes

@@ -1,4 +1,4 @@
-# 📚 Documentación de Diagramas - UPPER_CONTROL
+﻿# 📚 Documentación de Diagramas - UPPER_CONTROL
 
 Guía completa para entender, visualizar y utilizar los diagramas del sistema.
 
@@ -18,7 +18,7 @@ Este proyecto incluye **3 archivos principales** con diagramas en formato Mermai
 - 🗂️ **Diagrama de Base de Datos**: Relaciones principales
 - 📱 **Tecnologías Utilizadas**: Stack tecnológico
 
-### 2️⃣ **DIAGRAMAS_TECNICOS.md** - Diagramas Técnicos
+### 2️⃣ **DIAGRAMAS_TECNICOS.md** - Diagramas Team Leaders
 - 🏗️ **Arquitectura del Sistema**: Componentes y capas
 - 🔄 **Flujo de Procesamiento de Factura**: Job detallado
 - 📊 **Flujo de Datos**: Solicitud → Factura
@@ -36,7 +36,7 @@ Este proyecto incluye **3 archivos principales** con diagramas en formato Mermai
 ### 3️⃣ **DIAGRAMAS_SECUENCIA.md** - Diagramas de Secuencia
 - 📝 **Crear y Aprobar Solicitud**: Flujo completo
 - 📋 **Crear OT desde Solicitud**: Generación de órdenes
-- ⚙️ **Registrar Avances y Evidencias**: Trabajo del TL
+- ⚙️ **Registrar Avances y Evidencias**: Trabajo del TL (Team Leader)
 - ✅ **Validación de Calidad**: Proceso de aprobación
 - 👥 **Autorización del Cliente**: Cliente autoriza OT
 - 💰 **Proceso Completo de Facturación**: De creación a pago
@@ -109,7 +109,7 @@ mmdc -i DIAGRAMAS.md -o diagramas.pdf
 4. `DIAGRAMAS_TECNICOS.md` → Frontend Component Architecture
 5. `DIAGRAMAS_SECUENCIA.md` → Todos los casos de uso
 
-**Enfoque:** Entender la arquitectura y flujos técnicos
+**Enfoque:** Entender la arquitectura y flujos Team Leaders
 
 ### 🎨 Para Diseñadores UI/UX
 **Leer en este orden:**
@@ -147,7 +147,7 @@ mmdc -i DIAGRAMAS.md -o diagramas.pdf
 
 ### Módulo de Órdenes de Trabajo
 - ✅ Crear OT desde solicitud
-- ✅ Asignar técnico líder
+- ✅ Asignar Team Leader
 - ✅ Registrar avances
 - ✅ Subir evidencias
 - ✅ Generar PDF OT

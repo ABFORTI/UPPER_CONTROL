@@ -1,4 +1,4 @@
-# Diagramas del Sistema UPPER_CONTROL
+﻿# Diagramas del Sistema UPPER_CONTROL
 
 Sistema de gestión de órdenes de trabajo y facturación para control de calidad.
 
@@ -11,7 +11,7 @@ graph TB
     %% Actores
     Cliente([👤 Cliente])
     Coordinador([👤 Coordinador])
-    TecnicoLider([👤 Técnico Líder])
+    TeamLeader([👤 Team Leader])
     Calidad([👤 Calidad])
     Facturacion([👤 Facturación])
     Admin([👤 Administrador])
@@ -27,7 +27,7 @@ graph TB
     %% Módulo de Órdenes de Trabajo
     subgraph Ordenes[📋 Módulo de Órdenes]
         UC5[Generar OT desde Solicitud]
-        UC6[Asignar Técnico Líder]
+        UC6[Asignar Team Leader]
         UC7[Registrar Avances]
         UC8[Subir Evidencias]
         UC9[Ver OT]
@@ -95,11 +95,11 @@ graph TB
     Coordinador --> UC27
     Coordinador --> UC31
 
-    %% Relaciones Técnico Líder
-    TecnicoLider --> UC7
-    TecnicoLider --> UC8
-    TecnicoLider --> UC9
-    TecnicoLider --> UC10
+    %% Relaciones Team Leader
+    TeamLeader --> UC7
+    TeamLeader --> UC8
+    TeamLeader --> UC9
+    TeamLeader --> UC10
 
     %% Relaciones Calidad
     Calidad --> UC11
@@ -144,7 +144,7 @@ graph TB
     %% Todos ven notificaciones y dashboard básico
     Cliente --> UC34
     Coordinador --> UC34
-    TecnicoLider --> UC34
+    TeamLeader --> UC34
     Calidad --> UC34
     Facturacion --> UC34
     Admin --> UC34
@@ -180,9 +180,9 @@ flowchart TD
     
     %% Flujo de OT
     SolAprobada --> OTCrear[📋 Coordinador genera OT]
-    OTCrear --> OTAsignar[👤 Asignar Técnico Líder]
-    OTAsignar --> NotifTL[📧 Notificar Técnico]
-    NotifTL --> OTProgreso[⚙️ Técnico trabaja en OT]
+    OTCrear --> OTAsignar[👤 Asignar Team Leader]
+    OTAsignar --> NotifTL[📧 Notificar Team Leader]
+    NotifTL --> OTProgreso[⚙️ Team Leader trabaja en OT]
     
     OTProgreso --> OTAvances[📝 Registrar Avances]
     OTAvances --> OTEvidencias[📸 Subir Evidencias]
@@ -194,7 +194,7 @@ flowchart TD
     OTCompletada --> CalidadRevision[🔍 Calidad revisa]
     CalidadRevision --> CalidadDecision{Validación}
     CalidadDecision -->|Rechaza| OTRechazadaCalidad[❌ Rechazada]
-    OTRechazadaCalidad --> NotifTL2[📧 Notificar Técnico]
+    OTRechazadaCalidad --> NotifTL2[📧 Notificar Team Leader]
     NotifTL2 --> OTProgreso
     
     CalidadDecision -->|Aprueba| OTValidada[✅ Validada por Calidad]
@@ -209,16 +209,12 @@ flowchart TD
     ClienteDecision -->|Sí| ClienteAutoriza[✅ Cliente Autoriza]
     ClienteAutoriza --> NotifFacturacion[📧 Notificar Facturación]
     
-    %% Flujo de Facturación
+    %% Flujo de Facturación (Solo procesos internos del sistema)
     NotifFacturacion --> FacturaCrear[💰 Crear Factura]
-    FacturaCrear --> FacturaGenPDF[📄 Generar PDF con XML]
-    FacturaGenPDF --> FacturaGenQR[🔲 Generar QR SAT]
-    FacturaGenQR --> FacturaEmail[📧 Enviar PDF a Cliente]
-    
-    FacturaEmail --> FacturaXML[📎 Subir XML Factura]
-    FacturaXML --> FacturaFacturado[✅ Marcar Facturado]
+    FacturaCrear --> FacturaXML[� Subir XML para extraer datos]
+    FacturaXML --> FacturaFacturado[✅ Marcar como Facturado]
     FacturaFacturado --> FacturaCobro[💵 Registrar Cobro]
-    FacturaCobro --> FacturaPagado[✅ Marcar Pagado]
+    FacturaCobro --> FacturaPagado[✅ Marcar como Pagado]
     
     FacturaPagado --> End3([🎉 Proceso Completado])
     
@@ -248,7 +244,7 @@ flowchart TD
 
 ---
 
-## 💰 Diagrama de Flujo de Facturación (Detallado)
+## 💰 Diagrama de Flujo de Facturación (Detallado - Solo Procesos del Sistema)
 
 ```mermaid
 flowchart TD
@@ -256,46 +252,22 @@ flowchart TD
     Check -->|No| Wait[⏳ Esperar autorización]
     Wait --> End1([Fin])
     
-    Check -->|Sí| CreateFactura[💰 Crear Factura]
+    Check -->|Sí| Notif[📧 Notificar a Facturación]
+    Notif --> CreateFactura[💰 Crear Factura]
     CreateFactura --> FillData[📝 Llenar datos:<br/>- Folio<br/>- Total<br/>- Concepto]
     
     FillData --> GuardarDB[(💾 Guardar en BD)]
-    GuardarDB --> JobPDF[⚙️ Job: GenerateFacturaPdf]
+    GuardarDB --> UploadXML[📎 Subir XML para extraer datos]
     
-    JobPDF --> LoadData[📥 Cargar datos:<br/>- Factura<br/>- Orden<br/>- Cliente]
-    LoadData --> ParseXML[🔍 Parsear XML CFDI]
-    
-    ParseXML --> ExtractData[📊 Extraer datos:<br/>- Emisor<br/>- Receptor<br/>- UUID<br/>- Conceptos<br/>- Impuestos<br/>- Timbre]
-    
-    ExtractData --> GenQR[🔲 Generar QR SAT]
-    GenQR --> QRFormat{Formato QR}
-    QRFormat -->|PNG disponible| QRPng[Generar PNG]
-    QRFormat -->|No imagick| QRSvg[Generar SVG]
-    
-    QRPng --> BuildPDF[📄 Construir PDF]
-    QRSvg --> BuildPDF
-    
-    BuildPDF --> PDFContent[📝 PDF incluye:<br/>- Datos XML<br/>- QR verificación<br/>- Conceptos<br/>- Totales]
-    
-    PDFContent --> SavePDF[(💾 Guardar PDF)]
-    SavePDF --> CheckNotify{¿Notificar<br/>cliente?}
-    
-    CheckNotify -->|No| End2([Fin])
-    CheckNotify -->|Sí| SendEmail[📧 Enviar Email]
-    
-    SendEmail --> AttachPDF[📎 Adjuntar PDF]
-    AttachPDF --> EmailSent[✅ Email enviado]
-    EmailSent --> EmailContent[💌 Email contiene:<br/>- Datos factura<br/>- Link ver factura<br/>- PDF adjunto]
-    
-    EmailContent --> ClienteRecibe[👤 Cliente recibe]
-    
-    ClienteRecibe --> UploadXML[📎 Facturación sube XML]
     UploadXML --> ValidateXML{¿XML válido?}
     ValidateXML -->|No| ErrorXML[❌ Error validación]
     ErrorXML --> UploadXML
     
-    ValidateXML -->|Sí| XMLSaved[(💾 XML guardado)]
-    XMLSaved --> MarcarFacturado[✅ Marcar Facturado]
+    ValidateXML -->|Sí| ParseXML[🔍 Parsear XML CFDI]
+    ParseXML --> ExtractData[📊 Extraer datos:<br/>- Emisor<br/>- Receptor<br/>- UUID<br/>- Conceptos<br/>- Impuestos<br/>- Timbre]
+    
+    ExtractData --> XMLSaved[(💾 XML guardado)]
+    XMLSaved --> MarcarFacturado[✅ Marcar como Facturado]
     
     MarcarFacturado --> Status1[Estado: facturado]
     Status1 --> RegCobro[💵 Registrar Cobro]
@@ -309,10 +281,6 @@ flowchart TD
     style Start fill:#7b1fa2,stroke:#4a148c,color:#fff
     style Complete fill:#4caf50,stroke:#2e7d32,color:#fff
     style End1 fill:#ff9800,stroke:#e65100,color:#fff
-    style End2 fill:#2196f3,stroke:#1565c0,color:#fff
-    style JobPDF fill:#03a9f4,stroke:#01579b,color:#fff
-    style BuildPDF fill:#ff9800,stroke:#e65100,color:#fff
-    style SendEmail fill:#4caf50,stroke:#2e7d32,color:#fff
     style ErrorXML fill:#f44336,stroke:#c62828,color:#fff
     style Status1 fill:#81c784,stroke:#388e3c
     style Status2 fill:#81c784,stroke:#388e3c
@@ -327,8 +295,8 @@ flowchart TD
 stateDiagram-v2
     [*] --> nueva: Coordinador crea OT
     
-    nueva --> asignada: Asignar Técnico Líder
-    asignada --> en_progreso: Técnico inicia trabajo
+    nueva --> asignada: Asignar Team Leader
+    asignada --> en_progreso: Team Leader inicia trabajo
     
     en_progreso --> en_progreso: Registrar avances<br/>Subir evidencias
     en_progreso --> completada: Progreso = 100%
@@ -387,11 +355,11 @@ mindmap
     Coordinador
       Aprobar solicitudes
       Crear OT
-      Asignar técnicos
+      Asignar team leaders
       Gestionar servicios
       Gestionar áreas
       Ver dashboard
-    Técnico Líder
+    Team Leader
       Ver OT asignadas
       Registrar avances
       Subir evidencias
@@ -559,8 +527,8 @@ graph LR
 
 ### Estados de Orden de Trabajo
 - ⚪ **nueva**: Recién creada, sin asignar
-- 🔵 **asignada**: Asignada a técnico líder
-- 🟡 **en_progreso**: Técnico trabajando
+- 🔵 **asignada**: Asignada a Team Leader
+- 🟡 **en_progreso**: Team Leader trabajando
 - 🟣 **completada**: 100% progreso, esperando calidad
 - 🟢 **validada_calidad**: Aprobada por calidad
 - 🔴 **rechazada_calidad**: Rechazada por calidad
