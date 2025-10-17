@@ -17,6 +17,36 @@ function changeCentro(){
 
 const flashOk = computed(()=> usePage().props?.flash?.ok ?? null)
 
+// Modal crear servicio
+const showCreateModal = ref(false)
+const createForm = useForm({
+  nombre: '',
+  usa_tamanos: false,
+  id_centro: selCentro.value,
+  precio_base: null,
+  tamanos: { chico: null, mediano: null, grande: null, jumbo: null }
+})
+
+function openCreateModal(){
+  createForm.reset()
+  createForm.id_centro = selCentro.value
+  createForm.usa_tamanos = false
+  showCreateModal.value = true
+}
+function closeCreateModal(){
+  showCreateModal.value = false
+  createForm.reset()
+}
+function submitCreate(){
+  createForm.post(props.urls.crear, {
+    preserveScroll: false,
+    onSuccess: () => { closeCreateModal() }
+  })
+}
+
+// Sincronizar el centro seleccionado con el form de creación
+watch(() => selCentro.value, (v) => { if (createForm) createForm.id_centro = v })
+
 // Ya no hay formulario aquí; se mueve a Servicios/Create
 
 // Guardar una fila (precios de un servicio) para el centro seleccionado
@@ -101,13 +131,13 @@ function removeRow(r){
 
       <!-- Botón Agregar servicio -->
       <div class="mb-6 flex justify-end">
-        <a :href="urls.create" 
-           class="px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 font-bold text-white hover:shadow-xl transition-all duration-200 transform hover:scale-105 flex items-center gap-2">
+        <button @click="openCreateModal"
+                class="px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 font-bold text-white hover:shadow-xl transition-all duration-200 transform hover:scale-105 flex items-center gap-2">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
           </svg>
           Agregar servicio
-        </a>
+        </button>
       </div>
 
       <!-- Estado vacío -->
@@ -128,13 +158,13 @@ function removeRow(r){
             <p class="text-xl text-gray-600 mb-8">Empieza agregando un servicio o clona desde otro centro</p>
             
             <div class="flex flex-col sm:flex-row gap-4 justify-center items-center max-w-2xl mx-auto">
-              <a :href="urls.create" 
-                 class="px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 font-bold text-white hover:shadow-xl transition-all duration-200 transform hover:scale-105 flex items-center gap-2">
+              <button @click="openCreateModal"
+                      class="px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 font-bold text-white hover:shadow-xl transition-all duration-200 transform hover:scale-105 flex items-center gap-2">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
                 </svg>
                 Agregar servicio
-              </a>
+              </button>
               
               <div v-if="otherCentros.length" class="flex items-center gap-3 bg-gray-50 px-6 py-3 rounded-xl border-2 border-gray-200">
                 <span class="text-sm font-semibold text-gray-700">o clonar desde:</span>
@@ -149,6 +179,8 @@ function removeRow(r){
                 </button>
               </div>
             </div>
+    
+              
             
             <p v-if="cloneForm.errors.centro_origen" class="text-red-600 text-sm mt-4 flex items-center justify-center gap-1">
               <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
@@ -299,7 +331,65 @@ function removeRow(r){
       </div>
 
     </div>
+    
+    <!-- Modal Crear Servicio -->
+    <div v-if="showCreateModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
+      <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl transform transition-all">
+        <div class="bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-4 rounded-t-2xl">
+          <h2 class="text-2xl font-bold text-white">Nuevo Servicio</h2>
+        </div>
+        <form @submit.prevent="submitCreate" class="p-6">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-semibold text-gray-700 mb-2">Nombre</label>
+              <input v-model="createForm.nombre" type="text" required class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl" />
+              <p v-if="createForm.errors.nombre" class="text-red-600 text-sm mt-1">{{ createForm.errors.nombre }}</p>
+            </div>
+            <div>
+              <label class="block text-sm font-semibold text-gray-700 mb-2">Usa tamaños</label>
+              <select v-model="createForm.usa_tamanos" class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl">
+                <option :value="false">No (Unitario)</option>
+                <option :value="true">Sí (Por tamaños)</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-semibold text-gray-700 mb-2">Centro</label>
+              <select v-model.number="createForm.id_centro" class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl">
+                <option v-for="c in centros" :key="c.id" :value="c.id">{{ c.nombre }}</option>
+              </select>
+            </div>
+            <div v-if="!createForm.usa_tamanos">
+              <label class="block text-sm font-semibold text-gray-700 mb-2">Precio unitario</label>
+              <input v-model.number="createForm.precio_base" type="number" step="0.01" min="0" class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl" />
+            </div>
+          </div>
+
+          <div v-if="createForm.usa_tamanos" class="mt-4 grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-semibold text-gray-700 mb-2">Chico</label>
+              <input v-model.number="createForm.tamanos.chico" type="number" step="0.01" min="0" class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl" />
+            </div>
+            <div>
+              <label class="block text-sm font-semibold text-gray-700 mb-2">Mediano</label>
+              <input v-model.number="createForm.tamanos.mediano" type="number" step="0.01" min="0" class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl" />
+            </div>
+            <div>
+              <label class="block text-sm font-semibold text-gray-700 mb-2">Grande</label>
+              <input v-model.number="createForm.tamanos.grande" type="number" step="0.01" min="0" class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl" />
+            </div>
+            <div>
+              <label class="block text-sm font-semibold text-gray-700 mb-2">Jumbo</label>
+              <input v-model.number="createForm.tamanos.jumbo" type="number" step="0.01" min="0" class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl" />
+            </div>
+          </div>
+
+          <div class="mt-6 flex gap-3 justify-end">
+            <button type="button" @click="closeCreateModal" class="px-6 py-3 rounded-xl border-2 border-gray-300 font-semibold text-gray-700">Cancelar</button>
+            <button type="submit" :disabled="createForm.processing" class="px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold">{{ createForm.processing ? 'Guardando…' : 'Crear servicio' }}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
   </div>
 </template>
-
-<!-- script adicional eliminado; todo vive en <script setup> -->

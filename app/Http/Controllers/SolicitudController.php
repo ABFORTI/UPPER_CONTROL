@@ -6,6 +6,7 @@ use App\Models\CentroTrabajo;
 use App\Models\Solicitud;
 use App\Models\ServicioEmpresa;
 use Illuminate\Http\Request;
+use Carbon\Carbon;
 use Inertia\Inertia;
 use App\Services\Notifier;
 use Illuminate\Support\Facades\DB;
@@ -548,11 +549,10 @@ class SolicitudController extends Controller
             return null; // Sin centro asignado, no aplicar bloqueo
         }
 
-        // Obtener tiempo límite en minutos desde config
-        // PARA PRUEBAS: 1 minuto
-        // PARA PRODUCCIÓN: 4320 minutos (72 horas)
-        $timeoutMinutos = (int)config('business.ot_autorizacion_timeout_minutos', 1);
-        $limiteTimestamp = now()->subMinutes($timeoutMinutos);
+    // Obtener tiempo límite en minutos desde config
+    // PARA PRUEBAS: 1 minuto
+    // PARA PRODUCCIÓN: 4320 minutos (72 horas)
+    $timeoutMinutos = (int)config('business.ot_autorizacion_timeout_minutos', 1);
 
         // Buscar OTs que:
         // 1. Estén en estado 'completada' (aún no autorizadas por cliente)
@@ -572,7 +572,8 @@ class SolicitudController extends Controller
         }
 
         // Filtrar solo las que hayan excedido el tiempo DESDE LA VALIDACIÓN DE CALIDAD
-        $otsVencidas = $otsValidadas->filter(function($ot) use ($limiteTimestamp) {
+        // NOTE: aquí usamos tiempo "efectivo" que EXCLUYE sábados y domingos (se pausa el conteo)
+        $otsVencidas = $otsValidadas->filter(function($ot) use ($timeoutMinutos) {
             // Buscar el registro de actividad cuando calidad validó
             $activityLog = \Spatie\Activitylog\Models\Activity::where('log_name', 'ordenes')
                 ->where('subject_type', \App\Models\Orden::class)
@@ -585,8 +586,13 @@ class SolicitudController extends Controller
                 return false; // No se encontró registro de validación, no bloquear
             }
 
-            // Verificar si ha pasado más tiempo del permitido desde la validación
-            return $activityLog->created_at <= $limiteTimestamp;
+            $validadaEn = Carbon::parse($activityLog->created_at);
+            $ahora = Carbon::now();
+
+            // Calcular minutos efectivos excluyendo sábados y domingos
+            $minutosTranscurridos = $this->businessMinutesBetween($validadaEn, $ahora);
+
+            return $minutosTranscurridos >= $timeoutMinutos;
         });
 
         if ($otsVencidas->isEmpty()) {
@@ -607,8 +613,8 @@ class SolicitudController extends Controller
                 ->orderBy('created_at', 'desc')
                 ->first();
 
-            $validadaEn = $activityLog ? $activityLog->created_at : $ot->updated_at;
-            $transcurrido = now()->diffInMinutes($validadaEn);
+            $validadaEn = $activityLog ? Carbon::parse($activityLog->created_at) : Carbon::parse($ot->updated_at);
+            $transcurrido = $this->businessMinutesBetween($validadaEn, Carbon::now());
             $folio = $ot->solicitud ? $ot->solicitud->folio : 'OT-' . $ot->id;
             
             return [
@@ -646,5 +652,44 @@ class SolicitudController extends Controller
         }
         $dias = round($minutos / 1440, 1);
         return $dias . ' día(s)';
+    }
+
+    /**
+     * Calcula la cantidad de minutos transcurridos entre dos instantes EXCLUYENDO
+     * sábados y domingos. El conteo incluye cualquier hora del día mientras el día
+     * sea lunes-viernes; si la ventana cruza sábado/domingo, esos minutos se omiten.
+     *
+     * @param \Carbon\Carbon|string $inicio
+     * @param \Carbon\Carbon|string $fin
+     * @return int minutos efectivos
+     */
+    public function businessMinutesBetween($inicio, $fin): int
+    {
+        $start = $inicio instanceof Carbon ? $inicio->copy() : Carbon::parse($inicio);
+        $end = $fin instanceof Carbon ? $fin->copy() : Carbon::parse($fin);
+        if ($end->lte($start)) return 0;
+
+        $total = 0;
+
+        $currentDay = $start->copy()->startOfDay();
+        $lastDay = $end->copy()->startOfDay();
+
+        while ($currentDay->lte($lastDay)) {
+            if ($currentDay->isWeekend()) {
+                $currentDay->addDay();
+                continue;
+            }
+
+            $dayStartTs = max($start->getTimestamp(), $currentDay->getTimestamp());
+            $dayEndTs = min($end->getTimestamp(), $currentDay->copy()->addDay()->getTimestamp());
+
+            if ($dayEndTs > $dayStartTs) {
+                $total += ($dayEndTs - $dayStartTs) / 60.0;
+            }
+
+            $currentDay->addDay();
+        }
+
+        return (int) round($total);
     }
 }

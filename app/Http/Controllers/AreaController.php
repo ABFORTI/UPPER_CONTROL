@@ -31,17 +31,29 @@ class AreaController extends Controller
     public function index()
     {
         $user = Auth::user();
+        $centro = request('centro', null);
         
         // Admin ve todas las áreas, coordinador solo las de su centro
         if ($user->hasRole('admin')) {
-            $areas = Area::with('centro')->orderBy('id_centrotrabajo')->orderBy('nombre')->get();
+            // Si se especifica un centro via query, filtrar por él
+            if ($centro) {
+                $areas = Area::where('id_centrotrabajo', $centro)
+                    ->with('centro')
+                    ->orderBy('nombre')
+                    ->get();
+            } else {
+                $areas = Area::with('centro')->orderBy('id_centrotrabajo')->orderBy('nombre')->get();
+            }
             $centros = CentroTrabajo::orderBy('nombre')->get();
         } else if ($user->hasRole('coordinador')) {
+            // El coordinador solo ve su propio centro; ignorar el query param
             $areas = Area::where('id_centrotrabajo', $user->centro_trabajo_id)
                 ->with('centro')
                 ->orderBy('nombre')
                 ->get();
             $centros = CentroTrabajo::where('id', $user->centro_trabajo_id)->get();
+            // Forzar $centro para que el frontend muestre el centro correcto
+            $centro = $user->centro_trabajo_id;
         } else {
             abort(403);
         }
@@ -52,7 +64,8 @@ class AreaController extends Controller
             'can' => [
                 'create' => $user->hasAnyRole(['admin', 'coordinador']),
                 'edit' => $user->hasAnyRole(['admin', 'coordinador']),
-            ]
+            ],
+            'filters' => [ 'centro' => $centro ],
         ]);
     }
 

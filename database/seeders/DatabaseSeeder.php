@@ -9,6 +9,7 @@ class DatabaseSeeder extends Seeder {
     // Ejecuta seeders base
     $this->call([
       CentrosSeeder::class,
+      AreaSeeder::class,
       RolesSeeder::class,
       ServiciosSeeder::class,
       UsersSeeder::class,

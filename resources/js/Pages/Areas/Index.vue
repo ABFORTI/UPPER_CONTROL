@@ -7,8 +7,17 @@ const page = usePage();
 const props = defineProps({
   areas: Array,
   centros: Array,
-  can: Object
+  can: Object,
+  urls: { type: Object, required: false }
 });
+
+// Selector de centro para filtrar
+const centroSel = ref(page.props.filters?.centro ? Number(page.props.filters.centro) : (props.centros?.[0]?.id || page.props.auth?.user?.centro_trabajo_id || null))
+function changeCentro(){
+  const q = new URLSearchParams({ centro: String(centroSel.value) })
+  const url = props.urls?.index ? `${props.urls.index}?${q.toString()}` : `${route('areas.index')}?${q.toString()}`
+  router.get(url, {}, { preserveState: false, replace: true })
+}
 
 const showCreateModal = ref(false);
 const showEditModal = ref(false);
@@ -75,7 +84,8 @@ function deleteArea(area) {
 
 const groupedAreas = computed(() => {
   const groups = {};
-  props.areas.forEach(a => {
+  const list = centroSel.value ? props.areas.filter(a => Number(a.id_centrotrabajo) === Number(centroSel.value)) : props.areas
+  list.forEach(a => {
     const centroName = a.centro?.nombre || 'Sin Centro';
     if (!groups[centroName]) groups[centroName] = [];
     groups[centroName].push(a);
@@ -96,13 +106,23 @@ const groupedAreas = computed(() => {
               <h1 class="text-3xl font-extrabold text-white mb-2">📍 Áreas</h1>
               <p class="text-emerald-100">Administra las áreas por centro de trabajo</p>
             </div>
-            <button v-if="can?.create" @click="openCreateModal"
-                    class="inline-flex items-center gap-2 px-6 py-3 bg-white text-emerald-600 font-bold rounded-xl hover:bg-emerald-50 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105">
+            <div class="bg-white bg-opacity-20 backdrop-blur-sm rounded-xl p-4 border-2 border-white border-opacity-30 flex items-center gap-4">
+              <div>
+                <label class="block text-sm font-semibold text-white mb-2">Centro de trabajo</label>
+                <select v-model.number="centroSel" @change="changeCentro"
+                        class="px-4 py-2.5 rounded-lg border-2 border-emerald-200 min-w-[14rem] bg-white font-semibold text-gray-700 focus:ring-4 focus:ring-emerald-200 transition-all duration-200">
+                  <option v-for="c in centros" :key="c.id" :value="c.id">{{ c.nombre }}</option>
+                </select>
+              </div>
+
+              <button v-if="can?.create" @click="openCreateModal"
+                      class="inline-flex items-center gap-2 px-6 py-3 bg-white text-emerald-600 font-bold rounded-xl hover:bg-emerald-50 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105">
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
               </svg>
               Nueva Área
-            </button>
+              </button>
+            </div>
           </div>
         </div>
 
