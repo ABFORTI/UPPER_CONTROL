@@ -10,6 +10,7 @@ class Orden extends Model {
     protected $table='ordenes_trabajo';
     protected $fillable = [
         'id_solicitud','id_centrotrabajo','id_servicio','id_area','team_leader_id',
+        'descripcion_general',
         'estatus','calidad_resultado','total_planeado','total_real',
         'subtotal','iva','total'
     ];

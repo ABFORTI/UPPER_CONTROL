@@ -25,17 +25,23 @@ class FacturaGeneradaNotification extends Notification implements ShouldQueue
     public function toMail($notifiable): MailMessage
     {
         $orden = $this->factura->orden;
-        $servicio = $orden->servicio->nombre ?? 'Servicio';
-        $centro = $orden->centro->nombre ?? 'Centro';
+        $servicio = $orden?->servicio?->nombre ?? 'Servicio';
+        $centro = $orden?->centro?->nombre ?? 'Centro';
 
         $mail = (new MailMessage)
-            ->subject("📄 Factura #{$this->factura->id} Generada")
-            ->greeting("Hola {$notifiable->name},")
-            ->line("Se ha generado la factura correspondiente a la orden de trabajo **OT #{$orden->id}**.")
-            ->line("**Servicio:** {$servicio}")
-            ->line("**Centro:** {$centro}")
-            ->line("**Total:** $" . number_format($this->factura->total, 2))
-            ->action('Ver Factura', route('facturas.show', $this->factura->id));
+            ->subject('📄 Factura #' . $this->factura->id . ' Generada Exitosamente')
+            ->greeting('¡Hola ' . $notifiable->name . '!')
+            ->line('Se ha generado exitosamente la **factura** correspondiente a la orden de trabajo que solicitaste.')
+            ->line('')
+            ->line('**Detalles de la Factura:**')
+            ->line('• **Número de Factura:** #' . $this->factura->id)
+            ->line('• **Orden de Trabajo:** #' . $orden->id)
+            ->line('• **Servicio:** ' . $servicio)
+            ->line('• **Centro de Trabajo:** ' . $centro)
+            ->line('• **Total:** $' . number_format($this->factura->total, 2) . ' MXN')
+            ->line('• **Fecha de Emisión:** ' . $this->factura->created_at->format('d/m/Y'))
+            ->line('')
+            ->action('📋 Ver Factura Completa', route('facturas.show', $this->factura->id));
 
         // Adjuntar PDF si existe
         if ($this->factura->pdf_path && Storage::exists($this->factura->pdf_path)) {
@@ -47,12 +53,17 @@ class FacturaGeneradaNotification extends Notification implements ShouldQueue
                 'mime' => 'application/pdf',
             ]);
             
-            $mail->line("📎 El PDF de la factura está adjunto a este correo.");
+            $mail->line('')
+                 ->line('📎 **El PDF de la factura está adjunto** a este correo para tu comodidad.');
         } else {
-            $mail->line("⏳ El PDF se está generando y estará disponible en breve.");
+            $mail->line('')
+                 ->line('⏳ El PDF se está generando en este momento y estará disponible en breve en el sistema.');
         }
 
-        return $mail->line('Gracias por confiar en Upper Control.');
+        return $mail->line('')
+                    ->line('Gracias por confiar en nuestros servicios.')
+                    ->salutation('Atentamente,  
+**Equipo Upper Control**');
     }
 
     public function toDatabase($notifiable)

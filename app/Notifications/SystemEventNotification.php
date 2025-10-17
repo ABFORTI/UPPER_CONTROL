@@ -25,15 +25,19 @@ class SystemEventNotification extends Notification implements ShouldQueue
     public function toMail($notifiable): MailMessage
     {
         $mail = (new MailMessage)
-            ->subject($this->title)
-            ->greeting("Hola {$notifiable->name},")
-            ->line($this->message);
+            ->subject('🔔 ' . $this->title)
+            ->greeting('¡Hola ' . $notifiable->name . '!')
+            ->line($this->message)
+            ->line('');
         
         if ($this->url) {
-            $mail->action('Ver Detalles', $this->url);
+            $mail->action('🔗 Ver Detalles', $this->url)
+                 ->line('');
         }
         
-        return $mail->line('Gracias por usar Upper Control.');
+        return $mail->line('Este es un mensaje automático del sistema.')
+                    ->salutation('Atentamente,  
+**Sistema Upper Control**');
     }
 
     public function toDatabase($notifiable){

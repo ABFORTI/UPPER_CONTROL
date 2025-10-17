@@ -35,11 +35,12 @@ function badgeClass(estatus){
 
 // Exportar/Copy (cliente)
 function toCsv(items){
-  const headers = ['ID','OT','Servicio','Centro','Total','Estatus','Folio','Fecha']
+  const headers = ['ID','OT','Servicio','Producto','Centro','Total','Estatus','Folio','Fecha']
   const rows = items.map(f => [
     f.id,
     `OT ${f.orden_id ?? ''}`,
     f.servicio ?? '',
+    f.descripcion_general ?? '',
     f.centro ?? '',
     f.total ?? '',
     f.estatus ?? '',
@@ -61,7 +62,7 @@ function downloadExcel(){
 }
 async function copyTable(){
   try{
-    const tsv = (props.items||[]).map(f => [f.id, `OT ${f.orden_id??''}`, f.servicio??'', f.centro??'', f.total??'', f.estatus??'', f.folio??'', (f.created_at||'').slice(0,16)].join('\t')).join('\n')
+    const tsv = (props.items||[]).map(f => [f.id, `OT ${f.orden_id??''}`, f.servicio??'', f.descripcion_general??'', f.centro??'', f.total??'', f.estatus??'', f.folio??'', (f.created_at||'').slice(0,16)].join('\t')).join('\n')
     await navigator.clipboard.writeText(tsv)
     // opcional: feedback simple
     // alert('Copiado al portapapeles')
@@ -151,7 +152,12 @@ function goToPage(p){
           <tr v-for="f in pageItems" :key="f.id" class="border-t even:bg-slate-50 hover:bg-slate-100/60">
             <td class="px-4 py-3 font-mono">#{{ f.id }}</td>
             <td class="px-4 py-3">OT #{{ f.orden_id }}</td>
-            <td class="px-4 py-3">{{ f.servicio || '—' }}</td>
+            <td class="px-4 py-3">
+              <div>{{ f.servicio || '—' }}</div>
+              <div v-if="f.descripcion_general" class="text-sm text-purple-600 font-medium mt-0.5">
+                {{ f.descripcion_general }}
+              </div>
+            </td>
             <td class="px-4 py-3">{{ f.centro || '—' }}</td>
             <td class="px-4 py-3 text-right">${{ f.total }}</td>
             <td class="px-4 py-3">

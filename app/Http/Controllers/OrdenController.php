@@ -54,26 +54,30 @@ class OrdenController extends Controller
                 ->withErrors(['ot' => 'Ya existe una Orden de Trabajo para esta solicitud.']);
         }
 
-        // Cargar relaciones necesarias y preparar prefill de items desde los tamaños (si existen)
-    $solicitud->load(['servicio','centro','tamanos']);
+        // Cargar relaciones necesarias
+        $solicitud->load(['servicio','centro','tamanos']);
 
+        // Determinar si el servicio usa tamaños
+        $usaTamanos = (bool)($solicitud->servicio->usa_tamanos ?? false);
         $prefill = [];
-        if ($solicitud->relationLoaded('tamanos') && $solicitud->tamanos->count() > 0) {
+
+        if ($usaTamanos && $solicitud->tamanos->count() > 0) {
+            // Servicios CON tamaños: items fijos basados en tamaños de solicitud
             foreach ($solicitud->tamanos as $t) {
-                $tam = (string)($t->tamano ?? '');
-                $desc = trim(($solicitud->descripcion ?? '') . ($tam ? " (".ucfirst($tam).")" : ''));
                 $prefill[] = [
-                    'descripcion' => $desc ?: 'Item',
+                    'tamano'      => (string)($t->tamano ?? ''),
                     'cantidad'    => (int)($t->cantidad ?? 0),
-                    'tamano'      => $tam ?: null,
+                    'descripcion' => null,
+                    'editable'    => false, // NO permitir editar
                 ];
             }
         } else {
-            // Fallback: un solo renglón con la descripción/cantidad de la solicitud
+            // Servicios SIN tamaños: item único separable
             $prefill[] = [
                 'descripcion' => $solicitud->descripcion ?? 'Item',
                 'cantidad'    => (int)($solicitud->cantidad ?? 1),
                 'tamano'      => null,
+                'editable'    => true, // Permitir separar
             ];
         }
 
@@ -86,7 +90,8 @@ class OrdenController extends Controller
         $ivaRate = 0.16;
         $cotLines = [];
         $sub = 0.0;
-        if ($solicitud->tamanos && $solicitud->tamanos->count() > 0) {
+        
+        if ($usaTamanos && $solicitud->tamanos && $solicitud->tamanos->count() > 0) {
             foreach ($solicitud->tamanos as $t) {
                 $tam = (string)($t->tamano ?? '');
                 $cant = (int)($t->cantidad ?? 0);
@@ -99,17 +104,20 @@ class OrdenController extends Controller
         } else {
             $pu = (float)$pricing->precioUnitario($solicitud->id_centrotrabajo, $solicitud->id_servicio, null);
             $sub = $pu * (int)($solicitud->cantidad ?? 0);
-            $cotLines[] = ['label'=>'Pieza', 'cantidad'=>(int)($solicitud->cantidad ?? 0), 'pu'=>$pu, 'subtotal'=>$sub];
+            $cotLines[] = ['label'=>'Item', 'cantidad'=>(int)($solicitud->cantidad ?? 0), 'pu'=>$pu, 'subtotal'=>$sub];
         }
         $cot = ['lines'=>$cotLines, 'subtotal'=>$sub, 'iva_rate'=>$ivaRate, 'iva'=>$sub*$ivaRate, 'total'=>$sub*(1+$ivaRate)];
 
         return Inertia::render('Ordenes/CreateFromSolicitud', [
-            'solicitud'   => $solicitud->only('id','descripcion','cantidad','id_servicio','id_centrotrabajo'),
-            'folio'       => $this->buildFolioOT($solicitud->id_centrotrabajo),
-            'teamLeaders' => $teamLeaders,
-            'prefill'     => $prefill,
-            'cotizacion'  => $cot,
-            'urls'        => [
+            'solicitud'           => $solicitud->only('id','descripcion','cantidad','id_servicio','id_centrotrabajo'),
+            'folio'               => $this->buildFolioOT($solicitud->id_centrotrabajo),
+            'teamLeaders'         => $teamLeaders,
+            'prefill'             => $prefill,
+            'usaTamanos'          => $usaTamanos,
+            'cantidadTotal'       => (int)($solicitud->cantidad ?? 1),
+            'descripcionGeneral'  => $solicitud->descripcion ?? '', // Nombre del producto general
+            'cotizacion'          => $cot,
+            'urls'                => [
                 'store' => route('ordenes.storeFromSolicitud', $solicitud),
             ],
         ]);
@@ -126,15 +134,63 @@ class OrdenController extends Controller
                 ->withErrors(['ot' => 'Ya existe una Orden de Trabajo para esta solicitud.']);
         }
 
+        $solicitud->load('servicio', 'tamanos');
+        $usaTamanos = (bool)($solicitud->servicio->usa_tamanos ?? false);
+
+        // Validación base
         $data = $req->validate([
-            'team_leader_id'       => ['nullable','integer','exists:users,id'],
-            'items'                => ['required','array','min:1'],
-            'items.*.descripcion'  => ['required','string','max:255'],
-            'items.*.cantidad'     => ['required','integer','min:1'],
-            'items.*.tamano'       => ['nullable','string','max:50'],
+            'team_leader_id' => ['nullable','integer','exists:users,id'],
+            'separar_items'  => ['nullable','boolean'],
+            'items'          => ['required','array','min:1'],
+            'items.*.cantidad' => ['required','integer','min:1'],
+            'items.*.descripcion' => ['nullable','string','max:255'], // IMPORTANTE: Incluir aquí para que Laravel no lo elimine
+            'items.*.tamano' => ['nullable','string'],
         ]);
 
-    $orden = DB::transaction(function () use ($solicitud, $data) {
+        $separarItems = (bool)($data['separar_items'] ?? false);
+
+        if ($usaTamanos) {
+            // Servicios CON tamaños: validar tamaños obligatorios
+            $req->validate([
+                'items.*.tamano' => ['required','in:chico,mediano,grande,jumbo'],
+            ]);
+            
+            // Validar que las cantidades NO se hayan modificado
+            $expectedItems = $solicitud->tamanos->keyBy('tamano')->map(fn($t) => (int)$t->cantidad)->toArray();
+            
+            foreach ($data['items'] as $item) {
+                $tamano = $item['tamano'] ?? null;
+                if (!isset($expectedItems[$tamano])) {
+                    return back()->withErrors(['items' => "El tamaño '{$tamano}' no existe en la solicitud aprobada."]);
+                }
+                if ((int)$item['cantidad'] !== $expectedItems[$tamano]) {
+                    return back()->withErrors(['items' => "La cantidad del tamaño '{$tamano}' no coincide con la solicitud aprobada ({$expectedItems[$tamano]} esperado)."]);
+                }
+            }
+        } else {
+            // Servicios SIN tamaños
+            if ($separarItems) {
+                // SI se activa separación: validar descripciones y suma
+                $req->validate([
+                    'items.*.descripcion' => ['required','string','max:255'],
+                ]);
+                
+                // VALIDACIÓN CRÍTICA: Suma de cantidades debe ser igual a cantidad total aprobada
+                $cantidadTotal = (int)$solicitud->cantidad;
+                $sumaCantidades = collect($data['items'])->sum(fn($i) => (int)($i['cantidad'] ?? 0));
+                
+                if ($sumaCantidades !== $cantidadTotal) {
+                    return back()->withErrors([
+                        'items' => "La suma de las cantidades de los ítems ({$sumaCantidades}) no coincide con la cantidad total aprobada ({$cantidadTotal})."
+                    ]);
+                }
+            } else {
+                // NO se separa: descripción puede ser opcional o usar la general
+                // No es necesaria validación de suma
+            }
+        }
+
+        $orden = DB::transaction(function () use ($solicitud, $data, $usaTamanos, $separarItems) {
             $totalPlan = collect($data['items'])->sum(fn($i) => (int)($i['cantidad'] ?? 0));
 
             $orden = Orden::create([
@@ -144,22 +200,32 @@ class OrdenController extends Controller
                 'id_servicio'      => $solicitud->id_servicio,
                 'id_area'          => $solicitud->id_area,
                 'team_leader_id'   => $data['team_leader_id'] ?? null,
+                'descripcion_general' => $solicitud->descripcion ?? '',
                 'estatus'          => !empty($data['team_leader_id']) ? 'asignada' : 'generada',
                 'total_planeado'   => $totalPlan,
                 'total_real'       => 0,
                 'calidad_resultado'=> 'pendiente',
             ]);
 
-            // Resolver precios unitarios por item (por tamaño si aplica)
+            // Resolver precios unitarios por item
             $pricing = app(\App\Domain\Servicios\PricingService::class);
             $sub = 0.0;
+            
             foreach ($data['items'] as $it) {
                 $tamano = $it['tamano'] ?? null;
+                $descripcion = $it['descripcion'] ?? null;
+                
+                // Si no hay descripción específica, usar la descripción general de la solicitud
+                if (empty($descripcion)) {
+                    $descripcion = $solicitud->descripcion ?? 'Sin descripción';
+                }
+                
                 $pu = (float)$pricing->precioUnitario($solicitud->id_centrotrabajo, $solicitud->id_servicio, $tamano);
 
                 OrdenItem::create([
                     'id_orden'          => $orden->id,
-                    'descripcion'       => $it['descripcion'],
+                    'descripcion'       => $descripcion,
+                    'tamano'            => $tamano,
                     'cantidad_planeada' => (int)$it['cantidad'],
                     'precio_unitario'   => $pu,
                     'subtotal'          => $pu * (int)$it['cantidad'],
@@ -263,8 +329,20 @@ class OrdenController extends Controller
                 $orden->save();
             }
 
-            // (opcional) registrar bitácora de avance en una tabla aparte
-            // \App\Models\Avance::create([...]);
+            // Registrar avances en la tabla de avances
+            foreach ($data['items'] as $d) {
+                if ((int)$d['cantidad'] > 0) {
+                    \App\Models\Avance::create([
+                        'id_orden' => $orden->id,
+                        'id_item' => $d['id_item'],
+                        'id_usuario' => Auth::id(),
+                        'cantidad' => (int)$d['cantidad'],
+                        'comentario' => $req->comentario ?? null,
+                    ]);
+                }
+            }
+
+            // Registrar en activity log
             $this->act('ordenes')
                 ->performedOn($orden)
                 ->event('avance')
@@ -287,9 +365,8 @@ class OrdenController extends Controller
         $this->authorizeFromCentro($orden->id_centrotrabajo, $orden);
 
         $orden->load([
-            'solicitud.archivos','servicio','centro','area','items','teamLeader','avances.usuario',
-            // Deja la línea de abajo SOLO si existe la relación:
-            // 'items.evidencias',
+            'solicitud.archivos','servicio','centro','area','items','teamLeader',
+            'avances' => fn($q) => $q->with('usuario')->orderByDesc('created_at'),
             'evidencias' => fn($q)=>$q->with('usuario')->orderByDesc('id'),
         ]);
 

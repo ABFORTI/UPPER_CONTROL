@@ -522,8 +522,11 @@ class SolicitudController extends Controller
     }
 
     /**
-     * Verifica si hay OTs completadas sin autorizar que hayan excedido el tiempo límite.
+     * Verifica si hay OTs validadas por Calidad sin autorizar que hayan excedido el tiempo límite.
      * Si encuentra alguna en el centro del usuario, bloquea la creación de nuevas solicitudes.
+     * 
+     * IMPORTANTE: El tiempo se cuenta desde que CALIDAD validó la OT, no desde que se completó.
+     * Esto permite que el cliente tenga el tiempo completo para revisar después de la validación.
      * 
      * @param \App\Models\User $user
      * @return array|null ['mensaje' => string, 'ordenes' => array, 'tiempo_limite_texto' => string] o null si no hay bloqueo
@@ -551,19 +554,43 @@ class SolicitudController extends Controller
         $timeoutMinutos = (int)config('business.ot_autorizacion_timeout_minutos', 1);
         $limiteTimestamp = now()->subMinutes($timeoutMinutos);
 
-        // Buscar OTs completadas sin autorizar que hayan excedido el tiempo
-        $otsVencidas = \App\Models\Orden::where('id_centrotrabajo', $centroId)
+        // Buscar OTs que:
+        // 1. Estén en estado 'completada' (aún no autorizadas por cliente)
+        // 2. Tengan calidad_resultado = 'validado' (ya revisadas por calidad)
+        // 3. No tengan autorización del cliente
+        $otsValidadas = \App\Models\Orden::where('id_centrotrabajo', $centroId)
             ->where('estatus', 'completada')
-            ->where('updated_at', '<=', $limiteTimestamp) // completada hace más de X tiempo
+            ->where('calidad_resultado', 'validado')
             ->whereDoesntHave('aprobaciones', function($q) {
                 $q->where('tipo', 'cliente')->where('resultado', 'autorizado');
             })
             ->with('solicitud:id,folio')
-            ->orderBy('updated_at', 'asc')
-            ->get(['id', 'updated_at', 'id_solicitud']);
+            ->get(['id', 'id_solicitud']);
+
+        if ($otsValidadas->isEmpty()) {
+            return null; // No hay OTs validadas pendientes
+        }
+
+        // Filtrar solo las que hayan excedido el tiempo DESDE LA VALIDACIÓN DE CALIDAD
+        $otsVencidas = $otsValidadas->filter(function($ot) use ($limiteTimestamp) {
+            // Buscar el registro de actividad cuando calidad validó
+            $activityLog = \Spatie\Activitylog\Models\Activity::where('log_name', 'ordenes')
+                ->where('subject_type', \App\Models\Orden::class)
+                ->where('subject_id', $ot->id)
+                ->where('event', 'calidad_validar')
+                ->orderBy('created_at', 'desc')
+                ->first();
+
+            if (!$activityLog) {
+                return false; // No se encontró registro de validación, no bloquear
+            }
+
+            // Verificar si ha pasado más tiempo del permitido desde la validación
+            return $activityLog->created_at <= $limiteTimestamp;
+        });
 
         if ($otsVencidas->isEmpty()) {
-            return null; // No hay bloqueo
+            return null; // No hay bloqueo (las OTs validadas aún están dentro del tiempo)
         }
 
         // Construir mensaje de bloqueo
@@ -572,18 +599,28 @@ class SolicitudController extends Controller
             : $timeoutMinutos . ' minuto(s)';
 
         $ordenesDetalle = $otsVencidas->map(function($ot) use ($timeoutMinutos) {
-            $transcurrido = now()->diffInMinutes($ot->updated_at);
+            // Obtener la fecha de validación de calidad
+            $activityLog = \Spatie\Activitylog\Models\Activity::where('log_name', 'ordenes')
+                ->where('subject_type', \App\Models\Orden::class)
+                ->where('subject_id', $ot->id)
+                ->where('event', 'calidad_validar')
+                ->orderBy('created_at', 'desc')
+                ->first();
+
+            $validadaEn = $activityLog ? $activityLog->created_at : $ot->updated_at;
+            $transcurrido = now()->diffInMinutes($validadaEn);
             $folio = $ot->solicitud ? $ot->solicitud->folio : 'OT-' . $ot->id;
+            
             return [
                 'id' => $ot->id,
                 'folio' => $folio,
-                'completada_hace' => $this->formatearTiempo($transcurrido),
+                'validada_hace' => $this->formatearTiempo($transcurrido),
                 'url' => route('ordenes.show', $ot->id),
             ];
         })->toArray();
 
         $mensaje = sprintf(
-            'No puedes crear nuevas solicitudes. Hay %d orden(es) de trabajo completada(s) hace más de %s sin autorización del cliente. Por favor, autoriza las órdenes pendientes antes de continuar.',
+            'No puedes crear nuevas solicitudes. Hay %d orden(es) de trabajo validada(s) por Calidad hace más de %s sin autorización del cliente. Por favor, autoriza las órdenes pendientes antes de continuar.',
             $otsVencidas->count(),
             $tiempoTexto
         );

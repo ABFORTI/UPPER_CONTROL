@@ -68,6 +68,19 @@ function onPickXml(e){
       <div>
         <h1 class="text-2xl font-bold">Registrar factura</h1>
         <div class="text-sm text-slate-500 mt-1">OT #{{ orden?.id }} — {{ orden?.servicio?.nombre || '—' }} · Cliente: {{ orden?.cliente?.name || '—' }}</div>
+        
+        <!-- Descripción General del Producto/Servicio -->
+        <div v-if="orden?.descripcion_general" class="mt-3">
+          <div class="inline-flex items-center gap-2 bg-gradient-to-r from-purple-50 to-pink-50 border-2 border-purple-200 rounded-xl px-4 py-2">
+            <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/>
+            </svg>
+            <div>
+              <div class="text-xs text-purple-600 font-semibold uppercase tracking-wide">Producto/Servicio</div>
+              <div class="text-sm font-bold text-purple-900">{{ orden.descripcion_general }}</div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 

@@ -150,18 +150,21 @@ Route::middleware('auth')->group(function () {
     Route::post('/ordenes/{orden}/cliente/autorizar', [ClienteController::class,'autorizar'])
         ->name('cliente.autorizar');
 
-    // Facturas
+    // Facturas - Cliente puede ver el listado de sus facturas
     Route::get('/facturas', [FacturaController::class,'index'])
-        ->middleware('role:facturacion|admin')->name('facturas.index');
+        ->middleware('role:facturacion|admin|cliente')->name('facturas.index');
     Route::get('/ordenes/{orden}/facturar', [FacturaController::class,'createFromOrden'])
         ->middleware('role:facturacion|admin')->name('facturas.createFromOrden');
     Route::post('/ordenes/{orden}/facturar', [FacturaController::class,'storeFromOrden'])
         ->middleware('role:facturacion|admin')->name('facturas.storeFromOrden');
 
+    // Cliente puede ver factura y generar PDF
     Route::get('/facturas/{factura}', [FacturaController::class,'show'])
-        ->middleware('role:facturacion|admin')->name('facturas.show');
-    Route::get('/facturas/{factura}/pdf',[FacturaController::class,'pdf'])->name('facturas.pdf');
+        ->middleware('role:facturacion|admin|cliente')->name('facturas.show');
+    Route::get('/facturas/{factura}/pdf',[FacturaController::class,'pdf'])
+        ->middleware('role:facturacion|admin|cliente')->name('facturas.pdf');
 
+    // Solo facturacion y admin pueden ejecutar estas acciones
     Route::post('/facturas/{factura}/facturado', [FacturaController::class,'marcarFacturado'])
         ->middleware('role:facturacion|admin')->name('facturas.facturado');
     Route::post('/facturas/{factura}/xml', [FacturaController::class,'uploadXml'])

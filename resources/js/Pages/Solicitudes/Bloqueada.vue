@@ -59,7 +59,7 @@ function verOrden(url) {
               <div>
                 <div class="font-semibold text-slate-900">{{ orden.folio }}</div>
                 <div class="text-sm text-slate-600 mt-1">
-                  Completada hace: <span class="font-medium text-red-600">{{ orden.completada_hace }}</span>
+                  Validada por Calidad hace: <span class="font-medium text-red-600">{{ orden.validada_hace }}</span>
                 </div>
               </div>
               <div>

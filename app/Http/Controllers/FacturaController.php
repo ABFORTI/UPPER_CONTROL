@@ -18,16 +18,28 @@ class FacturaController extends Controller
   public function index(Request $request)
   {
     $u = $request->user();
-    if (!$u->hasRole('admin') && !$u->hasRole('facturacion')) abort(403);
+    
+    // Cliente solo puede ver sus propias facturas
+    $isCliente = $u->hasRole('cliente');
+    
+    if (!$u->hasRole('admin') && !$u->hasRole('facturacion') && !$isCliente) {
+      abort(403);
+    }
 
     $estatus = $request->get('estatus'); // opcional
     $year = $request->integer('year') ?: null;
     $week = $request->integer('week') ?: null;
 
   // 1) Facturas existentes
-  $qFact = Factura::query()->with(['orden.servicio','orden.centro']);
-  // Restricción por centro si no es admin -> usar centros asignados de facturación
-  if (!$u->hasRole('admin')) {
+  $qFact = Factura::query()->with(['orden.servicio','orden.centro','orden.solicitud']);
+  
+  // Si es cliente, solo mostrar SUS facturas
+  if ($isCliente) {
+    $qFact->whereHas('orden.solicitud', fn($qq) => $qq->where('id_cliente', $u->id));
+  }
+  // Restricción por centro si no es admin NI facturacion
+  // Facturación puede ver todas las facturas (como admin)
+  elseif (!$u->hasRole('admin') && !$u->hasRole('facturacion')) {
     $ids = $this->allowedCentroIds($u);
     if (!empty($ids)) {
       $qFact->whereHas('orden', fn($qq) => $qq->whereIn('id_centrotrabajo', $ids));
@@ -51,6 +63,7 @@ class FacturaController extends Controller
       'orden_id' => $f->id_orden,
       'servicio' => $f->orden?->servicio?->nombre,
       'centro'   => $f->orden?->centro?->nombre,
+      'descripcion_general' => $f->orden?->descripcion_general,
       'total'    => $f->total,
       'estatus'  => $f->estatus,
       'folio'    => $f->folio_externo,
@@ -59,13 +72,14 @@ class FacturaController extends Controller
     ];
   });
 
-  // 2) OTs autorizadas por cliente (sin factura)
+  // 2) OTs autorizadas por cliente (sin factura) - SOLO para facturacion/admin
   $items = collect();
 
-  if (!$estatus || $estatus === 'autorizada_cliente') {
+  // Cliente NO debe ver la lista de OTs pendientes de facturar (no puede crearlas)
+  if (!$isCliente && (!$estatus || $estatus === 'autorizada_cliente')) {
     // Excluir OTs que ya tengan factura
     $ordenesConFactura = Factura::query()
-      ->when(!$u->hasRole('admin'), function($q) use ($u) {
+      ->when(!$u->hasRole('admin') && !$u->hasRole('facturacion'), function($q) use ($u) {
         $ids = $this->allowedCentroIds($u);
         $q->whereHas('orden', fn($qq) => $qq->whereIn('id_centrotrabajo', $ids));
       })
@@ -73,7 +87,7 @@ class FacturaController extends Controller
 
     $qOts = Orden::query()
       ->where('estatus','autorizada_cliente')
-      ->when(!$u->hasRole('admin'), function($qq) use ($u) {
+      ->when(!$u->hasRole('admin') && !$u->hasRole('facturacion'), function($qq) use ($u) {
         $ids = $this->allowedCentroIds($u);
         $qq->whereIn('id_centrotrabajo', $ids);
       })
@@ -95,6 +109,7 @@ class FacturaController extends Controller
         'orden_id' => $o->id,
         'servicio' => $o->servicio?->nombre,
         'centro'   => $o->centro?->nombre,
+        'descripcion_general' => $o->descripcion_general,
         'total'    => $total,
         'estatus'  => 'autorizada_cliente',
         'folio'    => null,
@@ -125,7 +140,7 @@ class FacturaController extends Controller
   
 public function pdf(\App\Models\Factura $factura)
 {
-    $this->authorize('view', $factura->orden);
+    $this->authorize('view', $factura);
 
     $refresh = request()->boolean('refresh');
     $existing = $factura->pdf_path && Storage::exists($factura->pdf_path);
@@ -707,6 +722,7 @@ private function xmlElementToArray(\SimpleXMLElement $element): array
       'centro' => [ 'id' => $orden->centro?->id, 'nombre' => $orden->centro?->nombre ],
       'servicio' => [ 'id' => $orden->servicio?->id, 'nombre' => $orden->servicio?->nombre ],
       'cliente'  => $orden->solicitud?->cliente?->only(['id','name','email']),
+      'descripcion_general' => $orden->descripcion_general,
       'items'    => $items,
       'totales'  => [
         'subtotal' => (float) $subtotal,
@@ -805,7 +821,8 @@ private function xmlElementToArray(\SimpleXMLElement $element): array
 
   public function show(\App\Models\Factura $factura) {
   $this->authorize('view', $factura);
-  $this->authFacturacion($factura->orden);
+  // Cliente puede ver, pero authFacturacion solo verifica que pertenezca al centro
+  // Removido: $this->authFacturacion($factura->orden);
     $factura->load('orden.servicio','orden.centro','orden.solicitud.cliente');
 
   return \Inertia\Inertia::render('Facturas/Show', [
@@ -940,6 +957,9 @@ private function xmlElementToArray(\SimpleXMLElement $element): array
   private function authFacturacion(\App\Models\Orden $orden): void {
     $u = request()->user();
     if ($u->hasRole('admin')) return;
+    // Facturación tiene acceso a todas las órdenes
+    if ($u->hasRole('facturacion')) return;
+    // Para otros roles, verificar centros asignados
     if (!$u->hasRole('facturacion')) abort(403);
     $ids = $this->allowedCentroIds($u);
     if (!in_array((int)$orden->id_centrotrabajo, array_map('intval', $ids), true)) abort(403);

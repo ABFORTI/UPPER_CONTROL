@@ -110,7 +110,8 @@ function leave (e) {
                 <span class="w-0 opacity-0 group-hover:w-auto group-hover:opacity-100 overflow-hidden transition-all duration-200">Calidad</span>
               </Link>
             </li>
-            <li v-if="!isOnlyCalidad && (roles.includes('facturacion') || isAdmin)">
+            <!-- Facturación - Visible para facturacion, admin Y cliente -->
+            <li v-if="!isOnlyCalidad && (roles.includes('facturacion') || roles.includes('cliente') || isAdmin)">
               <Link :href="route('facturas.index')" class="flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-3 p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all" :class="{ 'bg-blue-50 text-blue-700 dark:bg-slate-800': url.includes('/facturas') }">
                 <Icon name="currency" :size="24" />
                 <span class="w-0 opacity-0 group-hover:w-auto group-hover:opacity-100 overflow-hidden transition-all duration-200">Facturación</span>
