@@ -12,7 +12,8 @@ class Orden extends Model {
         'id_solicitud','id_centrotrabajo','id_servicio','id_area','team_leader_id',
         'descripcion_general',
         'estatus','calidad_resultado','total_planeado','total_real',
-        'subtotal','iva','total'
+        'subtotal','iva','total',
+        'motivo_rechazo','acciones_correctivas'
     ];
     public function solicitud(){ return $this->belongsTo(Solicitud::class,'id_solicitud'); }
     public function centro(){ return $this->belongsTo(CentroTrabajo::class,'id_centrotrabajo'); }

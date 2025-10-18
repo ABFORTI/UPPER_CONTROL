@@ -33,9 +33,9 @@ class SolicitudController extends Controller
         ];
 
         $q = Solicitud::with(['servicio','centro'])
-            ->when(!$u->hasAnyRole(['admin','facturacion','calidad']),
+            ->when(!$u->hasAnyRole(['admin','facturacion','calidad','control','comercial']),
                 fn($qq) => $qq->where('id_centrotrabajo', $u->centro_trabajo_id))
-            ->when($u->hasAnyRole(['facturacion','calidad']) && !$u->hasRole('admin'), function($qq) use ($u) {
+            ->when($u->hasAnyRole(['facturacion','calidad','control','comercial']) && !$u->hasRole('admin'), function($qq) use ($u) {
                 $ids = $this->allowedCentroIds($u);
                 if (!empty($ids)) { $qq->whereIn('id_centrotrabajo', $ids); }
             })
@@ -82,7 +82,7 @@ class SolicitudController extends Controller
         $servicios = \App\Models\ServicioEmpresa::select('id','nombre','usa_tamanos')
             ->orderBy('nombre')->get();
 
-        $canChooseCentro = $u && $u->hasAnyRole(['admin','facturacion','calidad']);
+    $canChooseCentro = $u && $u->hasAnyRole(['admin','facturacion','calidad','control','comercial']);
         $selectedCentroId = (int)($u->centro_trabajo_id ?? 0) ?: null;
 
         $centros = collect();
@@ -178,7 +178,7 @@ class SolicitudController extends Controller
         $serv = ServicioEmpresa::findOrFail($req->id_servicio);
 
         // Determinar centro a usar
-        $canChooseCentro = $u && $u->hasAnyRole(['admin','facturacion','calidad']);
+    $canChooseCentro = $u && $u->hasAnyRole(['admin','facturacion','calidad','control','comercial']);
         $centroId = null;
         if ($canChooseCentro) {
             $req->validate(['id_centrotrabajo' => ['required','integer','exists:centros_trabajo,id']]);
@@ -194,7 +194,7 @@ class SolicitudController extends Controller
         }
 
         // Para roles no privilegiados, deben tener centro_trabajo_id asignado
-        if (!($u && $u->hasAnyRole(['admin','facturacion','calidad'])) && (!$u || !$u->centro_trabajo_id)) {
+    if (!($u && $u->hasAnyRole(['admin','facturacion','calidad','control','comercial'])) && (!$u || !$u->centro_trabajo_id)) {
             return back()->withErrors([
                 'centro' => 'Tu usuario no tiene un centro de trabajo asignado. Pide a un administrador que lo configure.'
             ])->withInput();
@@ -377,8 +377,18 @@ class SolicitudController extends Controller
     {
         $this->authorize('aprobar', $solicitud);
         $this->authorizeCentro($solicitud->id_centrotrabajo);
+        $req->validate([
+            'motivo' => ['required','string','min:3','max:2000']
+        ]);
 
-    $solicitud->update(['estatus'=>'rechazada','aprobada_por'=>Auth::id(),'aprobada_at'=>now()]);
+        $motivo = $req->input('motivo');
+
+        $solicitud->update([
+            'estatus' => 'rechazada',
+            'aprobada_por' => Auth::id(),
+            'aprobada_at' => now(),
+            'motivo_rechazo' => $motivo,
+        ]);
         $this->act('solicitudes')
             ->performedOn($solicitud)
             ->event('rechazar')

@@ -33,13 +33,21 @@ class AvanceController extends Controller
         $path = $req->file('evidencia')->store("ordenes/{$orden->id}/avances", 'public');
       }
 
+      // Consider an avance "corregido" if the order was rejected by calidad at any point
+      $isCorregido = \App\Models\Aprobacion::where('aprobable_type', \App\Models\Orden::class)
+        ->where('aprobable_id', $orden->id)
+        ->where('tipo','calidad')
+        ->where('resultado','rechazado')
+        ->exists();
+
       Avance::create([
         'id_orden'  => $orden->id,
         'id_item'   => $item?->id,
         'id_usuario'=> $u->id,
         'cantidad'  => (int)$req->cantidad,
-        'comentario'=> $req->comentario,
+        'comentario'=> $req->comentario ?? null,
         'evidencia_url' => $path,
+        'es_corregido' => $isCorregido,
       ]);
 
       // Actualiza acumulados

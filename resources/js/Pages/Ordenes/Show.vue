@@ -15,10 +15,54 @@ const props = defineProps({
 const items   = computed(() => props.orden?.items   ?? [])
 const avances = computed(() => props.orden?.avances ?? [])
 
+// Devuelve true si el comentario viene marcado como corregido
+function isCorregidoComentario(c) {
+  return typeof c === 'string' && c.startsWith('[CORREGIDO]')
+}
+
+// Extrae el comentario final (evita mostrar el resumen concatenado largo)
+function extractComentarioFinal(c) {
+  if (!c || typeof c !== 'string') return c
+  if (!isCorregidoComentario(c)) return c
+  // eliminar prefijo y tomar el último segmento después de ' | '
+  const withoutTag = c.replace(/^\[CORREGIDO\]\s*/,'')
+  const parts = withoutTag.split(' | ')
+  return parts.length ? parts[parts.length-1].trim() : withoutTag
+}
+
+// Devuelve true si el comentario viene de un rechazo de calidad
+function isRechazoComentario(c) {
+  return typeof c === 'string' && c.startsWith('[RECHAZO CALIDAD]')
+}
+
+// Extrae el texto del rechazo (quita prefijo y la parte de Acciones si existe)
+function extractRechazoComentario(c) {
+  if (!c || typeof c !== 'string') return c
+  if (!isRechazoComentario(c)) return c
+  const withoutTag = c.replace(/^\[RECHAZO CALIDAD\]\s*/,'')
+  // separar por ' | Acciones: '
+  const parts = withoutTag.split(' | Acciones: ')
+  return parts[0].trim()
+}
+
 // ----- Calidad / Cliente -----
-const obs = ref('No cumple especificación')
+const obs = ref('')
+const acciones_correctivas = ref('')
+const showRechazoModal = ref(false)
 const validarCalidad   = () => router.post(props.urls.calidad_validar)
-const rechazarCalidad  = () => router.post(props.urls.calidad_rechazar, { observaciones: obs.value })
+function openRechazo() {
+  // debug: confirmar que el handler se ejecuta en el navegador
+  console.log('openRechazo called for OT #' + (props.orden?.id || 'unknown'))
+  // limpiar valores y abrir modal
+  obs.value = ''
+  acciones_correctivas.value = ''
+  showRechazoModal.value = true
+}
+function rechazarCalidad() {
+  // Enviar observaciones y acciones desde el modal
+  console.log('rechazarCalidad sending', { observaciones: obs.value, acciones_correctivas: acciones_correctivas.value })
+  router.post(props.urls.calidad_rechazar, { observaciones: obs.value, acciones_correctivas: acciones_correctivas.value })
+}
 const autorizarCliente = () => router.post(props.urls.cliente_autorizar)
 
 // ----- Asignar TL -----
@@ -96,7 +140,7 @@ const closePreview = () => { archivoPreview.value = null }
               <span class="px-4 py-2 rounded-xl font-semibold text-sm backdrop-blur-sm border-2"
                     :class="{
                       'bg-yellow-500 bg-opacity-20 text-yellow-100 border-yellow-300 border-opacity-30': orden?.estatus === 'nueva' || orden?.estatus === 'asignada',
-                      'bg-blue-500 bg-opacity-20 text-blue-100 border-blue-300 border-opacity-30': orden?.estatus === 'en_progreso',
+                      'bg-blue-500 bg-opacity-20 text-blue-100 border-blue-300 border-opacity-30': orden?.estatus === 'en_proceso',
                       'bg-purple-500 bg-opacity-20 text-purple-100 border-purple-300 border-opacity-30': orden?.estatus === 'completada',
                       'bg-emerald-500 bg-opacity-20 text-emerald-100 border-emerald-300 border-opacity-30': orden?.estatus === 'validada_calidad' || orden?.estatus === 'validada_cliente',
                       'bg-indigo-500 bg-opacity-20 text-indigo-100 border-indigo-300 border-opacity-30': orden?.estatus === 'facturada'
@@ -520,29 +564,70 @@ const closePreview = () => { archivoPreview.value = null }
             </div>
             <div v-if="avances && avances.length > 0" class="p-5">
               <div class="space-y-3">
-                <div v-for="(a, idx) in avances" :key="a?.id || idx" 
-                     class="flex items-start gap-4 p-4 bg-gradient-to-r from-cyan-50 to-blue-50 rounded-xl border border-cyan-100">
-                  <div class="bg-cyan-500 p-2 rounded-full flex-shrink-0">
+       <div v-for="(a, idx) in avances" :key="a?.id || idx" 
+         :class="['flex items-start gap-4 p-4 rounded-xl border transition-all duration-150', 
+            isRechazoComentario(a?.comentario) ? 'bg-red-50 border-2 border-red-300' : ((a?.isCorregido || a?.es_corregido) ? 'bg-emerald-50 border-2 border-emerald-300' : 'bg-gradient-to-r from-cyan-50 to-blue-50 border-cyan-100') ]">
+                  
+                  <!-- Icon -->
+                  <div :class="['p-2 rounded-full flex-shrink-0', isRechazoComentario(a?.comentario) ? 'bg-red-500' : ((a?.isCorregido || a?.es_corregido) ? 'bg-emerald-500' : 'bg-cyan-500') ]">
                     <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
                     </svg>
                   </div>
+                  
+                  <!-- Content -->
                   <div class="flex-1">
-                    <div class="flex items-center gap-2 mb-1">
+                    <!-- Badge RECHAZO / CORREGIDO (si aplica) -->
+                    <div v-if="isRechazoComentario(a?.comentario)" 
+                         class="inline-flex items-center gap-1 px-3 py-1 bg-red-500 text-white text-xs font-bold rounded-full mb-2">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.36 6.64a9 9 0 11-12.73 0 9 9 0 0112.73 0z"/>
+                      </svg>
+                      RECHAZO
+                    </div>
+        <div v-else-if="(a?.isCorregido || a?.es_corregido)" 
+          class="inline-flex items-center gap-1 px-3 py-1 bg-emerald-500 text-white text-xs font-bold rounded-full mb-2">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                      </svg>
+                      CORREGIDO
+                    </div>
+                    
+                    <!-- Cantidad y nombre del Item -->
+                    <div class="flex items-center gap-2 mb-1 flex-wrap">
                       <span class="font-bold text-cyan-700">+{{ a?.cantidad || 0 }}</span>
                       <span v-if="a?.id_item" class="px-2 py-0.5 bg-cyan-200 text-cyan-800 rounded text-xs font-medium">
                         Ítem #{{ a.id_item }}
                       </span>
+                      <span v-if="a?.item" class="text-sm font-semibold text-gray-700">
+                        {{ a.item.tamano || a.item.descripcion || 'Sin descripción' }}
+                      </span>
                     </div>
-                    <div v-if="a?.comentario" class="text-sm text-gray-700 mb-2 italic">
-                      "{{ a.comentario }}"
+                    
+                    <!-- Comentario -->
+                    <div v-if="a?.comentario" class="text-sm mb-2">
+                      <template v-if="isRechazoComentario(a?.comentario)">
+                        <div class="text-xs text-red-800 font-semibold mb-1">RECHAZO POR CALIDAD</div>
+                        <div class="italic text-gray-700">"{{ extractRechazoComentario(a.comentario) }}"</div>
+                      </template>
+                      <template v-else-if="(a?.isCorregido || a?.es_corregido)">
+                        <div class="text-xs text-emerald-800 font-semibold mb-1">CORREGIDO</div>
+                        <div class="italic text-gray-700">"{{ a.comentario }}"</div>
+                      </template>
+                      <template v-else>
+                        <div class="italic text-gray-700">"{{ a.comentario }}"</div>
+                      </template>
                     </div>
+                    
+                    <!-- Usuario -->
                     <div class="text-sm text-gray-600 flex items-center gap-2">
                       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
                       </svg>
                       {{ a?.usuario?.name || 'Usuario' }}
                     </div>
+                    
+                    <!-- Fecha -->
                     <div class="text-xs text-gray-500 mt-1 flex items-center gap-1">
                       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
@@ -587,12 +672,9 @@ const closePreview = () => { archivoPreview.value = null }
                 Validar Calidad
               </button>
 
-              <!-- Rechazar Calidad -->
+              <!-- Rechazar Calidad (modal) -->
               <div v-if="can?.calidad_validar" class="space-y-2">
-                <input v-model="obs" 
-                       class="w-full px-4 py-2 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-red-100 focus:border-red-400 transition-all duration-200" 
-                       placeholder="Motivo del rechazo" />
-                <button @click="rechazarCalidad" 
+    <button @click="openRechazo" 
                         class="w-full px-5 py-3 bg-gradient-to-r from-red-600 to-rose-600 text-white font-bold rounded-xl shadow-lg hover:shadow-xl hover:scale-105 transform transition-all duration-200 flex items-center justify-center gap-2">
                   <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/>
@@ -631,12 +713,57 @@ const closePreview = () => { archivoPreview.value = null }
               </div>
             </div>
           </div>
+
+          <!-- Motivo de Rechazo / Acciones Correctivas (si existen) -->
+          <div v-if="orden?.motivo_rechazo || orden?.acciones_correctivas" class="bg-white rounded-2xl shadow-lg border-2 border-red-100 overflow-hidden">
+            <div class="bg-gradient-to-r from-red-600 to-rose-600 px-6 py-4">
+              <h4 class="text-lg font-bold text-white">Rechazo por Calidad</h4>
+            </div>
+            <div class="p-4 space-y-3">
+              <div v-if="orden?.motivo_rechazo">
+                <div class="text-sm font-semibold text-red-700">Motivo</div>
+                <div class="text-gray-700 whitespace-pre-wrap">{{ orden.motivo_rechazo }}</div>
+              </div>
+              <div v-if="orden?.acciones_correctivas">
+                <div class="text-sm font-semibold text-red-700">Acciones Correctivas</div>
+                <div class="text-gray-700 whitespace-pre-wrap">{{ orden.acciones_correctivas }}</div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
 
     <!-- Modal de preview -->
     <FilePreview v-if="archivoPreview" :archivo="archivoPreview" @close="closePreview" />
+
+    <!-- Modal Rechazo Calidad -->
+    <div v-if="showRechazoModal" class="fixed inset-0 z-[9999] flex items-center justify-center px-4">
+      <div class="fixed inset-0 bg-black/40 z-40" @click="showRechazoModal = false"></div>
+      <div class="relative w-full max-w-2xl bg-white rounded-2xl shadow-xl p-6 z-50">
+        <h3 class="text-lg font-semibold">Rechazar OT #{{ orden.id }}</h3>
+        <p class="text-sm text-gray-500 mt-1">Servicio: <strong>{{ orden.servicio?.nombre }}</strong></p>
+        <div v-if="orden?.descripcion_general" class="mt-3 p-3 bg-gray-50 border border-gray-100 rounded-lg">
+          <div class="text-xs text-gray-500">Producto/Servicio (general)</div>
+          <div class="text-sm font-semibold text-gray-800">{{ orden.descripcion_general }}</div>
+        </div>
+
+        <div class="mt-4">
+          <label class="text-sm font-semibold">Motivo del Rechazo</label>
+          <textarea v-model="obs" rows="4" class="w-full mt-2 p-3 border rounded-md" placeholder="Describe el motivo del rechazo (requerido)"></textarea>
+        </div>
+
+        <div class="mt-4">
+          <label class="text-sm font-semibold">Acciones Correctivas (opcional)</label>
+          <textarea v-model="acciones_correctivas" rows="3" class="w-full mt-2 p-3 border rounded-md" placeholder="Describe acciones sugeridas para corregir la OT"></textarea>
+        </div>
+
+        <div class="mt-4 flex justify-end gap-3">
+          <button @click="showRechazoModal = false" class="px-4 py-2 rounded bg-gray-200">Cancelar</button>
+          <button @click="rechazarCalidad" class="px-4 py-2 rounded bg-red-600 text-white">Enviar Rechazo</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 

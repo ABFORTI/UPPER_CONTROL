@@ -14,7 +14,10 @@ const mainRole = computed(() => roles.value?.[0] || '')
 const isAdmin  = computed(() => roles.value.includes('admin'))
 const isCoord  = computed(() => roles.value.includes('coordinador'))
 const isCalidad = computed(() => roles.value.includes('calidad'))
+const isControl = computed(() => roles.value.includes('control'))
+const isComercial = computed(() => roles.value.includes('comercial'))
 const isOnlyCalidad = computed(() => isCalidad.value && roles.value.length === 1)
+const isOnlyControlOrComercial = computed(() => (isControl.value || isComercial.value) && !isAdmin.value && !isCoord.value && !isCalidad.value)
 
 const unread = computed(() => page.props.auth?.user?.unread_count || 0)
 function markAll () {
@@ -37,26 +40,29 @@ function leave (e) {
 
 <template>
   <div class="min-h-screen bg-gray-50 dark:bg-gray-900">
-    <!-- Barra de aviso cuando estás impersonando -->
-    <div v-if="isImpersonating" class="bg-yellow-100 text-yellow-900 px-4 py-2 text-sm flex justify-between">
-      <div>⚠️ Estás impersonando la sesión de otro usuario.</div>
-      <button @click="leave" class="underline">Salir de impersonación</button>
-    </div>
-
-    <!-- Alerta de órdenes pendientes de validación (solo para clientes) -->
-    <div v-if="showValidationAlert" class="bg-orange-500 text-white px-4 py-3 text-sm flex items-center justify-between shadow-md">
-      <div class="flex items-center gap-3">
-        <svg class="w-6 h-6 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
-        </svg>
-        <div>
-          <span class="font-semibold">¡Atención!</span> 
-          Tienes <strong>{{ pendingValidation }}</strong> {{ pendingValidation === 1 ? 'orden de trabajo terminada' : 'órdenes de trabajo terminadas' }} pendiente{{ pendingValidation === 1 ? '' : 's' }} de validación.
-        </div>
+    <!-- Contenedor fijo para alertas persistentes (por encima de la navbar) -->
+    <div class="fixed inset-x-0 top-0 z-50 flex flex-col pointer-events-auto">
+      <!-- Barra de aviso cuando estás impersonando -->
+      <div v-if="isImpersonating" class="bg-yellow-100 text-yellow-900 px-4 py-2 text-sm flex justify-between border-b border-yellow-200">
+        <div>⚠️ Estás impersonando la sesión de otro usuario.</div>
+        <button @click="leave" class="underline">Salir de impersonación</button>
       </div>
-      <Link :href="route('ordenes.index')" class="px-4 py-2 bg-white text-orange-600 font-semibold rounded-lg hover:bg-orange-50 transition-colors whitespace-nowrap">
-        Ver Órdenes
-      </Link>
+
+      <!-- Alerta de órdenes pendientes de validación (solo para clientes) -->
+      <div v-if="showValidationAlert" class="bg-orange-500 text-white px-4 py-3 text-sm flex items-center justify-between shadow-md">
+        <div class="flex items-center gap-3">
+          <svg class="w-6 h-6 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+          </svg>
+          <div>
+            <span class="font-semibold">¡Atención!</span> 
+            Tienes <strong>{{ pendingValidation }}</strong> {{ pendingValidation === 1 ? 'orden de trabajo terminada' : 'órdenes de trabajo terminadas' }} pendiente{{ pendingValidation === 1 ? '' : 's' }} de validación.
+          </div>
+        </div>
+        <Link :href="route('ordenes.index')" class="px-4 py-2 bg-white text-orange-600 font-semibold rounded-lg hover:bg-orange-50 transition-colors whitespace-nowrap">
+          Ver Órdenes
+        </Link>
+      </div>
     </div>
 
     <div class="flex">
@@ -91,13 +97,13 @@ function leave (e) {
                 <span class="w-0 opacity-0 group-hover:w-auto group-hover:opacity-100 overflow-hidden transition-all duration-200">Dashboard</span>
               </Link>
             </li>
-            <li v-if="!isOnlyCalidad">
+            <li v-if="!isOnlyCalidad && !isOnlyControlOrComercial">
               <Link :href="route('solicitudes.index')" class="flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-3 p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all" :class="{ 'bg-blue-50 text-blue-700 dark:bg-slate-800': url.includes('/solicitudes') }">
                 <Icon name="document" :size="24" />
                 <span class="w-0 opacity-0 group-hover:w-auto group-hover:opacity-100 overflow-hidden transition-all duration-200">Solicitudes</span>
               </Link>
             </li>
-            <li v-if="!isOnlyCalidad">
+            <li v-if="!isOnlyCalidad && !isOnlyControlOrComercial">
               <Link :href="route('ordenes.index')" class="flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-3 p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all" :class="{ 'bg-blue-50 text-blue-700 dark:bg-slate-800': url.includes('/ordenes') }">
                 <Icon name="clipboard" :size="24" />
                 <span class="w-0 opacity-0 group-hover:w-auto group-hover:opacity-100 overflow-hidden transition-all duration-200">Órdenes</span>
@@ -111,20 +117,20 @@ function leave (e) {
               </Link>
             </li>
             <!-- Facturación - Visible para facturacion, admin Y cliente -->
-            <li v-if="!isOnlyCalidad && (roles.includes('facturacion') || roles.includes('cliente') || isAdmin)">
+            <li v-if="!isOnlyCalidad && !isOnlyControlOrComercial && (roles.includes('facturacion') || roles.includes('cliente') || isAdmin)">
               <Link :href="route('facturas.index')" class="flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-3 p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all" :class="{ 'bg-blue-50 text-blue-700 dark:bg-slate-800': url.includes('/facturas') }">
                 <Icon name="currency" :size="24" />
                 <span class="w-0 opacity-0 group-hover:w-auto group-hover:opacity-100 overflow-hidden transition-all duration-200">Facturación</span>
               </Link>
             </li>
 
-            <li v-if="isAdmin || isCoord">
+            <li v-if="isAdmin || isCoord || isControl || isComercial">
               <Link :href="route('servicios.index')" class="flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-3 p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all" :class="{ 'bg-blue-50 text-blue-700 dark:bg-slate-800': url.includes('/servicios') }">
                 <Icon name="dollar" :size="24" />
                 <span class="w-0 opacity-0 group-hover:w-auto group-hover:opacity-100 overflow-hidden transition-all duration-200">Servicios</span>
               </Link>
             </li>
-            <li v-if="isAdmin || isCoord">
+            <li v-if="isAdmin || isCoord || isControl || isComercial">
               <Link :href="route('areas.index')" class="flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-3 p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all" :class="{ 'bg-blue-50 text-blue-700 dark:bg-slate-800': url.includes('/areas') }">
                 <Icon name="folder" :size="24" />
                 <span class="w-0 opacity-0 group-hover:w-auto group-hover:opacity-100 overflow-hidden transition-all duration-200">Áreas</span>

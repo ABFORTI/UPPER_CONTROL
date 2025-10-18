@@ -6,7 +6,23 @@ import FilePreview from '@/Components/FilePreview.vue'
 const props = defineProps({ solicitud: Object, can: Object, urls: Object, flags: Object, cotizacion: Object })
 
 function aprobar()  { router.post(props.urls.aprobar) }
-function rechazar() { router.post(props.urls.rechazar) }
+
+// Rechazo con motivo: abrimos modal y enviamos motivo por POST
+const showRechazoModal = ref(false)
+const motivoRechazo = ref('')
+
+function rechazar() {
+  // abrir modal
+  motivoRechazo.value = ''
+  showRechazoModal.value = true
+}
+
+function submitRechazo() {
+  if (!motivoRechazo.value || motivoRechazo.value.trim().length < 3) {
+    return; // aquí podríamos mostrar validación simple
+  }
+  router.post(props.urls.rechazar, { motivo: motivoRechazo.value })
+}
 
 // Modal de previsualización
 const showPreviewModal = ref(false)
@@ -145,6 +161,16 @@ function canPreview(mime) {
                   Notas Adicionales
                 </label>
                 <p class="mt-2 text-gray-700 leading-relaxed">{{ solicitud.notas }}</p>
+              </div>
+
+              <div v-if="solicitud.motivo_rechazo" class="bg-red-50 rounded-xl p-4 border border-red-200">
+                <label class="text-xs font-semibold text-red-600 uppercase tracking-wide flex items-center gap-1">
+                  <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
+                  </svg>
+                  Motivo del Rechazo
+                </label>
+                <p class="mt-2 text-gray-700 leading-relaxed whitespace-pre-wrap">{{ solicitud.motivo_rechazo }}</p>
               </div>
             </div>
           </div>
@@ -312,9 +338,23 @@ function canPreview(mime) {
       </div>
     </div>
 
-    <!-- Modal de previsualización -->
-    <FilePreview v-if="showPreviewModal && previewFile"
-                 :archivo="previewFile"
-                 @close="closePreview" />
+      <!-- Modal de previsualización -->
+      <FilePreview v-if="showPreviewModal && previewFile"
+                   :archivo="previewFile"
+                   @close="closePreview" />
+
+      <!-- Modal Rechazo -->
+      <div v-if="showRechazoModal" class="fixed inset-0 z-60 flex items-center justify-center px-4">
+        <div class="fixed inset-0 bg-black/40" @click="showRechazoModal = false"></div>
+        <div class="relative w-full max-w-lg bg-white rounded-2xl shadow-xl p-6 z-50">
+          <h3 class="text-lg font-semibold">Motivo del Rechazo</h3>
+          <p class="text-sm text-gray-500 mt-1">Indica por qué se rechaza la solicitud. Este motivo será visible para el cliente.</p>
+          <textarea v-model="motivoRechazo" rows="6" class="w-full mt-4 p-3 border rounded-md" placeholder="Escribe el motivo del rechazo..."></textarea>
+          <div class="mt-4 flex justify-end gap-3">
+            <button @click="showRechazoModal = false" class="px-4 py-2 rounded-lg bg-gray-200">Cancelar</button>
+            <button @click="submitRechazo" class="px-4 py-2 rounded-lg bg-red-600 text-white">Enviar Rechazo</button>
+          </div>
+        </div>
+      </div>
   </div>
 </template>

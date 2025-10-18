@@ -20,6 +20,8 @@ class DashboardController extends Controller
     public function index(Request $req)
     {
         $u = $req->user();
+        
+        
     $isCliente = method_exists($u, 'hasRole') ? $u->hasRole('cliente') : false;
     $isClienteCentro = method_exists($u, 'hasRole') ? $u->hasRole('cliente_centro') : false;
 

@@ -308,6 +308,8 @@ class OrdenController extends Controller
             $justCompleted = ($orden->estatus !== 'completada') && ($sumReal >= $sumPlan && $sumPlan > 0);
             if ($justCompleted) {
                 $orden->estatus = 'completada';
+                // Cuando la OT se completa de nuevo, reiniciar el marcador de calidad a 'pendiente'
+                $orden->calidad_resultado = 'pendiente';
                 $orden->save();
 
                 // Notificar a calidad del centro con notificación específica
@@ -330,6 +332,13 @@ class OrdenController extends Controller
             }
 
             // Registrar avances en la tabla de avances
+            // Marcar como corregido si la orden fue rechazada previamente por calidad
+            $isCorregido = \App\Models\Aprobacion::where('aprobable_type', \App\Models\Orden::class)
+                ->where('aprobable_id', $orden->id)
+                ->where('tipo', 'calidad')
+                ->where('resultado', 'rechazado')
+                ->exists();
+            
             foreach ($data['items'] as $d) {
                 if ((int)$d['cantidad'] > 0) {
                     \App\Models\Avance::create([
@@ -338,6 +347,7 @@ class OrdenController extends Controller
                         'id_usuario' => Auth::id(),
                         'cantidad' => (int)$d['cantidad'],
                         'comentario' => $req->comentario ?? null,
+                        'es_corregido' => $isCorregido,
                     ]);
                 }
             }
@@ -366,7 +376,7 @@ class OrdenController extends Controller
 
         $orden->load([
             'solicitud.archivos','servicio','centro','area','items','teamLeader',
-            'avances' => fn($q) => $q->with('usuario')->orderByDesc('created_at'),
+            'avances' => fn($q) => $q->with(['usuario', 'item'])->orderByDesc('created_at'),
             'evidencias' => fn($q)=>$q->with('usuario')->orderByDesc('id'),
         ]);
 

@@ -160,8 +160,8 @@ function save(){
 
             </div>
 
-            <!-- Multiselección de centros (solo para admin/calidad/facturacion) -->
-            <div v-if="['admin','calidad','facturacion'].includes(form.role)" 
+      <!-- Multiselección de centros (solo para admin/calidad/facturacion/control/comercial) -->
+      <div v-if="['admin','calidad','facturacion','control','comercial'].includes(form.role)" 
                  class="bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl p-6 border-2 border-purple-200">
               <label class="block text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
                 <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">

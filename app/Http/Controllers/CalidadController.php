@@ -8,6 +8,7 @@ use App\Models\Aprobacion;
 use App\Notifications\CalidadResultadoNotification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use App\Services\Notifier;
 use Illuminate\Support\Facades\Auth;
@@ -46,8 +47,14 @@ class CalidadController extends Controller
       'observaciones' => $req->input('observaciones'),
       'id_usuario'    => $req->user()->id,
     ]);
-    $orden->calidad_resultado = 'validado';
-    $orden->save();
+    // Al validar, limpiar el motivo y las acciones correctivas para que el mensaje
+    // de rechazo desaparezca de la vista de la OT.
+    DB::transaction(function() use ($orden) {
+      $orden->calidad_resultado = 'validado';
+      $orden->motivo_rechazo = null;
+      $orden->acciones_correctivas = null;
+      $orden->save();
+    });
 
   // Notificar al cliente (dueño de la solicitud)
   optional($orden->solicitud?->cliente)->notify(new \App\Notifications\OtValidadaParaCliente($orden));
@@ -66,7 +73,11 @@ class CalidadController extends Controller
     $this->authorize('calidad', $orden);
     $this->authCalidad($orden);
     if ($orden->estatus !== 'completada') abort(422);
-    $req->validate(['observaciones'=>['required','string','max:2000']]);
+    $req->validate([
+      'observaciones' => ['required','string','max:2000'],
+      'acciones_correctivas' => ['nullable','string','max:4000'],
+    ]);
+
     Aprobacion::create([
       'aprobable_type'=> Orden::class,
       'aprobable_id'  => $orden->id,
@@ -75,7 +86,43 @@ class CalidadController extends Controller
       'observaciones' => $req->observaciones,
       'id_usuario'    => $req->user()->id,
     ]);
-  $orden->update(['calidad_resultado'=>'rechazado']);
+
+    // Reset progress so the OT can be corrected and worked again:
+    // - delete avances (work reports)
+    // - reset cantidad_real and subtotal on orden_items
+    // - reset orden totals and mark as en_progreso so team can continue work
+    DB::transaction(function() use ($orden, $req) {
+  // Keep historical avances: do NOT delete them so history remains available for audit.
+
+      // Reset each item
+      foreach ($orden->items as $it) {
+        $it->cantidad_real = 0;
+        $it->subtotal = 0;
+        $it->save();
+      }
+
+      // Update orden totals and calidad status
+      $orden->total_real = 0;
+      $orden->calidad_resultado = 'rechazado';
+      $orden->motivo_rechazo = $req->observaciones;
+      $orden->acciones_correctivas = $req->input('acciones_correctivas');
+  // Move back to en_proceso so TL can re-open work (if previously completed)
+  $orden->estatus = 'en_proceso';
+      $orden->save();
+    });
+    // Registrar un avance informativo en el historial con motivo y acciones
+    $coment = '[RECHAZO CALIDAD] ' . $req->observaciones;
+    if ($req->filled('acciones_correctivas')) {
+      $coment .= ' | Acciones: ' . $req->input('acciones_correctivas');
+    }
+    \App\Models\Avance::create([
+      'id_orden' => $orden->id,
+      'id_item' => null,
+      'id_usuario' => $req->user()->id,
+      'cantidad' => 0,
+      'comentario' => $coment,
+      'es_corregido' => 0,
+    ]);
   // Notificar a cliente (y/o TL/Coordinador) si quieres:
   $cliente = $orden->solicitud->cliente;
   Notification::send($cliente, new CalidadResultadoNotification($orden, 'RECHAZADO', $req->observaciones));

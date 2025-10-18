@@ -66,7 +66,7 @@ Route::middleware('auth')->group(function () {
 /* ==========
  |  SERVICIOS (precios)
  * ========== */
-Route::middleware(['auth','role:admin|coordinador'])->group(function () {
+Route::middleware(['auth', 'check.servicios'])->group(function () {
     Route::get('/servicios', [PrecioController::class,'index'])->name('servicios.index');
     Route::get('/servicios/create', [PrecioController::class,'create'])->name('servicios.create');
     Route::post('/servicios/guardar', [PrecioController::class,'guardar'])->name('servicios.guardar');
@@ -78,7 +78,7 @@ Route::middleware(['auth','role:admin|coordinador'])->group(function () {
 /* ==========
  |  ÁREAS
  * ========== */
-Route::middleware(['auth','role:admin|coordinador'])->group(function () {
+Route::middleware(['auth', 'check.areas'])->group(function () {
     Route::get('/areas', [\App\Http\Controllers\AreaController::class,'index'])->name('areas.index');
     Route::post('/areas', [\App\Http\Controllers\AreaController::class,'store'])->name('areas.store');
     Route::put('/areas/{area}', [\App\Http\Controllers\AreaController::class,'update'])->name('areas.update');
@@ -223,3 +223,18 @@ Route::post('/admin/impersonate/leave', [ImpersonateController::class,'leave'])
 
 // Auth (login/registro de Breeze)
 require __DIR__.'/auth.php';
+
+// TEMPORAL: Debug de roles
+Route::middleware('auth')->get('/test-roles-debug', function () {
+    $user = request()->user();
+    return response()->json([
+        'user_id' => $user->id,
+        'email' => $user->email,
+        'name' => $user->name,
+        'roles' => $user->roles->pluck('name'),
+        'has_control' => $user->hasRole('control'),
+        'has_comercial' => $user->hasRole('comercial'),
+        'has_any_role' => $user->hasAnyRole(['admin','coordinador','control','comercial']),
+        'permissions' => $user->getAllPermissions()->pluck('name'),
+    ]);
+});

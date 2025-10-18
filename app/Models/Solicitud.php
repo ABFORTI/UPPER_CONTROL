@@ -11,7 +11,8 @@ class Solicitud extends Model {
   protected $table='solicitudes';
   protected $fillable=[
     'folio','id_cliente','id_centrotrabajo','id_servicio',
-    'tamano','descripcion','id_area','cantidad','subtotal','iva','total','notas','estatus','aprobada_por','aprobada_at','tamanos_json'
+    'tamano','descripcion','id_area','cantidad','subtotal','iva','total','notas','estatus','aprobada_por','aprobada_at','tamanos_json',
+    'motivo_rechazo'
   ];
   public function cliente(){ return $this->belongsTo(User::class,'id_cliente'); }
   public function centro(){ return $this->belongsTo(CentroTrabajo::class,'id_centrotrabajo'); }

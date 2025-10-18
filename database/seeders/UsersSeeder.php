@@ -45,8 +45,8 @@ class UsersSeeder extends Seeder
                 $user->update(['centro_trabajo_id' => $centro->id]);
             }
 
-            // Si es admin, facturacion o calidad: asignar múltiples centros en la pivote
-            if (in_array($role, ['admin','facturacion','calidad'], true)) {
+            // Si es admin, facturacion, calidad, control o comercial: asignar múltiples centros en la pivote
+            if (in_array($role, ['admin','facturacion','calidad','control','comercial'], true)) {
                 $ids = [$centro->id, $centroGdl->id];
                 $user->centros()->syncWithoutDetaching($ids);
             }
