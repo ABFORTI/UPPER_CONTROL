@@ -51,7 +51,7 @@ function toCsv(items){
     o.calidad_resultado || '-',
     o.facturacion || '-',
     o.team_leader?.name || '—',
-    o.created_at || ''
+    o.fecha || ''
   ])
   const csv = [headers, ...rows].map(r => r.map(v => `"${String(v??'').replaceAll('"','""')}"`).join(',')).join('\n')
   return csv
@@ -68,7 +68,7 @@ function downloadExcel(){
 }
 async function copyTable(){
   try{
-    const tsv = (rows.value||[]).map(o => [o.id, o.servicio?.nombre||'-', o.centro?.nombre||'-', o.area?.nombre||'-', o.estatus||'-', o.calidad_resultado||'-', o.facturacion||'-', o.team_leader?.name||'—', o.created_at||''].join('\t')).join('\n')
+  const tsv = (rows.value||[]).map(o => [o.id, o.servicio?.nombre||'-', o.centro?.nombre||'-', o.area?.nombre||'-', o.estatus||'-', o.calidad_resultado||'-', o.facturacion||'-', o.team_leader?.name||'—', o.fecha||''].join('\t')).join('\n')
     await navigator.clipboard.writeText(tsv)
   }catch(e){ console.warn('No se pudo copiar:', e) }
 }
@@ -151,7 +151,7 @@ async function copyTable(){
                   <span class="px-3 py-1.5 rounded-full text-xs font-semibold uppercase tracking-wide" :class="factBadgeClass(o.facturacion)">{{ o.facturacion }}</span>
                 </td>
                 <td class="px-4 py-3">{{ o.team_leader?.name || '—' }}</td>
-                <td class="px-4 py-3">{{ o.created_at }}</td>
+                <td class="px-4 py-3">{{ o.fecha }}</td>
                 <td class="px-4 py-3">
                   <div class="flex items-center gap-2">
                     <a :href="o.urls.show" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg transition-colors">

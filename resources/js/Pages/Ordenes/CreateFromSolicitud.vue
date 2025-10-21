@@ -6,6 +6,7 @@ const props = defineProps({
   solicitud: Object,
   folio: String,
   teamLeaders: Array,
+  areas: { type: Array, default: () => [] },
   urls: Object,
   cotizacion: Object,
   prefill: { type: Array, default: () => [] },
@@ -19,6 +20,7 @@ const separarItems = ref(false)
 
 const form = useForm({
   team_leader_id: null,
+  id_area: null,
   separar_items: false,
   items: props.prefill.length > 0 
     ? props.prefill.map(i => ({ 
@@ -88,7 +90,8 @@ function removeItem(i) {
 }
 
 function submit() {
-  form.post(props.urls.store, { preserveScroll: true })
+  const payload = Object.assign({}, form);
+  form.transform(() => payload).post(props.urls.store, { preserveScroll: true })
 }
 </script>
 
@@ -177,6 +180,15 @@ function submit() {
                 </h2>
               </div>
               <div class="p-6">
+                <!-- Área: coordinador seleccionará el área para la OT -->
+                <div class="mb-4">
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Área</label>
+                  <select v-model="form.id_area" class="w-full px-4 py-3 rounded-xl border-2 border-gray-200">
+                    <option :value="null">— Sin seleccionar —</option>
+                    <option v-for="a in areas" :key="a.id" :value="a.id">{{ a.nombre }}</option>
+                  </select>
+                  <p v-if="form.errors.id_area" class="text-red-600 text-sm mt-2">{{ form.errors.id_area }}</p>
+                </div>
                 <label class="block text-sm font-semibold text-gray-700 mb-3">
                   Seleccionar Team Leader
                   <span class="text-gray-400 font-normal ml-1">(Opcional)</span>

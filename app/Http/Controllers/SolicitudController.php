@@ -56,12 +56,47 @@ class SolicitudController extends Controller
 
         $data = $q->paginate(10)->withQueryString();
 
+        $paginator = $q->with(['servicio','centro','cliente','area','archivos'])->paginate(10)->withQueryString();
+        // Transform each item to include a formatted 'fecha' field expected by the frontend
+        $paginator->getCollection()->transform(function($s) {
+            // Mostrar exactamente lo guardado en BD (sin conversión de huso). Se formatea una sola vez a 'Y-m-d H:i'.
+            $raw = $s->getRawOriginal('created_at');
+            $fecha = null; $fechaHumana = null; $fechaIso = null;
+            if ($raw) {
+                try {
+                    $dt = \Carbon\Carbon::parse($raw); // sin tz explícita
+                    $fecha = $dt->format('Y-m-d H:i');
+                    $fechaHumana = $dt->diffForHumans();
+                    $fechaIso = $dt->toIso8601String();
+                } catch (\Throwable $e) {
+                    $fecha = substr($raw, 0, 16); // fallback: yyyy-mm-dd hh:mm
+                }
+            }
+
+            return [
+                'id' => $s->id,
+                'folio' => $s->folio,
+                'producto' => $s->descripcion ?? null,
+                'cliente' => ['name' => $s->cliente?->name ?? null],
+                'servicio' => ['nombre' => $s->servicio?->nombre ?? null],
+                'centro' => ['nombre' => $s->centro?->nombre ?? null],
+                'area' => ['nombre' => $s->area?->nombre ?? null],
+                'cantidad' => $s->cantidad,
+                'archivos' => $s->archivos ?? [],
+                'estatus' => $s->estatus,
+                'fecha' => $fecha,
+                'fecha_humana' => $fechaHumana,
+                'fecha_iso' => $fechaIso,
+                'created_at_raw' => $raw,
+            ];
+        });
+
         return Inertia::render('Solicitudes/Index', [
-            'data' => $q->with(['servicio','centro','cliente','area','archivos'])->paginate(10)->withQueryString(),
+            'data' => $paginator,
             'filters' => $req->only(['estatus','servicio','folio','desde','hasta','year','week']),
             'servicios'=> ServicioEmpresa::select('id','nombre')->orderBy('nombre')->get(),
             'urls' => ['index' => route('solicitudes.index')],
-            ]);
+        ]);
     }
 
     public function create()
@@ -243,7 +278,7 @@ class SolicitudController extends Controller
                     'id_centrotrabajo' => $centroId,
                     'id_servicio'      => $serv->id,
                     'descripcion'      => $req->descripcion,
-                    'id_area'          => $req->id_area,
+                    // 'id_area' intentionally omitted: area will be assigned later when creating the OT by coordinador
                     'cantidad'         => $total,
                     'subtotal'         => $subtotal,
                     'iva'              => $iva,

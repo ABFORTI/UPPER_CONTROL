@@ -188,13 +188,26 @@ class CalidadController extends Controller
 
   $data = $q->paginate(10)->withQueryString();
   $data->getCollection()->transform(function($o){
+    $raw = $o->getRawOriginal('created_at');
+    $fecha = null; $fechaIso = null;
+    if ($raw) {
+      try {
+        $dt = \Carbon\Carbon::parse($raw);
+        $fecha = $dt->format('Y-m-d H:i');
+        $fechaIso = $dt->toIso8601String();
+      } catch (\Throwable $e) {
+        $fecha = substr($raw,0,16);
+      }
+    }
     return [
       'id' => $o->id,
       'servicio' => ['nombre' => $o->servicio?->nombre],
       'centro'   => ['nombre' => $o->centro?->nombre],
       'estatus'  => $o->estatus,
       'calidad_resultado' => $o->calidad_resultado,
-      'created_at' => $o->created_at,
+      'fecha' => $fecha,
+      'fecha_iso' => $fechaIso,
+      'created_at_raw' => $raw,
       'urls' => [
         'review' => route('calidad.show', $o),
         'show'   => route('ordenes.show', $o),

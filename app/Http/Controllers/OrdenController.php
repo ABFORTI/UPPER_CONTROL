@@ -120,6 +120,7 @@ class OrdenController extends Controller
             'urls'                => [
                 'store' => route('ordenes.storeFromSolicitud', $solicitud),
             ],
+            'areas'               => \App\Models\Area::where('id_centrotrabajo', $solicitud->id_centrotrabajo)->activas()->orderBy('nombre')->get(),
         ]);
     }
 
@@ -140,6 +141,7 @@ class OrdenController extends Controller
         // Validación base
         $data = $req->validate([
             'team_leader_id' => ['nullable','integer','exists:users,id'],
+            'id_area' => ['nullable','integer','exists:areas,id'],
             'separar_items'  => ['nullable','boolean'],
             'items'          => ['required','array','min:1'],
             'items.*.cantidad' => ['required','integer','min:1'],
@@ -198,7 +200,7 @@ class OrdenController extends Controller
                 'id_solicitud'     => $solicitud->id,
                 'id_centrotrabajo' => $solicitud->id_centrotrabajo,
                 'id_servicio'      => $solicitud->id_servicio,
-                'id_area'          => $solicitud->id_area,
+                'id_area'          => $data['id_area'] ?? null,
                 'team_leader_id'   => $data['team_leader_id'] ?? null,
                 'descripcion_general' => $solicitud->descripcion ?? '',
                 'estatus'          => !empty($data['team_leader_id']) ? 'asignada' : 'generada',
@@ -536,12 +538,24 @@ class OrdenController extends Controller
         $data->getCollection()->transform(function ($o) {
             // Derivar estatus de facturación: si hay factura vinculada, usar su estatus; si no, "sin_factura".
             $factStatus = optional($o->factura)->estatus ?? 'sin_factura';
+            // Fecha exacta según BD (sin convertir TZ): formateada una sola vez
+            $raw = $o->getRawOriginal('created_at');
+            $fecha = null; $fechaIso = null;
+            if ($raw) {
+                try {
+                    $dt = \Carbon\Carbon::parse($raw);
+                    $fecha = $dt->format('Y-m-d H:i');
+                    $fechaIso = $dt->toIso8601String();
+                } catch (\Throwable $e) {
+                    $fecha = substr($raw, 0, 16);
+                }
+            }
             return [
                 'id' => $o->id,
                 'estatus' => $o->estatus,
                 'calidad_resultado' => $o->calidad_resultado,
                 'facturacion' => $factStatus,
-                'created_at' => $o->created_at,
+                'fecha' => $fecha,
                 'servicio' => ['nombre' => $o->servicio?->nombre],
                 'centro'   => ['nombre' => $o->centro?->nombre],
                 'area'     => ['nombre' => $o->area?->nombre],
@@ -551,6 +565,8 @@ class OrdenController extends Controller
                     'calidad'  => route('calidad.show',  $o),
                     'facturar' => route('facturas.createFromOrden', $o),
                 ],
+                'created_at_raw' => $raw,
+                'fecha_iso' => $fechaIso,
             
                 ]    ;
         });

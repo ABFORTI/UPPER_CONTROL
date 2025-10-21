@@ -28,19 +28,21 @@ function applyFilter(){
 
 function toPage(link){ if(link.url){ router.get(link.url, {}, {preserveState:true}) } }
 
+// Mostramos la fecha exactamente como viene del backend (s.fecha)
+
 // Exportar/Copy (cliente) - similar a Facturas
 function toCsv(items){
-  const headers = ['Folio','Usuario','Servicio','Centro','Área','Cantidad','Archivo','Estatus','Fecha']
+  const headers = ['Folio','Usuario','Producto','Servicio','Centro','Cantidad','Archivo','Estatus','Fecha']
   const rows = items.map(s => [
     s.folio || s.id,
     s.cliente?.name || '-',
+    s.producto || '-',
     s.servicio?.nombre || '-',
     s.centro?.nombre || '-',
-    s.area?.nombre || '-',
     s.cantidad ?? '',
     s.archivos?.length > 0 ? 'Sí' : 'No',
     s.estatus ?? '',
-    s.fecha ?? ''
+    s.fecha || ''
   ])
   const csv = [headers, ...rows].map(r => r.map(v => `"${String(v??'').replaceAll('"','""')}"`).join(',')).join('\n')
   return csv
@@ -57,7 +59,7 @@ function downloadExcel(){
 }
 async function copyTable(){
   try{
-    const tsv = (props.data?.data||[]).map(s => [s.folio||s.id, s.cliente?.name||'-', s.servicio?.nombre||'-', s.centro?.nombre||'-', s.area?.nombre||'-', s.cantidad??'', s.archivos?.length > 0 ? 'Sí' : 'No', s.estatus??'', s.fecha??''].join('\t')).join('\n')
+  const tsv = (props.data?.data||[]).map(s => [s.folio||s.id, s.cliente?.name||'-', s.producto||'-', s.servicio?.nombre||'-', s.centro?.nombre||'-', s.cantidad??'', s.archivos?.length > 0 ? 'Sí' : 'No', s.estatus??'', s.fecha||''].join('\t')).join('\n')
     await navigator.clipboard.writeText(tsv)
   }catch(e){ console.warn('No se pudo copiar:', e) }
 }
@@ -117,9 +119,9 @@ async function copyTable(){
               <tr>
                 <th class="p-2">Folio</th>
                 <th class="p-2">Usuario</th>
+                <th class="p-2">Producto</th>
                 <th class="p-2">Servicio</th>
                 <th class="p-2">Centro</th>
-                <th class="p-2">Área</th>
                 <th class="p-2">Cantidad</th>
                 <th class="p-2">Archivo</th>
                 <th class="p-2">Estatus</th>
@@ -131,9 +133,9 @@ async function copyTable(){
               <tr v-for="s in data.data" :key="s.id" class="border-t even:bg-slate-50 hover:bg-slate-100/60">
                 <td class="px-4 py-3">{{ s.folio || s.id }}</td>
                 <td class="px-4 py-3">{{ s.cliente?.name || '-' }}</td>
+                <td class="px-4 py-3">{{ s.producto || '-' }}</td>
                 <td class="px-4 py-3">{{ s.servicio?.nombre || '-' }}</td>
                 <td class="px-4 py-3">{{ s.centro?.nombre || '-' }}</td>
-                <td class="px-4 py-3">{{ s.area?.nombre || '-' }}</td>
                 <td class="px-4 py-3">{{ s.cantidad }}</td>
                 <td class="px-4 py-3 text-center">
                   <span v-if="s.archivos?.length > 0" class="inline-flex items-center gap-1 text-green-600">
@@ -152,7 +154,7 @@ async function copyTable(){
                           'bg-red-100 text-red-700': s.estatus==='rechazada'
                         }">{{ s.estatus }}</span>
                 </td>
-                <td class="px-4 py-3">{{ s.fecha }}</td>
+                <td class="px-4 py-3">{{ s.fecha || '' }}</td>
                 <td class="px-4 py-3">
                   <a :href="`./solicitudes/${s.id}`" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
