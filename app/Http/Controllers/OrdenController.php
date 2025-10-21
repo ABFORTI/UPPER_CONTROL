@@ -556,6 +556,7 @@ class OrdenController extends Controller
                 'calidad_resultado' => $o->calidad_resultado,
                 'facturacion' => $factStatus,
                 'fecha' => $fecha,
+                'producto' => $o->descripcion_general ?: ($o->solicitud?->descripcion ?? null),
                 'servicio' => ['nombre' => $o->servicio?->nombre],
                 'centro'   => ['nombre' => $o->centro?->nombre],
                 'area'     => ['nombre' => $o->area?->nombre],

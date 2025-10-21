@@ -41,9 +41,10 @@ function factBadgeClass(v){
 
 // Exportar/Copy (cliente)
 function toCsv(items){
-  const headers = ['ID','Servicio','Centro','Área','Estatus','Calidad','Facturación','TL','Fecha']
+  const headers = ['ID','Producto','Servicio','Centro','Área','Estatus','Calidad','Facturación','TL','Fecha']
   const rows = items.map(o => [
     o.id,
+    o.producto || '-',
     o.servicio?.nombre || '-',
     o.centro?.nombre || '-',
     o.area?.nombre || '-',
@@ -112,6 +113,7 @@ async function copyTable(){
             <thead class="bg-slate-800 text-white uppercase text-sm">
               <tr>
             <th class="p-2">ID</th>
+            <th class="p-2">Producto</th>
             <th class="p-2">Servicio</th>
             <th class="p-2">Centro</th>
             <th class="p-2">Área</th>
@@ -126,6 +128,7 @@ async function copyTable(){
             <tbody>
               <tr v-for="o in rows" :key="o.id" class="border-t even:bg-slate-50 hover:bg-slate-100/60">
                 <td class="px-4 py-3 font-mono">#{{ o.id }}</td>
+                <td class="px-4 py-3">{{ o.producto || '-' }}</td>
                 <td class="px-4 py-3">{{ o.servicio?.nombre }}</td>
                 <td class="px-4 py-3">{{ o.centro?.nombre }}</td>
                 <td class="px-4 py-3">{{ o.area?.nombre || '-' }}</td>
