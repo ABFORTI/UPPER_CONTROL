@@ -53,7 +53,12 @@
     <div class="box-sm" style="margin-bottom:6px;">FECHA:&nbsp; <span class="nowrap">{{ $fechaLarga }}</span></div>
     <div class="row" style="gap:6px; justify-content:flex-end;">
       <div class="box-sm">N. ORDEN:&nbsp; {{ $o->folio ?? ('OT-'.$o->id) }}</div>
-      <div class="box-sm">ID:&nbsp; {{ $o->id }}</div>
+      @php
+        // Mostrar folio de la solicitud de donde provino la OT si existe; si no, fallback al folio OT o ID
+        $folioSolicitud = optional($o->solicitud)->folio ?? null;
+        $idLabel = $folioSolicitud ?: ($o->folio ?? ('OT-'.$o->id));
+      @endphp
+      <div class="box-sm">ID:&nbsp; {{ $idLabel }}</div>
     </div>
   </div>
   </div>
