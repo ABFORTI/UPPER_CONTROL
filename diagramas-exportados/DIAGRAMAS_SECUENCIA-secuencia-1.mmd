@@ -1,0 +1,54 @@
+﻿sequenceDiagram
+    actor Cliente
+    participant Browser
+    participant SolicitudController
+    participant Solicitud
+    participant DB
+    participant Notification
+    actor Coordinador
+
+    Cliente->>Browser: Accede a /solicitudes/create
+    Browser->>SolicitudController: GET create()
+    SolicitudController->>DB: Cargar áreas activas
+    DB-->>SolicitudController: Lista de áreas
+    SolicitudController-->>Browser: Inertia render form
+    Browser-->>Cliente: Mostrar formulario
+    
+    Cliente->>Browser: Completa y envía formulario
+    Browser->>SolicitudController: POST store(request)
+    
+    SolicitudController->>SolicitudController: Validar datos
+    SolicitudController->>Solicitud: Create new solicitud
+    Solicitud->>DB: INSERT solicitud
+    DB-->>Solicitud: ID creado
+    
+    Solicitud->>Notification: SolicitudCreadaNotification
+    Notification->>DB: Guardar notificación
+    Notification->>Coordinador: 📧 Email a coordinadores
+    
+    Solicitud-->>SolicitudController: Solicitud creada
+    SolicitudController-->>Browser: Redirect con mensaje success
+    Browser-->>Cliente: "Solicitud creada exitosamente"
+    
+    Note over Coordinador: Recibe notificación
+    
+    Coordinador->>Browser: Accede a /solicitudes/{id}
+    Browser->>SolicitudController: GET show(solicitud)
+    SolicitudController->>DB: Cargar solicitud con cliente
+    DB-->>SolicitudController: Datos completos
+    SolicitudController-->>Browser: Render vista detalle
+    Browser-->>Coordinador: Mostrar solicitud
+    
+    Coordinador->>Browser: Click "Aprobar"
+    Browser->>SolicitudController: POST aprobar(solicitud)
+    
+    SolicitudController->>Solicitud: Update estado = 'aprobada'
+    Solicitud->>DB: UPDATE solicitud
+    DB-->>Solicitud: Success
+    
+    Solicitud->>Notification: Notificar cliente
+    Notification->>Cliente: 📧 "Solicitud aprobada"
+    
+    Solicitud-->>SolicitudController: Aprobada
+    SolicitudController-->>Browser: Redirect
+    Browser-->>Coordinador: "Solicitud aprobada"

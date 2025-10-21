@@ -33,6 +33,19 @@ class HandleInertiaRequests extends Middleware
         // Ej.: "/upper-control/public" (o cadena vacía si está en raíz)
         $base = rtrim($request->getBaseUrl(), '/');
 
+        // Verificar si hay órdenes completadas pendientes de validación (solo para clientes)
+        $pendingValidation = 0;
+        if ($u && !$u->hasAnyRole(['admin', 'coordinador', 'calidad'])) {
+            // Cliente: buscar órdenes completadas y validadas por calidad, pero aún no autorizadas por el cliente
+            // Solo de solicitudes donde el cliente es el usuario actual
+            $pendingValidation = \App\Models\Orden::whereHas('solicitud', function($q) use ($u) {
+                    $q->where('id_cliente', $u->id);
+                })
+                ->where('estatus', 'completada')
+                ->where('calidad_resultado', 'validado')
+                ->count();
+        }
+
         return array_merge(parent::share($request), [
             'auth' => [
                 'user' => $u ? [
@@ -61,6 +74,9 @@ class HandleInertiaRequests extends Middleware
                 'impersonate_leave' => route('admin.impersonate.leave'),
                 'centros_index' => route('admin.centros.index'),
             ],
+
+            // Alertas de validación pendiente
+            'pending_validation' => $pendingValidation,
 
             // (opcional) errores compartidos
             'errors' => fn () => (object) ($request->session()->get('errors')?->getBag('default')?->toArray() ?? []),

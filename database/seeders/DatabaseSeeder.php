@@ -9,8 +9,10 @@ class DatabaseSeeder extends Seeder {
     // Ejecuta seeders base
     $this->call([
       CentrosSeeder::class,
+      AreaSeeder::class,
       RolesSeeder::class,
       ServiciosSeeder::class,
+  AsignarServiciosACentrosSeeder::class,
       UsersSeeder::class,
       ServicioTamanosJumboSeeder::class, // asegura precio 'jumbo' por centro/servicio
     ]);

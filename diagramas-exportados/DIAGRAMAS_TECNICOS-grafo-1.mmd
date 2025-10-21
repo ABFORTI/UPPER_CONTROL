@@ -1,0 +1,62 @@
+﻿graph TB
+    subgraph Cliente["💻 Cliente (Navegador)"]
+        UI[Vue.js 3 + Inertia.js]
+        CSS[Tailwind CSS]
+    end
+    
+    subgraph Servidor["🖥️ Servidor XAMPP"]
+        subgraph Laravel["Laravel 12"]
+            Routes[Routes]
+            Controllers[Controllers]
+            Models[Eloquent Models]
+            Jobs[Jobs/Queue]
+            Notifications[Notifications]
+            Middleware[Middleware]
+            Policies[Policies]
+        end
+        
+        subgraph Servicios["📦 Servicios"]
+            PDF[Dompdf]
+            QR[Simple QR Code]
+            Mail[Laravel Mail]
+            Permission[Spatie Permission]
+            ActivityLog[Spatie Activity Log]
+            Backup[Spatie Backup]
+            Excel[Maatwebsite Excel]
+        end
+        
+        subgraph Storage["💾 Almacenamiento"]
+            FileSystem[Local Storage]
+            PDFs[PDFs]
+            XMLs[XMLs]
+            Images[Imágenes]
+        end
+    end
+    
+    subgraph Database["🗄️ Base de Datos"]
+        MySQL[(MySQL)]
+        Tables[Tablas]
+        Migrations[Migrations]
+        Seeders[Seeders]
+    end
+    
+    UI <-->|HTTP/AJAX| Routes
+    Routes --> Middleware
+    Middleware --> Controllers
+    Controllers --> Models
+    Controllers --> Jobs
+    Controllers --> Notifications
+    Models <--> MySQL
+    Jobs --> PDF
+    Jobs --> QR
+    Jobs --> Mail
+    Notifications --> Mail
+    Jobs --> FileSystem
+    Models --> Tables
+    
+    style Cliente fill:#42b883,stroke:#35495e,color:#fff
+    style Servidor fill:#ff2d20,stroke:#c62828,color:#fff
+    style Database fill:#00758f,stroke:#004d61,color:#fff
+    style Laravel fill:#fff3e0,stroke:#ff6f00
+    style Servicios fill:#e8eaf6,stroke:#3f51b5
+    style Storage fill:#e0f2f1,stroke:#00796b

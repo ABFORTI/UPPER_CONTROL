@@ -1,0 +1,43 @@
+﻿stateDiagram-v2
+    [*] --> nueva: Coordinador crea OT
+    
+    nueva --> asignada: Asignar Team Leader
+    asignada --> en_progreso: Team Leader inicia trabajo
+    
+    en_progreso --> en_progreso: Registrar avances<br/>Subir evidencias
+    en_progreso --> completada: Progreso = 100%
+    
+    completada --> validada_calidad: Calidad aprueba
+    completada --> rechazada_calidad: Calidad rechaza
+    
+    rechazada_calidad --> en_progreso: Corregir problemas
+    
+    validada_calidad --> validada_cliente: Cliente autoriza
+    validada_calidad --> bloqueada: Cliente no autoriza
+    
+    validada_cliente --> facturada: Facturación crea factura
+    facturada --> cobrada: Registrar cobro
+    cobrada --> pagada: Registrar pago
+    
+    pagada --> [*]: Proceso completado
+    bloqueada --> [*]: OT bloqueada
+    
+    note right of nueva
+        Estado inicial
+        Recién creada
+    end note
+    
+    note right of validada_calidad
+        Lista para cliente
+        Notificar cliente
+    end note
+    
+    note right of validada_cliente
+        Autorizada para facturar
+        Notificar facturación
+    end note
+    
+    note right of pagada
+        Ciclo completado
+        Fin del proceso
+    end note

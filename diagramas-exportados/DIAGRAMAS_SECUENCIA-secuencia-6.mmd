@@ -1,0 +1,73 @@
+﻿sequenceDiagram
+    actor Facturacion
+    participant Browser
+    participant FacturaController
+    participant Factura
+    participant DB
+    participant Storage
+
+    Facturacion->>Browser: Accede a /facturas
+    Browser->>FacturaController: GET index()
+    FacturaController->>DB: Query facturas con filtros
+    DB-->>FacturaController: Lista facturas
+    FacturaController-->>Browser: Render lista
+    Browser-->>Facturacion: Mostrar facturas
+    
+    Facturacion->>Browser: Click "Crear Factura"
+    Browser->>FacturaController: GET createFromOrden(orden)
+    FacturaController->>DB: Cargar orden validada_cliente
+    DB-->>FacturaController: Datos orden
+    FacturaController-->>Browser: Render formulario
+    Browser-->>Facturacion: Mostrar formulario prefilled
+    
+    Facturacion->>Browser: Completar:<br/>- Folio<br/>- Total<br/>- Conceptos
+    Browser->>FacturaController: POST storeFromOrden(orden, request)
+    
+    FacturaController->>Factura: Create factura
+    Factura->>DB: INSERT factura
+    DB-->>Factura: ID factura
+    
+    FacturaController-->>Browser: Redirect a factura
+    Browser-->>Facturacion: "Factura creada"
+    
+    Facturacion->>Browser: Accede a factura
+    Browser->>FacturaController: GET show(factura)
+    FacturaController-->>Browser: Render vista
+    Browser-->>Facturacion: Mostrar detalles
+    
+    Facturacion->>Browser: Subir archivo XML
+    Browser->>FacturaController: POST uploadXml(factura, file)
+    
+    FacturaController->>FacturaController: Validar XML
+    
+    alt XML válido
+        FacturaController->>Storage: Guardar XML
+        Storage-->>FacturaController: Path
+        FacturaController->>DB: Update xml_path
+        FacturaController-->>Browser: Success
+        Browser-->>Facturacion: "XML subido y parseado"
+    else XML inválido
+        FacturaController-->>Browser: Error
+        Browser-->>Facturacion: "XML inválido"
+    end
+    
+    Facturacion->>Browser: Marcar como "Facturado"
+    Browser->>FacturaController: POST marcarFacturado(factura)
+    FacturaController->>Factura: Update estado, fecha_facturacion
+    Factura->>DB: UPDATE factura
+    FacturaController-->>Browser: Success
+    
+    Facturacion->>Browser: Registrar cobro
+    Browser->>FacturaController: POST marcarCobro(factura)
+    FacturaController->>Factura: Update estado='cobrado', fecha_cobro
+    Factura->>DB: UPDATE factura
+    FacturaController-->>Browser: Success
+    
+    Facturacion->>Browser: Marcar como pagado
+    Browser->>FacturaController: POST marcarPagado(factura)
+    FacturaController->>Factura: Update estado='pagado', fecha_pago
+    Factura->>DB: UPDATE factura
+    FacturaController-->>Browser: Success
+    Browser-->>Facturacion: "Factura completada"
+    
+    Note over Facturacion: Proceso de facturación<br/>completado exitosamente

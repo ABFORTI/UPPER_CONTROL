@@ -1,0 +1,30 @@
+﻿flowchart TD
+    Start([Navegación/Acción]) --> Trigger[Evento Inertia]
+    Trigger --> Check{Tipo de acción}
+    
+    Check -->|Primera carga| AppSplash[App Splash Screen<br/>Logo + Barra progreso]
+    Check -->|Navegación| ProcessLoader[Process Loader<br/>Banda transportadora]
+    
+    ProcessLoader --> Show[Mostrar loader]
+    Show --> UpdateText[Actualizar texto según ruta:<br/>- factura: "Procesando factura..."<br/>- orden: "Procesando orden..."<br/>- etc.]
+    
+    UpdateText --> Animate[Animación CSS:<br/>- Cajas moviéndose<br/>- Banda girando<br/>- Delay entre cajas]
+    
+    Animate --> Wait[Esperar respuesta]
+    Wait --> Response{Respuesta recibida}
+    
+    Response -->|Success| Hide[Ocultar loader]
+    Response -->|Error| ShowError[Mostrar error]
+    ShowError --> Hide
+    
+    AppSplash --> ProgressBar[Barra de progreso<br/>animada 14% → 100%]
+    ProgressBar --> AppLoaded[App cargada]
+    AppLoaded --> HideApp[Ocultar splash]
+    
+    Hide --> Complete([Completado])
+    HideApp --> Complete
+    
+    style Start fill:#4caf50,stroke:#2e7d32,color:#fff
+    style Complete fill:#4caf50,stroke:#2e7d32,color:#fff
+    style Animate fill:#ff9800,stroke:#e65100,color:#fff
+    style ShowError fill:#f44336,stroke:#c62828,color:#fff

@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class Archivo extends Model {
   protected $table='archivos';
-  protected $fillable=['path','mime','size','subtipo'];
+  protected $fillable=['path','nombre_original','mime','size','subtipo'];
   public function fileable(){ return $this->morphTo(); }
 
   protected $appends = ['url'];

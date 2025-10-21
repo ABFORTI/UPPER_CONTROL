@@ -1,0 +1,40 @@
+﻿graph TB
+    subgraph ENV["🔧 .env Configuration"]
+        E1[APP_ENV=local]
+        E2[APP_DEBUG=true]
+        E3[APP_URL=http://localhost/UPPER_CONTROL/public]
+        E4[DB_CONNECTION=mysql]
+        E5[DB_DATABASE=upper_control]
+        E6[MAIL_MAILER=log]
+        E7[QUEUE_CONNECTION=sync]
+        E8[SESSION_DRIVER=file]
+    end
+    
+    subgraph Services["📦 Servicios Configurados"]
+        S1[Laravel Dompdf]
+        S2[Simple QR Code]
+        S3[Spatie Permission]
+        S4[Spatie Activity Log]
+        S5[Spatie Backup]
+        S6[Maatwebsite Excel]
+    end
+    
+    subgraph Providers["🔌 Service Providers"]
+        SP1[AppServiceProvider]
+        SP2[AuthServiceProvider]
+        SP3[EventServiceProvider]
+        SP4[RouteServiceProvider]
+        SP5[PermissionServiceProvider]
+    end
+    
+    ENV --> Services
+    Services --> Providers
+    
+    Providers --> Boot[Application Boot]
+    Boot --> Routes[Load Routes]
+    Boot --> Middleware[Load Middleware]
+    Boot --> Policies[Load Policies]
+    
+    style ENV fill:#fff3e0,stroke:#f57c00
+    style Services fill:#e8eaf6,stroke:#3f51b5
+    style Providers fill:#e0f2f1,stroke:#00796b

@@ -22,8 +22,11 @@ class Kernel extends ConsoleKernel
         $schedule->command('backup:monitor')->dailyAt('03:30');
 
         $schedule->command('activitylog:clean')->daily();
-        // ...otros schedules...
-    }
 
-    // ...existing code...
+        // Test scheduler
+        $schedule->command('test:schedule')->everyMinute();
+
+        // Recordatorios de validación de OT para clientes
+        $schedule->command('recordatorios:validacion-ot')->everyMinute();
+    }
 }

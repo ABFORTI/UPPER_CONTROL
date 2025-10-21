@@ -18,9 +18,22 @@ class OtListaParaCalidad extends Notification
     public function toMail($notifiable): MailMessage
     {
         return (new MailMessage)
-            ->subject('OT lista para revisión de calidad')
-            ->line("La OT #{$this->orden->id} quedó completada y está lista para revisar.")
-            ->action('Revisar en calidad', route('calidad.show', $this->orden));
+            ->subject('✅ OT #' . $this->orden->id . ' Lista para Revisión de Calidad')
+            ->greeting('¡Hola ' . $notifiable->name . '!')
+            ->line('Una **Orden de Trabajo** ha sido completada y está lista para tu revisión de calidad.')
+            ->line('')
+            ->line('**Detalles de la OT:**')
+            ->line('• **Número:** #' . $this->orden->id)
+            ->line('• **Servicio:** ' . ($this->orden->servicio?->nombre ?? 'N/A'))
+            ->line('• **Centro de Trabajo:** ' . ($this->orden->centro?->nombre ?? 'N/A'))
+            ->line('• **Responsable:** ' . ($this->orden->responsable?->name ?? 'N/A'))
+            ->line('')
+            ->line('Por favor, realiza la inspección de calidad correspondiente y valida o rechaza el trabajo.')
+            ->action('🔍 Revisar en Calidad', route('calidad.show', $this->orden))
+            ->line('')
+            ->line('Es importante realizar esta revisión a la brevedad posible.')
+            ->salutation('Atentamente,  
+**Sistema de Control de Calidad**');
     }
 
     public function toDatabase($notifiable): array

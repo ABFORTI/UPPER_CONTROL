@@ -39,6 +39,8 @@ class AuthenticatedSessionController extends Controller
 
         $request->session()->regenerate();
 
+        // Marcar modo splash para mostrar pantalla de inicio de sesión
+        cookie()->queue(cookie('splash_mode', 'login', 1, null, null, false, false)); // 1 minuto
         return redirect()->intended(route('dashboard', absolute: false));
     }
 
@@ -53,6 +55,8 @@ class AuthenticatedSessionController extends Controller
 
         $request->session()->regenerateToken();
 
+        // Marcar modo splash para mostrar pantalla de cierre de sesión
+        cookie()->queue(cookie('splash_mode', 'logout', 1, null, null, false, false)); // 1 minuto
         return redirect('/');
     }
 }

@@ -1,0 +1,28 @@
+﻿graph LR
+    subgraph Frontend
+        A[Vue.js 3] --> B[Inertia.js]
+        B --> C[Tailwind CSS]
+        C --> D[Vite]
+    end
+    
+    subgraph Backend
+        E[Laravel 12] --> F[PHP 8.2]
+        F --> G[MySQL]
+        E --> H[Spatie Permissions]
+        E --> I[Laravel Dompdf]
+        E --> J[Simple QR Code]
+    end
+    
+    subgraph Infraestructura
+        K[XAMPP] --> L[Apache]
+        K --> M[MySQL]
+        N[Composer] --> E
+        O[NPM] --> A
+    end
+    
+    Frontend --> Backend
+    Backend --> Infraestructura
+    
+    style Frontend fill:#42b883,stroke:#35495e,color:#fff
+    style Backend fill:#ff2d20,stroke:#c62828,color:#fff
+    style Infraestructura fill:#3f51b5,stroke:#1a237e,color:#fff

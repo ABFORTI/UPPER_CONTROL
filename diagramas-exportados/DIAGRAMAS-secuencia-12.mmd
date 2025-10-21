@@ -1,0 +1,26 @@
+﻿sequenceDiagram
+    participant Sistema
+    participant Job
+    participant Notification
+    participant BD
+    participant Email
+    participant Usuario
+
+    Sistema->>Job: Evento del sistema
+    Job->>Notification: Crear notificación
+    
+    Notification->>BD: Guardar en tabla notifications
+    Notification->>Email: Enviar email (si aplica)
+    
+    Email-->>Usuario: 📧 Correo electrónico
+    
+    Usuario->>Sistema: Accede al sistema
+    Sistema->>BD: Consultar notificaciones
+    BD-->>Sistema: Listado notificaciones
+    Sistema->>Usuario: Mostrar campana 🔔
+    
+    Usuario->>Sistema: Click en notificación
+    Sistema->>BD: Marcar como leída
+    Sistema->>Usuario: Redirigir a recurso
+    
+    Note over Sistema,Usuario: Tipos de notificaciones:<br/>- OT Asignada<br/>- OT Lista para Calidad<br/>- OT Validada para Cliente<br/>- Cliente Autorizó<br/>- Factura Generada<br/>- Sistema (eventos varios)

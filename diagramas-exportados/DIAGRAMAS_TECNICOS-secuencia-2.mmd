@@ -1,0 +1,46 @@
+﻿sequenceDiagram
+    participant Controller as FacturaController
+    participant Queue as Queue System
+    participant Job as GenerateFacturaPdf Job
+    participant Storage as File Storage
+    participant DB as Database
+    participant PDF as Dompdf Service
+    participant QR as QR Generator
+    participant Mail as Mail Service
+    participant Client as Cliente
+
+    Controller->>DB: Crear registro Factura
+    DB-->>Controller: Factura creada (ID)
+    Controller->>Queue: Dispatch Job(id, notifyClient=true)
+    
+    Queue->>Job: Ejecutar handle()
+    Job->>DB: Cargar Factura con relaciones
+    DB-->>Job: Datos completos
+    
+    Job->>Job: parseCfdi() - Extraer datos XML
+    Note over Job: Procesa CFDI 3.3/4.0<br/>Extrae: Emisor, Receptor,<br/>Conceptos, Impuestos, Timbre
+    
+    Job->>Job: generateQrCode() - Crear QR SAT
+    Job->>QR: Generate SVG/PNG
+    QR-->>Job: QR Code (SVG fallback)
+    
+    Job->>PDF: loadView('pdf.factura', data)
+    PDF->>PDF: Renderizar HTML con datos
+    PDF-->>Job: PDF Binary
+    
+    Job->>Storage: Guardar PDF
+    Storage-->>Job: Path guardado
+    
+    Job->>DB: Actualizar pdf_path
+    
+    alt notifyClient == true
+        Job->>Mail: FacturaGeneradaNotification
+        Mail->>Storage: Leer PDF
+        Storage-->>Mail: PDF Binary
+        Mail->>Client: Email con PDF adjunto
+        Mail->>DB: Guardar notificación
+    end
+    
+    Job-->>Queue: Job completado
+    Queue-->>Controller: Success
+    Controller-->>Client: Redirect con mensaje

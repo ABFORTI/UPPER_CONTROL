@@ -1,0 +1,57 @@
+﻿sequenceDiagram
+    actor Coordinador
+    participant Browser
+    participant OrdenController
+    participant Orden
+    participant OrdenItem
+    participant DB
+    participant Notification
+    participant PDF
+    actor TeamLeader
+
+    Coordinador->>Browser: Click "Generar OT"
+    Browser->>OrdenController: GET createFromSolicitud(solicitud)
+    
+    OrdenController->>DB: Cargar solicitud con relaciones
+    OrdenController->>DB: Cargar servicios activos
+    OrdenController->>DB: Cargar centros activos
+    OrdenController->>DB: Cargar team leaders líderes
+    DB-->>OrdenController: Todos los datos
+    
+    OrdenController-->>Browser: Render formulario OT
+    Browser-->>Coordinador: Mostrar formulario
+    
+    Coordinador->>Browser: Selecciona servicio
+    Browser->>OrdenController: AJAX get precios
+    OrdenController->>DB: Query precios por servicio/centro
+    DB-->>OrdenController: Lista precios
+    OrdenController-->>Browser: JSON precios
+    Browser-->>Coordinador: Actualizar opciones
+    
+    Coordinador->>Browser: Completa formulario:<br/>- Servicio<br/>- Centro<br/>- Items<br/>- Team Leader
+    Browser->>OrdenController: POST storeFromSolicitud(solicitud, request)
+    
+    OrdenController->>DB: BEGIN TRANSACTION
+    
+    OrdenController->>Orden: Create orden
+    Orden->>DB: INSERT orden
+    DB-->>Orden: ID orden
+    
+    loop Para cada item
+        OrdenController->>OrdenItem: Create item
+        OrdenItem->>DB: INSERT orden_item
+    end
+    
+    OrdenController->>DB: COMMIT TRANSACTION
+    
+    OrdenController->>Notification: OtAsignada notification
+    Notification->>TeamLeader: 📧 Email "OT asignada"
+    Notification->>DB: Guardar notificación
+    
+    OrdenController->>PDF: GenerateOrdenPdf::dispatch(orden.id)
+    PDF->>PDF: Generar PDF en background
+    
+    OrdenController-->>Browser: Redirect a orden
+    Browser-->>Coordinador: "OT creada exitosamente"
+    
+    Note over TeamLeader: Recibe notificación<br/>de OT asignada

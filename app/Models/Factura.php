@@ -13,6 +13,9 @@ class Factura extends Model {
         'id_orden','folio','folio_externo','total','estatus','fecha_facturado','fecha_cobro','fecha_pagado','pdf_path','xml_path'
     ];
     public function orden(){ return $this->belongsTo(Orden::class,'id_orden'); }
+    public function ordenes(){
+        return $this->belongsToMany(Orden::class, 'factura_orden', 'id_factura', 'id_orden');
+    }
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()

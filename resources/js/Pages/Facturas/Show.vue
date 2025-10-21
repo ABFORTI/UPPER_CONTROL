@@ -1,11 +1,25 @@
 <script setup>
 import { ref, computed } from 'vue'
-import { router } from '@inertiajs/vue3'
+import { router, usePage } from '@inertiajs/vue3'
 
 const props = defineProps({
   factura: { type: Object, required: true },
+  ordenes: { type: Array, required: false, default: () => [] },
   cfdi:    { type: Object, required: false, default: null },
   urls: { type: Object, required: true }
+})
+
+const page = usePage()
+
+// Verificar si el usuario puede operar (facturacion/admin)
+const puedeOperar = computed(() => {
+  const user = page.props.auth?.user
+  if (!user) return false
+  
+  // Los roles vienen como array de strings: ['admin'] o ['facturacion']
+  // No como array de objetos con .name
+  const roles = user.roles || []
+  return roles.includes('facturacion') || roles.includes('admin')
 })
 
 const folio = ref(props.factura?.folio_externo ?? '')
@@ -41,7 +55,28 @@ const tipoEtiqueta = computed(() => {
     <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-3 mb-4">
       <div>
         <h1 class="section-title text-2xl">Factura #{{ factura?.id }}</h1>
-        <div class="text-sm opacity-70 mt-1">OT #{{ factura?.orden?.id }} — {{ factura?.orden?.servicio?.nombre }}</div>
+        <div class="text-sm opacity-70 mt-1">
+          <template v-if="(ordenes && ordenes.length)">
+            OTs: <span v-for="(o,idx) in ordenes" :key="o.id">#{{ o.id }}<span v-if="idx < ordenes.length-1">, </span></span>
+          </template>
+          <template v-else>
+            OT #{{ factura?.orden?.id }} — {{ factura?.orden?.servicio?.nombre }}
+          </template>
+        </div>
+        
+        <!-- Descripción General del Producto/Servicio -->
+        <div v-if="factura?.orden?.descripcion_general && (!ordenes || ordenes.length===0)" class="mt-3">
+          <div class="inline-flex items-center gap-2 bg-gradient-to-r from-purple-50 to-pink-50 border-2 border-purple-200 rounded-xl px-4 py-2">
+            <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/>
+            </svg>
+            <div>
+              <div class="text-xs text-purple-600 font-semibold uppercase tracking-wide">Producto/Servicio</div>
+              <div class="text-sm font-bold text-purple-900">{{ factura.orden.descripcion_general }}</div>
+            </div>
+          </div>
+        </div>
+        
         <div class="mt-2 flex flex-wrap gap-2 items-center text-sm">
           <span :class="statusBadgeClass">{{ factura?.estatus }}</span>
           <span class="badge badge-gray">CFDI folio: {{ factura?.folio ?? '—' }}</span>
@@ -53,8 +88,8 @@ const tipoEtiqueta = computed(() => {
       </div>
     </div>
 
-    <!-- Acciones de estatus -->
-    <div class="mt-2 flex flex-wrap gap-2">
+    <!-- Acciones de estatus (solo para facturacion/admin) -->
+    <div v-if="puedeOperar" class="mt-2 flex flex-wrap gap-2">
       <!-- pendiente -> facturado -->
       <div v-if="factura?.estatus==='pendiente'" class="flex gap-2 items-center">
         <input v-model="folio" class="border p-2 rounded" placeholder="Folio timbrado" />
@@ -75,6 +110,18 @@ const tipoEtiqueta = computed(() => {
         Marcar pagado
       </button>
     </div>
+    
+    <!-- Mensaje para clientes -->
+    <div v-else class="mt-4 bg-blue-50 border-l-4 border-blue-400 p-4 rounded">
+      <div class="flex items-center">
+        <svg class="w-5 h-5 text-blue-400 mr-2" fill="currentColor" viewBox="0 0 20 20">
+          <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+        </svg>
+        <p class="text-sm text-blue-700">
+          <strong>Vista de solo lectura.</strong> Puedes ver la factura y descargar el PDF, pero no realizar cambios de estado.
+        </p>
+      </div>
+    </div>
 
     <!-- Mensajes -->
     <div v-if="$page.props?.flash?.ok" class="mt-4 alert-success">{{$page.props.flash.ok}}</div>
@@ -89,6 +136,32 @@ const tipoEtiqueta = computed(() => {
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
         <!-- Columna izquierda (contenido principal) -->
         <div class="md:col-span-2 space-y-4">
+          <!-- Lista de OTs asociadas -->
+          <div v-if="ordenes && ordenes.length" class="border border-gray-200 rounded p-4 bg-white">
+            <div class="text-xs uppercase tracking-wide text-gray-500 mb-3">Órdenes facturadas</div>
+            <div class="overflow-auto">
+              <table class="min-w-full text-sm">
+                <thead class="bg-gray-50">
+                  <tr>
+                    <th class="px-3 py-2 text-left border-b border-gray-200">OT</th>
+                    <th class="px-3 py-2 text-left border-b border-gray-200">Centro</th>
+                    <th class="px-3 py-2 text-left border-b border-gray-200">Servicio</th>
+                    <th class="px-3 py-2 text-left border-b border-gray-200">Producto/Descripción</th>
+                    <th class="px-3 py-2 text-right border-b border-gray-200">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="o in ordenes" :key="o.id">
+                    <td class="px-3 py-2 border-b border-gray-100"><a :href="o.url" class="text-blue-600 hover:underline">#{{ o.id }}</a></td>
+                    <td class="px-3 py-2 border-b border-gray-100">{{ o.centro || '—' }}</td>
+                    <td class="px-3 py-2 border-b border-gray-100">{{ o.servicio || '—' }}</td>
+                    <td class="px-3 py-2 border-b border-gray-100">{{ o.descripcion_general || '—' }}</td>
+                    <td class="px-3 py-2 border-b border-gray-100 text-right">${{ Number(o.total||0).toFixed(2) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
           <!-- Subheader: Serie-Folio | Tipo | Fecha -->
           <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
             <div class="bg-white border border-gray-200 rounded p-3">

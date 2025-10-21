@@ -1,0 +1,38 @@
+﻿flowchart TD
+    Start([🚀 Inicio Facturación]) --> Check{¿OT autorizada<br/>por cliente?}
+    Check -->|No| Wait[⏳ Esperar autorización]
+    Wait --> End1([Fin])
+    
+    Check -->|Sí| Notif[📧 Notificar a Facturación]
+    Notif --> CreateFactura[💰 Crear Factura]
+    CreateFactura --> FillData[📝 Llenar datos:<br/>- Folio<br/>- Total<br/>- Concepto]
+    
+    FillData --> GuardarDB[(💾 Guardar en BD)]
+    GuardarDB --> UploadXML[📎 Subir XML para extraer datos]
+    
+    UploadXML --> ValidateXML{¿XML válido?}
+    ValidateXML -->|No| ErrorXML[❌ Error validación]
+    ErrorXML --> UploadXML
+    
+    ValidateXML -->|Sí| ParseXML[🔍 Parsear XML CFDI]
+    ParseXML --> ExtractData[📊 Extraer datos:<br/>- Emisor<br/>- Receptor<br/>- UUID<br/>- Conceptos<br/>- Impuestos<br/>- Timbre]
+    
+    ExtractData --> XMLSaved[(💾 XML guardado)]
+    XMLSaved --> MarcarFacturado[✅ Marcar como Facturado]
+    
+    MarcarFacturado --> Status1[Estado: facturado]
+    Status1 --> RegCobro[💵 Registrar Cobro]
+    RegCobro --> Status2[Estado: cobrado]
+    
+    Status2 --> RegPago[✅ Registrar Pago]
+    RegPago --> Status3[Estado: pagado]
+    
+    Status3 --> Complete([🎉 Facturación Completada])
+    
+    style Start fill:#7b1fa2,stroke:#4a148c,color:#fff
+    style Complete fill:#4caf50,stroke:#2e7d32,color:#fff
+    style End1 fill:#ff9800,stroke:#e65100,color:#fff
+    style ErrorXML fill:#f44336,stroke:#c62828,color:#fff
+    style Status1 fill:#81c784,stroke:#388e3c
+    style Status2 fill:#81c784,stroke:#388e3c
+    style Status3 fill:#81c784,stroke:#388e3c

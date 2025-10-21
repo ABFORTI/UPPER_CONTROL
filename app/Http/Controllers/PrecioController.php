@@ -233,7 +233,7 @@ class PrecioController extends Controller
     /** @var User|null $u */
     $u = Auth::user();
     if (!$u) abort(403);
-    if ($u->hasRole('admin') || $u->hasRole('coordinador')) return;
+    if ($u->hasAnyRole(['admin', 'coordinador', 'control', 'comercial'])) return;
     abort(403);
   }
 }

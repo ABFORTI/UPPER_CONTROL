@@ -1,0 +1,48 @@
+﻿flowchart TD
+    Start([Usuario accede]) --> Login[Login Form]
+    Login --> Auth{Autenticación<br/>Laravel Breeze}
+    
+    Auth -->|Falla| LoginError[Error: Credenciales inválidas]
+    LoginError --> Login
+    
+    Auth -->|Éxito| CheckActive{¿Usuario activo?}
+    CheckActive -->|No| Inactive[Usuario desactivado]
+    Inactive --> Logout([Logout])
+    
+    CheckActive -->|Sí| Session[Crear sesión]
+    Session --> LoadRole[Cargar rol y permisos]
+    
+    LoadRole --> RoleCheck{Tipo de usuario}
+    
+    RoleCheck -->|admin| AdminAccess[✅ Acceso total<br/>+ Impersonación]
+    RoleCheck -->|coordinador| CoordAccess[✅ Gestión de<br/>Solicitudes y OTs]
+    RoleCheck -->|team_leader| TLAccess[✅ OTs asignadas<br/>Avances y evidencias]
+    RoleCheck -->|calidad| CalAccess[✅ Validación<br/>de calidad]
+    RoleCheck -->|facturacion| FactAccess[✅ Gestión de<br/>facturas]
+    RoleCheck -->|cliente| ClienteAccess[✅ Solicitudes<br/>Autorización OTs]
+    
+    AdminAccess --> Dashboard[Dashboard]
+    CoordAccess --> Dashboard
+    TLAccess --> Dashboard
+    CalAccess --> Dashboard
+    FactAccess --> Dashboard
+    ClienteAccess --> Dashboard
+    
+    Dashboard --> Route[Usuario accede a ruta]
+    Route --> Middleware{Middleware<br/>role:xxx}
+    
+    Middleware -->|Autorizado| Policy{Policy check}
+    Middleware -->|No autorizado| Error403[403 Forbidden]
+    
+    Policy -->|Permitido| Controller[Controller action]
+    Policy -->|Denegado| Error403
+    
+    Controller --> Response[Respuesta Inertia]
+    Response --> UI[Render Vue.js]
+    
+    Error403 --> ErrorPage[Página de error]
+    
+    style Start fill:#4caf50,stroke:#2e7d32,color:#fff
+    style Dashboard fill:#2196f3,stroke:#1565c0,color:#fff
+    style Error403 fill:#f44336,stroke:#c62828,color:#fff
+    style AdminAccess fill:#ff9800,stroke:#e65100,color:#fff

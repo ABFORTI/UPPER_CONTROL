@@ -16,6 +16,8 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 use Barryvdh\DomPDF\Facade\Pdf as PDF;
 use App\Notifications\OtAsignada;
+use App\Notifications\OtListaParaCalidad;
+use Illuminate\Support\Facades\Notification;
 use App\Services\Notifier;
 use App\Jobs\GenerateOrdenPdf;
 
@@ -52,26 +54,30 @@ class OrdenController extends Controller
                 ->withErrors(['ot' => 'Ya existe una Orden de Trabajo para esta solicitud.']);
         }
 
-        // Cargar relaciones necesarias y preparar prefill de items desde los tamaños (si existen)
-    $solicitud->load(['servicio','centro','tamanos']);
+        // Cargar relaciones necesarias
+        $solicitud->load(['servicio','centro','tamanos']);
 
+        // Determinar si el servicio usa tamaños
+        $usaTamanos = (bool)($solicitud->servicio->usa_tamanos ?? false);
         $prefill = [];
-        if ($solicitud->relationLoaded('tamanos') && $solicitud->tamanos->count() > 0) {
+
+        if ($usaTamanos && $solicitud->tamanos->count() > 0) {
+            // Servicios CON tamaños: items fijos basados en tamaños de solicitud
             foreach ($solicitud->tamanos as $t) {
-                $tam = (string)($t->tamano ?? '');
-                $desc = trim(($solicitud->descripcion ?? '') . ($tam ? " (".ucfirst($tam).")" : ''));
                 $prefill[] = [
-                    'descripcion' => $desc ?: 'Item',
+                    'tamano'      => (string)($t->tamano ?? ''),
                     'cantidad'    => (int)($t->cantidad ?? 0),
-                    'tamano'      => $tam ?: null,
+                    'descripcion' => null,
+                    'editable'    => false, // NO permitir editar
                 ];
             }
         } else {
-            // Fallback: un solo renglón con la descripción/cantidad de la solicitud
+            // Servicios SIN tamaños: item único separable
             $prefill[] = [
                 'descripcion' => $solicitud->descripcion ?? 'Item',
                 'cantidad'    => (int)($solicitud->cantidad ?? 1),
                 'tamano'      => null,
+                'editable'    => true, // Permitir separar
             ];
         }
 
@@ -84,7 +90,8 @@ class OrdenController extends Controller
         $ivaRate = 0.16;
         $cotLines = [];
         $sub = 0.0;
-        if ($solicitud->tamanos && $solicitud->tamanos->count() > 0) {
+        
+        if ($usaTamanos && $solicitud->tamanos && $solicitud->tamanos->count() > 0) {
             foreach ($solicitud->tamanos as $t) {
                 $tam = (string)($t->tamano ?? '');
                 $cant = (int)($t->cantidad ?? 0);
@@ -97,19 +104,23 @@ class OrdenController extends Controller
         } else {
             $pu = (float)$pricing->precioUnitario($solicitud->id_centrotrabajo, $solicitud->id_servicio, null);
             $sub = $pu * (int)($solicitud->cantidad ?? 0);
-            $cotLines[] = ['label'=>'Pieza', 'cantidad'=>(int)($solicitud->cantidad ?? 0), 'pu'=>$pu, 'subtotal'=>$sub];
+            $cotLines[] = ['label'=>'Item', 'cantidad'=>(int)($solicitud->cantidad ?? 0), 'pu'=>$pu, 'subtotal'=>$sub];
         }
         $cot = ['lines'=>$cotLines, 'subtotal'=>$sub, 'iva_rate'=>$ivaRate, 'iva'=>$sub*$ivaRate, 'total'=>$sub*(1+$ivaRate)];
 
         return Inertia::render('Ordenes/CreateFromSolicitud', [
-            'solicitud'   => $solicitud->only('id','descripcion','cantidad','id_servicio','id_centrotrabajo'),
-            'folio'       => $this->buildFolioOT($solicitud->id_centrotrabajo),
-            'teamLeaders' => $teamLeaders,
-            'prefill'     => $prefill,
-            'cotizacion'  => $cot,
-            'urls'        => [
+            'solicitud'           => $solicitud->only('id','descripcion','cantidad','id_servicio','id_centrotrabajo'),
+            'folio'               => $this->buildFolioOT($solicitud->id_centrotrabajo),
+            'teamLeaders'         => $teamLeaders,
+            'prefill'             => $prefill,
+            'usaTamanos'          => $usaTamanos,
+            'cantidadTotal'       => (int)($solicitud->cantidad ?? 1),
+            'descripcionGeneral'  => $solicitud->descripcion ?? '', // Nombre del producto general
+            'cotizacion'          => $cot,
+            'urls'                => [
                 'store' => route('ordenes.storeFromSolicitud', $solicitud),
             ],
+            'areas'               => \App\Models\Area::where('id_centrotrabajo', $solicitud->id_centrotrabajo)->activas()->orderBy('nombre')->get(),
         ]);
     }
 
@@ -124,15 +135,64 @@ class OrdenController extends Controller
                 ->withErrors(['ot' => 'Ya existe una Orden de Trabajo para esta solicitud.']);
         }
 
+        $solicitud->load('servicio', 'tamanos');
+        $usaTamanos = (bool)($solicitud->servicio->usa_tamanos ?? false);
+
+        // Validación base
         $data = $req->validate([
-            'team_leader_id'       => ['nullable','integer','exists:users,id'],
-            'items'                => ['required','array','min:1'],
-            'items.*.descripcion'  => ['required','string','max:255'],
-            'items.*.cantidad'     => ['required','integer','min:1'],
-            'items.*.tamano'       => ['nullable','string','max:50'],
+            'team_leader_id' => ['nullable','integer','exists:users,id'],
+            'id_area' => ['nullable','integer','exists:areas,id'],
+            'separar_items'  => ['nullable','boolean'],
+            'items'          => ['required','array','min:1'],
+            'items.*.cantidad' => ['required','integer','min:1'],
+            'items.*.descripcion' => ['nullable','string','max:255'], // IMPORTANTE: Incluir aquí para que Laravel no lo elimine
+            'items.*.tamano' => ['nullable','string'],
         ]);
 
-    $orden = DB::transaction(function () use ($solicitud, $data) {
+        $separarItems = (bool)($data['separar_items'] ?? false);
+
+        if ($usaTamanos) {
+            // Servicios CON tamaños: validar tamaños obligatorios
+            $req->validate([
+                'items.*.tamano' => ['required','in:chico,mediano,grande,jumbo'],
+            ]);
+            
+            // Validar que las cantidades NO se hayan modificado
+            $expectedItems = $solicitud->tamanos->keyBy('tamano')->map(fn($t) => (int)$t->cantidad)->toArray();
+            
+            foreach ($data['items'] as $item) {
+                $tamano = $item['tamano'] ?? null;
+                if (!isset($expectedItems[$tamano])) {
+                    return back()->withErrors(['items' => "El tamaño '{$tamano}' no existe en la solicitud aprobada."]);
+                }
+                if ((int)$item['cantidad'] !== $expectedItems[$tamano]) {
+                    return back()->withErrors(['items' => "La cantidad del tamaño '{$tamano}' no coincide con la solicitud aprobada ({$expectedItems[$tamano]} esperado)."]);
+                }
+            }
+        } else {
+            // Servicios SIN tamaños
+            if ($separarItems) {
+                // SI se activa separación: validar descripciones y suma
+                $req->validate([
+                    'items.*.descripcion' => ['required','string','max:255'],
+                ]);
+                
+                // VALIDACIÓN CRÍTICA: Suma de cantidades debe ser igual a cantidad total aprobada
+                $cantidadTotal = (int)$solicitud->cantidad;
+                $sumaCantidades = collect($data['items'])->sum(fn($i) => (int)($i['cantidad'] ?? 0));
+                
+                if ($sumaCantidades !== $cantidadTotal) {
+                    return back()->withErrors([
+                        'items' => "La suma de las cantidades de los ítems ({$sumaCantidades}) no coincide con la cantidad total aprobada ({$cantidadTotal})."
+                    ]);
+                }
+            } else {
+                // NO se separa: descripción puede ser opcional o usar la general
+                // No es necesaria validación de suma
+            }
+        }
+
+        $orden = DB::transaction(function () use ($solicitud, $data, $usaTamanos, $separarItems) {
             $totalPlan = collect($data['items'])->sum(fn($i) => (int)($i['cantidad'] ?? 0));
 
             $orden = Orden::create([
@@ -140,23 +200,34 @@ class OrdenController extends Controller
                 'id_solicitud'     => $solicitud->id,
                 'id_centrotrabajo' => $solicitud->id_centrotrabajo,
                 'id_servicio'      => $solicitud->id_servicio,
+                'id_area'          => $data['id_area'] ?? null,
                 'team_leader_id'   => $data['team_leader_id'] ?? null,
+                'descripcion_general' => $solicitud->descripcion ?? '',
                 'estatus'          => !empty($data['team_leader_id']) ? 'asignada' : 'generada',
                 'total_planeado'   => $totalPlan,
                 'total_real'       => 0,
                 'calidad_resultado'=> 'pendiente',
             ]);
 
-            // Resolver precios unitarios por item (por tamaño si aplica)
+            // Resolver precios unitarios por item
             $pricing = app(\App\Domain\Servicios\PricingService::class);
             $sub = 0.0;
+            
             foreach ($data['items'] as $it) {
                 $tamano = $it['tamano'] ?? null;
+                $descripcion = $it['descripcion'] ?? null;
+                
+                // Si no hay descripción específica, usar la descripción general de la solicitud
+                if (empty($descripcion)) {
+                    $descripcion = $solicitud->descripcion ?? 'Sin descripción';
+                }
+                
                 $pu = (float)$pricing->precioUnitario($solicitud->id_centrotrabajo, $solicitud->id_servicio, $tamano);
 
                 OrdenItem::create([
                     'id_orden'          => $orden->id,
-                    'descripcion'       => $it['descripcion'],
+                    'descripcion'       => $descripcion,
+                    'tamano'            => $tamano,
                     'cantidad_planeada' => (int)$it['cantidad'],
                     'precio_unitario'   => $pu,
                     'subtotal'          => $pu * (int)$it['cantidad'],
@@ -176,14 +247,12 @@ class OrdenController extends Controller
             ->withProperties(['team_leader_id' => $orden->team_leader_id])
             ->log("OT #{$orden->id} generada desde solicitud {$solicitud->folio}");
 
-        // Notificar a TL si existe
+        // Notificar al TL si fue asignado
         if ($orden->team_leader_id) {
-            Notifier::toUser(
-                $orden->team_leader_id,
-                'OT asignada',
-                "Se te asignó la OT #{$orden->id}.",
-                route('ordenes.show',$orden->id)
-            );
+            $teamLeader = User::find($orden->team_leader_id);
+            if ($teamLeader) {
+                $teamLeader->notify(new OtAsignada($orden));
+            }
         }
         // Notificar a calidad del centro
         Notifier::toRoleInCentro(
@@ -241,22 +310,51 @@ class OrdenController extends Controller
             $justCompleted = ($orden->estatus !== 'completada') && ($sumReal >= $sumPlan && $sumPlan > 0);
             if ($justCompleted) {
                 $orden->estatus = 'completada';
+                // Cuando la OT se completa de nuevo, reiniciar el marcador de calidad a 'pendiente'
+                $orden->calidad_resultado = 'pendiente';
                 $orden->save();
 
-                // Notificar a calidad del centro
-                Notifier::toRoleInCentro(
-                    'calidad',
-                    $orden->id_centrotrabajo,
-                    'OT lista para calidad',
-                    "La OT #{$orden->id} quedó completada y espera validación.",
-                    route('calidad.show',$orden->id)
-                );
+                // Notificar a calidad del centro con notificación específica
+                // Buscar usuarios con rol 'calidad' que tengan asignado este centro
+                // Ya sea como centro principal O en centros adicionales
+                $usuariosCalidad = User::role('calidad')
+                    ->where(function($query) use ($orden) {
+                        $query->where('centro_trabajo_id', $orden->id_centrotrabajo)
+                              ->orWhereHas('centros', function($q) use ($orden) {
+                                  $q->where('centro_trabajo_id', $orden->id_centrotrabajo);
+                              });
+                    })
+                    ->get();
+                
+                if ($usuariosCalidad->isNotEmpty()) {
+                    Notification::send($usuariosCalidad, new OtListaParaCalidad($orden));
+                }
             } else {
                 $orden->save();
             }
 
-            // (opcional) registrar bitácora de avance en una tabla aparte
-            // \App\Models\Avance::create([...]);
+            // Registrar avances en la tabla de avances
+            // Marcar como corregido si la orden fue rechazada previamente por calidad
+            $isCorregido = \App\Models\Aprobacion::where('aprobable_type', \App\Models\Orden::class)
+                ->where('aprobable_id', $orden->id)
+                ->where('tipo', 'calidad')
+                ->where('resultado', 'rechazado')
+                ->exists();
+            
+            foreach ($data['items'] as $d) {
+                if ((int)$d['cantidad'] > 0) {
+                    \App\Models\Avance::create([
+                        'id_orden' => $orden->id,
+                        'id_item' => $d['id_item'],
+                        'id_usuario' => Auth::id(),
+                        'cantidad' => (int)$d['cantidad'],
+                        'comentario' => $req->comentario ?? null,
+                        'es_corregido' => $isCorregido,
+                    ]);
+                }
+            }
+
+            // Registrar en activity log
             $this->act('ordenes')
                 ->performedOn($orden)
                 ->event('avance')
@@ -279,9 +377,8 @@ class OrdenController extends Controller
         $this->authorizeFromCentro($orden->id_centrotrabajo, $orden);
 
         $orden->load([
-            'solicitud','servicio','centro','items','teamLeader','avances.usuario',
-            // Deja la línea de abajo SOLO si existe la relación:
-            // 'items.evidencias',
+            'solicitud.archivos','servicio','centro','area','items','teamLeader',
+            'avances' => fn($q) => $q->with(['usuario', 'item'])->orderByDesc('created_at'),
             'evidencias' => fn($q)=>$q->with('usuario')->orderByDesc('id'),
         ]);
 
@@ -379,6 +476,10 @@ class OrdenController extends Controller
         $orden->team_leader_id = $data['team_leader_id'];
         if ($orden->estatus === 'generada') $orden->estatus = 'asignada';
         $orden->save();
+        
+        // Recargar la relación teamLeader para que esté disponible
+        $orden->load('teamLeader');
+        
         $this->act('ordenes')
             ->performedOn($orden)
             ->event('asignar_tl')
@@ -386,7 +487,9 @@ class OrdenController extends Controller
             ->log("OT #{$orden->id}: asignado TL {$req->team_leader_id}");
 
         // Notificar al TL asignado
-        optional($orden->teamLeader)->notify(new OtAsignada($orden));
+        if ($orden->teamLeader) {
+            $orden->teamLeader->notify(new OtAsignada($orden));
+        }
 
         return back()->with('ok','Team Leader asignado');
     }
@@ -404,13 +507,28 @@ class OrdenController extends Controller
             'estatus'  => $req->string('estatus')->toString(),
             'calidad'  => $req->string('calidad')->toString(),
             'servicio' => $req->integer('servicio') ?: null,
+            'centro'   => $req->integer('centro') ?: null,
             'desde'    => $req->date('desde'),
             'hasta'    => $req->date('hasta'),
             'id'       => $req->integer('id') ?: null,
+            'year'     => $req->integer('year') ?: null,
+            'week'     => $req->integer('week') ?: null,
         ];
 
-    $q = Orden::with(['servicio','centro','teamLeader','solicitud','factura'])
-        ->when(!$isAdminOrFact, fn($qq)=>$qq->where('id_centrotrabajo',$u->centro_trabajo_id))
+    // Centros permitidos para el usuario
+    $centrosPermitidos = $this->allowedCentroIds($u);
+    $q = Orden::with(['servicio','centro','teamLeader','solicitud','factura','facturas','area'])
+        ->when(!$isAdminOrFact, function($qq) use ($centrosPermitidos){
+            if (!empty($centrosPermitidos)) { $qq->whereIn('id_centrotrabajo', $centrosPermitidos); }
+            else { $qq->whereRaw('1=0'); }
+        })
+        ->when($isAdminOrFact && $filters['centro'], fn($qq)=>$qq->where('id_centrotrabajo', $filters['centro']))
+        ->when(!$isAdminOrFact && $filters['centro'], function($qq) use ($filters, $centrosPermitidos){
+            // Aplicar filtro solo si el centro está permitido
+            if (in_array((int)$filters['centro'], array_map('intval',$centrosPermitidos), true)) {
+                $qq->where('id_centrotrabajo', $filters['centro']);
+            }
+        })
         ->when($isTL, fn($qq)=>$qq->where('team_leader_id',$u->id))
         ->when($isCliente && !$isClienteCentro, fn($qq)=>$qq->whereHas('solicitud', fn($w)=>$w->where('id_cliente',$u->id)))
             ->when($filters['id'], fn($qq,$v)=>$qq->where('id',$v))
@@ -420,36 +538,77 @@ class OrdenController extends Controller
             ->when($filters['desde'] && $filters['hasta'], fn($qq)=>$qq->whereBetween('created_at', [
                 request()->date('desde')->startOfDay(), request()->date('hasta')->endOfDay(),
             ]))
+            ->when($filters['year'] && $filters['week'], function($qq) use ($filters) {
+                $qq->whereRaw('YEAR(created_at) = ? AND WEEK(created_at, 1) = ?', [$filters['year'], $filters['week']]);
+            })
+            ->when($filters['year'] && !$filters['week'], function($qq) use ($filters) {
+                $qq->whereYear('created_at', $filters['year']);
+            })
             ->orderByDesc('id');
 
         $data = $q->paginate(10)->withQueryString();
 
         $data->getCollection()->transform(function ($o) {
-            // Derivar estatus de facturación: si hay factura vinculada, usar su estatus; si no, "sin_factura".
-            $factStatus = optional($o->factura)->estatus ?? 'sin_factura';
+            // Estatus de facturación real priorizando la factura en pivot (única por integridad)
+            // Orden de prioridad: pivot -> directa -> fallback por estatus de OT
+            $factStatus = 'sin_factura';
+            if ($o->relationLoaded('facturas') && $o->facturas && $o->facturas->count() > 0) {
+                $factStatus = $o->facturas->first()->estatus ?? 'facturado';
+            } elseif ($o->relationLoaded('factura') && $o->factura) {
+                $factStatus = $o->factura->estatus ?? 'facturado';
+            } elseif ($o->estatus === 'facturada') {
+                // Caso legado: la OT está marcada como 'facturada' pero no se cargó la factura
+                $factStatus = 'facturado';
+            }
+            // Fecha exacta según BD (sin convertir TZ): formateada una sola vez
+            $raw = $o->getRawOriginal('created_at');
+            $fecha = null; $fechaIso = null;
+            if ($raw) {
+                try {
+                    $dt = \Carbon\Carbon::parse($raw);
+                    $fecha = $dt->format('Y-m-d H:i');
+                    $fechaIso = $dt->toIso8601String();
+                } catch (\Throwable $e) {
+                    $fecha = substr($raw, 0, 16);
+                }
+            }
             return [
                 'id' => $o->id,
                 'estatus' => $o->estatus,
                 'calidad_resultado' => $o->calidad_resultado,
                 'facturacion' => $factStatus,
-                'created_at' => $o->created_at,
+                'fecha' => $fecha,
+                'producto' => $o->descripcion_general ?: ($o->solicitud?->descripcion ?? null),
                 'servicio' => ['nombre' => $o->servicio?->nombre],
                 'centro'   => ['nombre' => $o->centro?->nombre],
+                'area'     => ['nombre' => $o->area?->nombre],
                 'team_leader' => ['name' => $o->teamLeader?->name],
                 'urls' => [
                     'show'     => route('ordenes.show', $o),
                     'calidad'  => route('calidad.show',  $o),
                     'facturar' => route('facturas.createFromOrden', $o),
                 ],
+                'created_at_raw' => $raw,
+                'fecha_iso' => $fechaIso,
             
                 ]    ;
         });
 
+        // Lista de centros para selector
+        $centrosLista = $u->hasAnyRole(['admin','facturacion'])
+            ? \App\Models\CentroTrabajo::select('id','nombre')->orderBy('nombre')->get()
+            : \App\Models\CentroTrabajo::whereIn('id', $centrosPermitidos)->select('id','nombre')->orderBy('nombre')->get();
+
         return Inertia::render('Ordenes/Index', [
             'data'      => $data,
-            'filters'   => $req->only(['id','estatus','calidad','servicio','desde','hasta']),
+            'filters'   => $req->only(['id','estatus','calidad','servicio','centro','desde','hasta','year','week']),
             'servicios' => \App\Models\ServicioEmpresa::select('id','nombre')->orderBy('nombre')->get(),
-            'urls'      => ['index' => route('ordenes.index')],
+            'centros'   => $centrosLista,
+            'urls'      => [
+                'index' => route('ordenes.index'),
+                'facturas_batch' => route('facturas.batch'),
+                'facturas_batch_create' => route('facturas.batch.create'),
+            ],
         ]);
     }
 
