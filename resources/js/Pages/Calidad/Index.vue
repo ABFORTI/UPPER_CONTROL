@@ -8,17 +8,20 @@ const props = defineProps({
   estado: String,
   filters: Object,
   urls: Object,
+  centros: Array,
 })
 
 const rows = computed(()=> props.data?.data ?? [])
 
 // Filtros unificados por estatus (píldoras) con conjunto fijo
 const sel = ref((props.estado && props.estado !== 'todos') ? props.estado : '')
+const centroSel = ref(props.filters?.centro || '')
 const yearSel = ref(props.filters?.year || new Date().getFullYear())
 const weekSel = ref(props.filters?.week || '')
 const estatuses = computed(() => ['pendiente', 'validado', 'rechazado'])
 function applyFilter(){
   const params = { estado: sel.value || 'todos' }
+  if (centroSel.value) params.centro = centroSel.value
   if (yearSel.value) params.year = yearSel.value
   if (weekSel.value) params.week = weekSel.value
   router.get(props.urls.index, params, { preserveState:true, preserveScroll:true, replace:true })
@@ -68,6 +71,11 @@ async function copyTable(){
         </div>
 
         <div class="flex flex-wrap items-center gap-2 w-full lg:w-auto justify-end">
+          <!-- Centro -->
+          <select v-model="centroSel" @change="applyFilter" class="border p-2 rounded min-w-[180px]">
+            <option value="">Todos los centros</option>
+            <option v-for="c in (props.centros||[])" :key="c.id" :value="c.id">{{ c.nombre }}</option>
+          </select>
           <!-- Año -->
           <select v-model="yearSel" @change="applyFilter" class="border p-2 rounded min-w-[100px]">
             <option v-for="y in [yearSel-2, yearSel-1, yearSel, yearSel+1]" :key="y" :value="y">{{ y }}</option>

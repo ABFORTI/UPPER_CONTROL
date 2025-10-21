@@ -173,6 +173,12 @@ Route::middleware('auth')->group(function () {
         ->middleware('role:facturacion|admin')->name('facturas.cobro');
     Route::post('/facturas/{factura}/pagado', [FacturaController::class,'marcarPagado'])
         ->middleware('role:facturacion|admin')->name('facturas.pagado');
+
+    // Facturación múltiple (agrupar varias OTs en una sola factura)
+    Route::post('/facturas/batch', [FacturaController::class,'storeBatch'])
+        ->middleware('role:facturacion|admin')->name('facturas.batch');
+    Route::get('/facturas/batch/create', [FacturaController::class,'createBatch'])
+        ->middleware('role:facturacion|admin')->name('facturas.batch.create');
 });
 
 /* ==========

@@ -6,13 +6,36 @@ const props = defineProps({
   data: Object,
   filters: Object,
   servicios: Array,
+  centros: Array,
   urls: Object
 })
 
 const rows = computed(()=> props.data?.data ?? [])
 
+// Selección múltiple para facturación
+const selected = ref(new Set())
+const anySelected = computed(()=> selected.value.size > 0)
+function toggleSelection(id, checked){
+  if(checked) selected.value.add(id); else selected.value.delete(id)
+}
+function clearSelection(){ selected.value.clear() }
+
+// Helper para saber si una OT es seleccionable para facturar
+function isSelectable(o){
+  const sinFactura = !o.facturacion || o.facturacion === 'sin_factura'
+  return o.estatus === 'autorizada_cliente' && sinFactura
+}
+
+// Ir a pantalla CreateBatch con las OTs seleccionadas
+function openBatch(){
+  const ids = Array.from(selected.value)
+  if (ids.length === 0) return
+  router.get(props.urls?.facturas_batch_create, { ids: ids.join(',') })
+}
+
 // Filtros unificados por estatus (píldoras) con conjunto fijo
 const sel = ref(props.filters?.estatus || '')
+const centroSel = ref(props.filters?.centro || '')
 const yearSel = ref(props.filters?.year || new Date().getFullYear())
 const weekSel = ref(props.filters?.week || '')
 const estatuses = computed(() => [
@@ -25,6 +48,7 @@ const estatuses = computed(() => [
 function applyFilter(){
   const params = {}
   if (sel.value) params.estatus = sel.value
+  if (centroSel.value) params.centro = centroSel.value
   if (yearSel.value) params.year = yearSel.value
   if (weekSel.value) params.week = weekSel.value
   router.get(props.urls.index, params, { preserveState: true, replace: true })
@@ -33,9 +57,10 @@ function applyFilter(){
 // Badge para estatus de facturación
 function factBadgeClass(v){
   const e = String(v||'').toLowerCase()
-  if (e === 'pagado') return 'bg-green-100 text-green-700'
-  if (e === 'facturado') return 'bg-emerald-100 text-emerald-700'
-  if (e === 'por_pagar') return 'bg-amber-100 text-amber-700'
+  if (e === 'pagado') return 'bg-green-100 text-green-700'       // Pagado: verde
+  if (e === 'por_pagar') return 'bg-amber-100 text-amber-700'     // Por pagar: ámbar
+  if (e === 'facturado') return 'bg-cyan-100 text-cyan-700'       // Facturado: cian para diferenciar de verde
+  if (e === 'sin_factura') return 'bg-slate-100 text-slate-700'   // Sin factura: gris azulado
   return 'bg-gray-100 text-gray-700'
 }
 
@@ -85,9 +110,16 @@ async function copyTable(){
         <div class="flex items-center gap-2">
           <button @click="downloadExcel" class="px-4 py-2 rounded text-white" style="background:#22c55e">Excel</button>
           <button @click="copyTable" class="px-4 py-2 rounded text-white" style="background:#64748b">Copiar</button>
+          <button v-if="anySelected" @click="openBatch" class="px-4 py-2 rounded text-white" style="background:#1A73E8">Generar factura</button>
         </div>
 
         <div class="flex flex-wrap items-center gap-2 w-full lg:w-auto justify-end">
+          <!-- Centro -->
+          <select v-model="centroSel" @change="applyFilter" class="border p-2 rounded min-w-[180px]">
+            <option value="">Todos los centros</option>
+            <option v-for="c in (props.centros||[])" :key="c.id" :value="c.id">{{ c.nombre }}</option>
+          </select>
+
           <!-- Año -->
           <select v-model="yearSel" @change="applyFilter" class="border p-2 rounded min-w-[100px]">
             <option v-for="y in [yearSel-2, yearSel-1, yearSel, yearSel+1]" :key="y" :value="y">{{ y }}</option>
@@ -112,6 +144,7 @@ async function copyTable(){
           <table class="min-w-full text-base">
             <thead class="bg-slate-800 text-white uppercase text-sm">
               <tr>
+            <th class="p-2"></th>
             <th class="p-2">ID</th>
             <th class="p-2">Producto</th>
             <th class="p-2">Servicio</th>
@@ -127,6 +160,19 @@ async function copyTable(){
             </thead>
             <tbody>
               <tr v-for="o in rows" :key="o.id" class="border-t even:bg-slate-50 hover:bg-slate-100/60">
+                <td class="px-2 py-3">
+                  <input
+                    type="checkbox"
+                    :disabled="!isSelectable(o)"
+                    :class="!isSelectable(o)
+                      ? 'opacity-40 cursor-not-allowed accent-gray-300'
+                      : 'cursor-pointer accent-[#1A73E8] hover:accent-[#1557b0]'
+                    "
+                    :title="!isSelectable(o) ? 'No seleccionable: ya facturada o sin autorización del cliente' : 'Seleccionar para facturar'"
+                    :checked="selected.has(o.id)"
+                    @change="toggleSelection(o.id, $event.target.checked)"
+                  />
+                </td>
                 <td class="px-4 py-3 font-mono">#{{ o.id }}</td>
                 <td class="px-4 py-3">{{ o.producto || '-' }}</td>
                 <td class="px-4 py-3">{{ o.servicio?.nombre }}</td>
@@ -193,4 +239,6 @@ async function copyTable(){
       </div>
     </div>
   </div>
+
+  
 </template>

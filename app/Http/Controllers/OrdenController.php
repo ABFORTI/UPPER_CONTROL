@@ -507,6 +507,7 @@ class OrdenController extends Controller
             'estatus'  => $req->string('estatus')->toString(),
             'calidad'  => $req->string('calidad')->toString(),
             'servicio' => $req->integer('servicio') ?: null,
+            'centro'   => $req->integer('centro') ?: null,
             'desde'    => $req->date('desde'),
             'hasta'    => $req->date('hasta'),
             'id'       => $req->integer('id') ?: null,
@@ -514,8 +515,20 @@ class OrdenController extends Controller
             'week'     => $req->integer('week') ?: null,
         ];
 
-    $q = Orden::with(['servicio','centro','teamLeader','solicitud','factura','area'])
-        ->when(!$isAdminOrFact, fn($qq)=>$qq->where('id_centrotrabajo',$u->centro_trabajo_id))
+    // Centros permitidos para el usuario
+    $centrosPermitidos = $this->allowedCentroIds($u);
+    $q = Orden::with(['servicio','centro','teamLeader','solicitud','factura','facturas','area'])
+        ->when(!$isAdminOrFact, function($qq) use ($centrosPermitidos){
+            if (!empty($centrosPermitidos)) { $qq->whereIn('id_centrotrabajo', $centrosPermitidos); }
+            else { $qq->whereRaw('1=0'); }
+        })
+        ->when($isAdminOrFact && $filters['centro'], fn($qq)=>$qq->where('id_centrotrabajo', $filters['centro']))
+        ->when(!$isAdminOrFact && $filters['centro'], function($qq) use ($filters, $centrosPermitidos){
+            // Aplicar filtro solo si el centro está permitido
+            if (in_array((int)$filters['centro'], array_map('intval',$centrosPermitidos), true)) {
+                $qq->where('id_centrotrabajo', $filters['centro']);
+            }
+        })
         ->when($isTL, fn($qq)=>$qq->where('team_leader_id',$u->id))
         ->when($isCliente && !$isClienteCentro, fn($qq)=>$qq->whereHas('solicitud', fn($w)=>$w->where('id_cliente',$u->id)))
             ->when($filters['id'], fn($qq,$v)=>$qq->where('id',$v))
@@ -536,8 +549,17 @@ class OrdenController extends Controller
         $data = $q->paginate(10)->withQueryString();
 
         $data->getCollection()->transform(function ($o) {
-            // Derivar estatus de facturación: si hay factura vinculada, usar su estatus; si no, "sin_factura".
-            $factStatus = optional($o->factura)->estatus ?? 'sin_factura';
+            // Estatus de facturación real priorizando la factura en pivot (única por integridad)
+            // Orden de prioridad: pivot -> directa -> fallback por estatus de OT
+            $factStatus = 'sin_factura';
+            if ($o->relationLoaded('facturas') && $o->facturas && $o->facturas->count() > 0) {
+                $factStatus = $o->facturas->first()->estatus ?? 'facturado';
+            } elseif ($o->relationLoaded('factura') && $o->factura) {
+                $factStatus = $o->factura->estatus ?? 'facturado';
+            } elseif ($o->estatus === 'facturada') {
+                // Caso legado: la OT está marcada como 'facturada' pero no se cargó la factura
+                $factStatus = 'facturado';
+            }
             // Fecha exacta según BD (sin convertir TZ): formateada una sola vez
             $raw = $o->getRawOriginal('created_at');
             $fecha = null; $fechaIso = null;
@@ -572,11 +594,21 @@ class OrdenController extends Controller
                 ]    ;
         });
 
+        // Lista de centros para selector
+        $centrosLista = $u->hasAnyRole(['admin','facturacion'])
+            ? \App\Models\CentroTrabajo::select('id','nombre')->orderBy('nombre')->get()
+            : \App\Models\CentroTrabajo::whereIn('id', $centrosPermitidos)->select('id','nombre')->orderBy('nombre')->get();
+
         return Inertia::render('Ordenes/Index', [
             'data'      => $data,
-            'filters'   => $req->only(['id','estatus','calidad','servicio','desde','hasta','year','week']),
+            'filters'   => $req->only(['id','estatus','calidad','servicio','centro','desde','hasta','year','week']),
             'servicios' => \App\Models\ServicioEmpresa::select('id','nombre')->orderBy('nombre')->get(),
-            'urls'      => ['index' => route('ordenes.index')],
+            'centros'   => $centrosLista,
+            'urls'      => [
+                'index' => route('ordenes.index'),
+                'facturas_batch' => route('facturas.batch'),
+                'facturas_batch_create' => route('facturas.batch.create'),
+            ],
         ]);
     }
 

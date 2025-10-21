@@ -12,6 +12,7 @@ class DatabaseSeeder extends Seeder {
       AreaSeeder::class,
       RolesSeeder::class,
       ServiciosSeeder::class,
+  AsignarServiciosACentrosSeeder::class,
       UsersSeeder::class,
       ServicioTamanosJumboSeeder::class, // asegura precio 'jumbo' por centro/servicio
     ]);

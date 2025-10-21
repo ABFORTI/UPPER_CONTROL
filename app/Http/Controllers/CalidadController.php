@@ -142,6 +142,7 @@ class CalidadController extends Controller
 
   private function authCalidad(Orden $orden): void {
     $u = Auth::user();
+    /** @var \App\Models\User $u */
     if ($u->hasRole('admin')) return;
     if (!$u->hasRole('calidad')) abort(403);
     $ids = $this->allowedCentroIds($u);
@@ -158,6 +159,7 @@ class CalidadController extends Controller
 
   $filters = [
     'estado' => $estadoNorm,
+    'centro' => $req->integer('centro') ?: null,
     'year' => $req->integer('year') ?: null,
     'week' => $req->integer('week') ?: null,
   ];
@@ -167,6 +169,13 @@ class CalidadController extends Controller
       $ids = $this->allowedCentroIds($u);
       if (!empty($ids)) { $qq->whereIn('id_centrotrabajo', $ids); }
       else { $qq->whereRaw('1=0'); }
+    })
+    ->when($filters['centro'] !== null, function($qq) use ($u, $filters) {
+      if ($u->hasRole('admin')) { $qq->where('id_centrotrabajo', $filters['centro']); }
+      else {
+        $ids = $this->allowedCentroIds($u);
+        if (in_array((int)$filters['centro'], array_map('intval',$ids), true)) { $qq->where('id_centrotrabajo', $filters['centro']); }
+      }
     })
     // Lógica de filtrado:
     // - Pendientes: sólo OTs completadas y calidad pendiente
@@ -215,10 +224,16 @@ class CalidadController extends Controller
     ];
   });
 
+  // Centros para selector
+  $centrosLista = $u->hasRole('admin')
+    ? \App\Models\CentroTrabajo::select('id','nombre')->orderBy('nombre')->get()
+    : \App\Models\CentroTrabajo::whereIn('id', $this->allowedCentroIds($u))->select('id','nombre')->orderBy('nombre')->get();
+
   return \Inertia\Inertia::render('Calidad/Index', [
     'data'    => $data,
     'filters' => $filters,
     'urls'    => [ 'index' => route('calidad.index') ],
+    'centros' => $centrosLista,
   ]);
   }
 

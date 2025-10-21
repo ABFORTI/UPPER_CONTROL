@@ -30,6 +30,9 @@ class Orden extends Model {
 }
 
     public function factura(){ return $this->hasOne(\App\Models\Factura::class,'id_orden'); }
+    public function facturas(){
+        return $this->belongsToMany(\App\Models\Factura::class, 'factura_orden', 'id_orden', 'id_factura');
+    }
 
     public function getActivitylogOptions(): LogOptions
     {
