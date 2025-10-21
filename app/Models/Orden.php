@@ -9,13 +9,16 @@ class Orden extends Model {
     use LogsActivity;
     protected $table='ordenes_trabajo';
     protected $fillable = [
-        'id_solicitud','id_centrotrabajo','id_servicio','team_leader_id',
+        'id_solicitud','id_centrotrabajo','id_servicio','id_area','team_leader_id',
+        'descripcion_general',
         'estatus','calidad_resultado','total_planeado','total_real',
-        'subtotal','iva','total'
+        'subtotal','iva','total',
+        'motivo_rechazo','acciones_correctivas'
     ];
     public function solicitud(){ return $this->belongsTo(Solicitud::class,'id_solicitud'); }
     public function centro(){ return $this->belongsTo(CentroTrabajo::class,'id_centrotrabajo'); }
     public function servicio(){ return $this->belongsTo(ServicioEmpresa::class,'id_servicio'); }
+    public function area(){ return $this->belongsTo(Area::class,'id_area'); }
     public function items(){ return $this->hasMany(OrdenItem::class,'id_orden'); }
     public function avances(){ return $this->hasMany(Avance::class,'id_orden'); }
     public function teamLeader(){ return $this->belongsTo(User::class,'team_leader_id'); }
@@ -27,6 +30,9 @@ class Orden extends Model {
 }
 
     public function factura(){ return $this->hasOne(\App\Models\Factura::class,'id_orden'); }
+    public function facturas(){
+        return $this->belongsToMany(\App\Models\Factura::class, 'factura_orden', 'id_orden', 'id_factura');
+    }
 
     public function getActivitylogOptions(): LogOptions
     {

@@ -18,9 +18,24 @@ class OtAutorizadaParaFacturacion extends Notification
     public function toMail($notifiable): MailMessage
     {
         return (new MailMessage)
-            ->subject('OT autorizada por cliente')
-            ->line("La OT #{$this->orden->id} fue autorizada por el cliente.")
-            ->action('Facturar', route('facturas.createFromOrden', $this->orden));
+            ->subject('💰 OT #' . $this->orden->id . ' Lista para Facturación')
+            ->greeting('¡Hola ' . $notifiable->name . '!')
+            ->line('Una **Orden de Trabajo** ha sido **autorizada por el cliente** y está lista para ser facturada.')
+            ->line('')
+            ->line('**Detalles de la OT:**')
+            ->line('• **Número:** #' . $this->orden->id)
+            ->line('• **Servicio:** ' . ($this->orden->servicio?->nombre ?? 'N/A'))
+            ->line('• **Centro de Trabajo:** ' . ($this->orden->centro?->nombre ?? 'N/A'))
+            ->line('• **Estado:** ✅ Autorizada - Lista para Facturar')
+            ->line('')
+            ->line('**🎯 Acción Requerida:**')
+            ->line('Por favor, procede a generar la factura correspondiente.')
+            ->line('')
+            ->action('💵 Generar Factura', route('facturas.createFromOrden', $this->orden))
+            ->line('')
+            ->line('Todos los pasos previos han sido completados exitosamente.')
+            ->salutation('Saludos,  
+**Departamento de Facturación**');
     }
 
     public function toDatabase($notifiable): array

@@ -1,0 +1,37 @@
+﻿sequenceDiagram
+    participant User as Usuario
+    participant Browser as Navegador
+    participant Inertia as Inertia.js
+    participant Controller as DashboardController
+    participant DB as Database
+    participant View as Vue Component
+
+    User->>Browser: Accede a /dashboard
+    Browser->>Inertia: GET /dashboard
+    Inertia->>Controller: index()
+    
+    Controller->>DB: Query OTs por estado
+    DB-->>Controller: Conteo OTs
+    
+    Controller->>DB: Query Facturas por estado
+    DB-->>Controller: Conteo Facturas
+    
+    Controller->>DB: Query actividad reciente
+    DB-->>Controller: Actividad
+    
+    Controller->>DB: Query notificaciones pendientes
+    DB-->>Controller: Notificaciones
+    
+    Controller->>Controller: Formatear datos por rol
+    Controller->>Inertia: Inertia response con props
+    Inertia->>View: Renderizar Dashboard.vue
+    View->>Browser: HTML/CSS/JS
+    Browser->>User: Mostrar dashboard
+    
+    User->>View: Click en "Exportar OTs"
+    View->>Controller: GET /dashboard/export/ots
+    Controller->>DB: Query todas las OTs
+    DB-->>Controller: Dataset completo
+    Controller->>Controller: Generar Excel
+    Controller-->>Browser: Descargar archivo
+    Browser-->>User: archivo.xlsx

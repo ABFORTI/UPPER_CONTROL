@@ -51,18 +51,38 @@ Route::middleware('auth')->group(function () {
         auth()->user()->unreadNotifications->markAsRead();
         return back();
     })->name('notificaciones.read_all');
+
+    Route::post('/notificaciones/{notification}/read', function ($notificationId) {
+        $user = request()->user();
+        $notification = $user->notifications()->whereKey($notificationId)->firstOrFail();
+        if (is_null($notification->read_at)) {
+            $notification->markAsRead();
+        }
+        // Devolvemos 204 para que el front pueda continuar con la navegación deseada
+        return response()->noContent();
+    })->name('notificaciones.read');
 });
 
 /* ==========
  |  SERVICIOS (precios)
  * ========== */
-Route::middleware(['auth','role:admin|coordinador'])->group(function () {
+Route::middleware(['auth', 'check.servicios'])->group(function () {
     Route::get('/servicios', [PrecioController::class,'index'])->name('servicios.index');
     Route::get('/servicios/create', [PrecioController::class,'create'])->name('servicios.create');
     Route::post('/servicios/guardar', [PrecioController::class,'guardar'])->name('servicios.guardar');
     Route::post('/servicios/crear', [PrecioController::class,'crear'])->name('servicios.crear');
     Route::post('/servicios/clonar', [PrecioController::class,'clonar'])->name('servicios.clonar');
     Route::post('/servicios/eliminar', [PrecioController::class,'eliminar'])->name('servicios.eliminar');
+});
+
+/* ==========
+ |  ÁREAS
+ * ========== */
+Route::middleware(['auth', 'check.areas'])->group(function () {
+    Route::get('/areas', [\App\Http\Controllers\AreaController::class,'index'])->name('areas.index');
+    Route::post('/areas', [\App\Http\Controllers\AreaController::class,'store'])->name('areas.store');
+    Route::put('/areas/{area}', [\App\Http\Controllers\AreaController::class,'update'])->name('areas.update');
+    Route::delete('/areas/{area}', [\App\Http\Controllers\AreaController::class,'destroy'])->name('areas.destroy');
 });
 
 /* ===============
@@ -84,6 +104,14 @@ Route::middleware('auth')->group(function () {
         ->name('ordenes.createFromSolicitud');
     Route::post('/solicitudes/{solicitud}/generar-ot', [OrdenController::class,'storeFromSolicitud'])
         ->name('ordenes.storeFromSolicitud');
+});
+
+/* ===============
+ |  ARCHIVOS
+ * =============== */
+Route::middleware('auth')->group(function () {
+    Route::get('/archivos/{archivo}/download', [\App\Http\Controllers\ArchivoController::class,'download'])->name('archivos.download');
+    Route::get('/archivos/{archivo}/view', [\App\Http\Controllers\ArchivoController::class,'view'])->name('archivos.view');
 });
 
 /* ==========
@@ -122,18 +150,21 @@ Route::middleware('auth')->group(function () {
     Route::post('/ordenes/{orden}/cliente/autorizar', [ClienteController::class,'autorizar'])
         ->name('cliente.autorizar');
 
-    // Facturas
+    // Facturas - Cliente puede ver el listado de sus facturas
     Route::get('/facturas', [FacturaController::class,'index'])
-        ->middleware('role:facturacion|admin')->name('facturas.index');
+        ->middleware('role:facturacion|admin|cliente')->name('facturas.index');
     Route::get('/ordenes/{orden}/facturar', [FacturaController::class,'createFromOrden'])
         ->middleware('role:facturacion|admin')->name('facturas.createFromOrden');
     Route::post('/ordenes/{orden}/facturar', [FacturaController::class,'storeFromOrden'])
         ->middleware('role:facturacion|admin')->name('facturas.storeFromOrden');
 
+    // Cliente puede ver factura y generar PDF
     Route::get('/facturas/{factura}', [FacturaController::class,'show'])
-        ->middleware('role:facturacion|admin')->name('facturas.show');
-    Route::get('/facturas/{factura}/pdf',[FacturaController::class,'pdf'])->name('facturas.pdf');
+        ->middleware('role:facturacion|admin|cliente')->name('facturas.show');
+    Route::get('/facturas/{factura}/pdf',[FacturaController::class,'pdf'])
+        ->middleware('role:facturacion|admin|cliente')->name('facturas.pdf');
 
+    // Solo facturacion y admin pueden ejecutar estas acciones
     Route::post('/facturas/{factura}/facturado', [FacturaController::class,'marcarFacturado'])
         ->middleware('role:facturacion|admin')->name('facturas.facturado');
     Route::post('/facturas/{factura}/xml', [FacturaController::class,'uploadXml'])
@@ -142,6 +173,12 @@ Route::middleware('auth')->group(function () {
         ->middleware('role:facturacion|admin')->name('facturas.cobro');
     Route::post('/facturas/{factura}/pagado', [FacturaController::class,'marcarPagado'])
         ->middleware('role:facturacion|admin')->name('facturas.pagado');
+
+    // Facturación múltiple (agrupar varias OTs en una sola factura)
+    Route::post('/facturas/batch', [FacturaController::class,'storeBatch'])
+        ->middleware('role:facturacion|admin')->name('facturas.batch');
+    Route::get('/facturas/batch/create', [FacturaController::class,'createBatch'])
+        ->middleware('role:facturacion|admin')->name('facturas.batch.create');
 });
 
 /* ==========
@@ -192,3 +229,18 @@ Route::post('/admin/impersonate/leave', [ImpersonateController::class,'leave'])
 
 // Auth (login/registro de Breeze)
 require __DIR__.'/auth.php';
+
+// TEMPORAL: Debug de roles
+Route::middleware('auth')->get('/test-roles-debug', function () {
+    $user = request()->user();
+    return response()->json([
+        'user_id' => $user->id,
+        'email' => $user->email,
+        'name' => $user->name,
+        'roles' => $user->roles->pluck('name'),
+        'has_control' => $user->hasRole('control'),
+        'has_comercial' => $user->hasRole('comercial'),
+        'has_any_role' => $user->hasAnyRole(['admin','coordinador','control','comercial']),
+        'permissions' => $user->getAllPermissions()->pluck('name'),
+    ]);
+});

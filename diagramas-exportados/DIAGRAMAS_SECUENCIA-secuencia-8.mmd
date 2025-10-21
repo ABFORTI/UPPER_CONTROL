@@ -1,0 +1,51 @@
+﻿sequenceDiagram
+    actor Admin
+    participant Browser
+    participant ImpersonateController
+    participant Session
+    participant DB
+    participant ActivityLog
+    actor TargetUser
+
+    Admin->>Browser: Accede a /admin/users
+    Browser-->>Admin: Lista de usuarios
+    
+    Admin->>Browser: Click "Impersonar" en usuario
+    Browser->>ImpersonateController: POST /admin/users/{user}/impersonate
+    
+    ImpersonateController->>ImpersonateController: Check role = admin
+    
+    ImpersonateController->>Session: Guardar impersonator_id
+    Session->>Session: Store original user ID
+    
+    ImpersonateController->>Session: Login as target user
+    Session->>Session: Switch auth to target
+    
+    ImpersonateController->>ActivityLog: Log impersonation start
+    ActivityLog->>DB: INSERT activity
+    
+    ImpersonateController-->>Browser: Redirect to dashboard
+    Browser-->>Admin: Vista como TargetUser
+    
+    Note over Admin: Admin ve la aplicación<br/>como si fuera el usuario objetivo<br/>Banner "Estás impersonando a X"
+    
+    Admin->>Browser: Navega y prueba funcionalidad
+    Browser-->>Admin: Respuesta según permisos de TargetUser
+    
+    Admin->>Browser: Click "Salir de impersonación"
+    Browser->>ImpersonateController: POST /admin/impersonate/leave
+    
+    ImpersonateController->>Session: Get impersonator_id
+    Session-->>ImpersonateController: Original admin ID
+    
+    ImpersonateController->>Session: Logout target user
+    ImpersonateController->>Session: Login as original admin
+    Session->>Session: Restore admin session
+    
+    ImpersonateController->>Session: Clear impersonator_id
+    
+    ImpersonateController->>ActivityLog: Log impersonation end
+    ActivityLog->>DB: INSERT activity
+    
+    ImpersonateController-->>Browser: Redirect to admin users
+    Browser-->>Admin: Vista como Admin restaurada

@@ -38,18 +38,9 @@ class ClienteController extends Controller
         $orden->cliente_autorizada_at = now();
         $orden->save();
 
-        // avisar a 'facturacion' del centro
+        // Avisar a 'facturacion' del centro
         $factUsers = Notify::usersByRoleAndCenter('facturacion', $orden->id_centrotrabajo);
         Notify::send($factUsers, new OtAutorizadaParaFacturacion($orden));
-
-        // Notificar a facturación con Notifier
-        Notifier::toRoleInCentro(
-            'facturacion',
-            $orden->id_centrotrabajo,
-            'OT autorizada por cliente',
-            "La OT #{$orden->id} está lista para facturar.",
-            route('facturas.createFromOrden',$orden->id)
-        );
 
         $this->act('ordenes')
             ->performedOn($orden)

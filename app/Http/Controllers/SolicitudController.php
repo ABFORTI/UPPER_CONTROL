@@ -6,6 +6,7 @@ use App\Models\CentroTrabajo;
 use App\Models\Solicitud;
 use App\Models\ServicioEmpresa;
 use Illuminate\Http\Request;
+use Carbon\Carbon;
 use Inertia\Inertia;
 use App\Services\Notifier;
 use Illuminate\Support\Facades\DB;
@@ -27,12 +28,14 @@ class SolicitudController extends Controller
             'folio'    => $req->string('folio')->toString(),
             'desde'    => $req->date('desde'),
             'hasta'    => $req->date('hasta'),
+            'year'     => $req->integer('year') ?: null,
+            'week'     => $req->integer('week') ?: null,
         ];
 
         $q = Solicitud::with(['servicio','centro'])
-            ->when(!$u->hasAnyRole(['admin','facturacion','calidad']),
+            ->when(!$u->hasAnyRole(['admin','facturacion','calidad','control','comercial']),
                 fn($qq) => $qq->where('id_centrotrabajo', $u->centro_trabajo_id))
-            ->when($u->hasAnyRole(['facturacion','calidad']) && !$u->hasRole('admin'), function($qq) use ($u) {
+            ->when($u->hasAnyRole(['facturacion','calidad','control','comercial']) && !$u->hasRole('admin'), function($qq) use ($u) {
                 $ids = $this->allowedCentroIds($u);
                 if (!empty($ids)) { $qq->whereIn('id_centrotrabajo', $ids); }
             })
@@ -43,26 +46,78 @@ class SolicitudController extends Controller
             ->when($filters['desde'] && $filters['hasta'], fn($qq)=>$qq->whereBetween(
                 'created_at', [$filters['desde']->startOfDay(), $filters['hasta']->endOfDay()]
             ))
+            ->when($filters['year'] && $filters['week'], function($qq) use ($filters) {
+                $qq->whereRaw('YEAR(created_at) = ? AND WEEK(created_at, 1) = ?', [$filters['year'], $filters['week']]);
+            })
+            ->when($filters['year'] && !$filters['week'], function($qq) use ($filters) {
+                $qq->whereYear('created_at', $filters['year']);
+            })
             ->orderByDesc('id');
 
         $data = $q->paginate(10)->withQueryString();
 
+        $paginator = $q->with(['servicio','centro','cliente','area','archivos'])->paginate(10)->withQueryString();
+        // Transform each item to include a formatted 'fecha' field expected by the frontend
+        $paginator->getCollection()->transform(function($s) {
+            // Mostrar exactamente lo guardado en BD (sin conversión de huso). Se formatea una sola vez a 'Y-m-d H:i'.
+            $raw = $s->getRawOriginal('created_at');
+            $fecha = null; $fechaHumana = null; $fechaIso = null;
+            if ($raw) {
+                try {
+                    $dt = \Carbon\Carbon::parse($raw); // sin tz explícita
+                    $fecha = $dt->format('Y-m-d H:i');
+                    $fechaHumana = $dt->diffForHumans();
+                    $fechaIso = $dt->toIso8601String();
+                } catch (\Throwable $e) {
+                    $fecha = substr($raw, 0, 16); // fallback: yyyy-mm-dd hh:mm
+                }
+            }
+
+            return [
+                'id' => $s->id,
+                'folio' => $s->folio,
+                'producto' => $s->descripcion ?? null,
+                'cliente' => ['name' => $s->cliente?->name ?? null],
+                'servicio' => ['nombre' => $s->servicio?->nombre ?? null],
+                'centro' => ['nombre' => $s->centro?->nombre ?? null],
+                'area' => ['nombre' => $s->area?->nombre ?? null],
+                'cantidad' => $s->cantidad,
+                'archivos' => $s->archivos ?? [],
+                'estatus' => $s->estatus,
+                'fecha' => $fecha,
+                'fecha_humana' => $fechaHumana,
+                'fecha_iso' => $fechaIso,
+                'created_at_raw' => $raw,
+            ];
+        });
+
         return Inertia::render('Solicitudes/Index', [
-            'data' => $q->with(['servicio','centro','cliente'])->paginate(10)->withQueryString(),
-            'filters' => $req->only(['estatus','servicio','folio','desde','hasta']),
+            'data' => $paginator,
+            'filters' => $req->only(['estatus','servicio','folio','desde','hasta','year','week']),
             'servicios'=> ServicioEmpresa::select('id','nombre')->orderBy('nombre')->get(),
             'urls' => ['index' => route('solicitudes.index')],
-            ]);
+        ]);
     }
 
     public function create()
     {
         /** @var \App\Models\User $u */
         $u = \Illuminate\Support\Facades\Auth::user();
+        
+        // Verificar bloqueo por OTs vencidas sin autorizar
+        $bloqueo = $this->verificarBloqueoOTsVencidas($u);
+        if ($bloqueo) {
+            return Inertia::render('Solicitudes/Bloqueada', [
+                'mensaje' => $bloqueo['mensaje'],
+                'ordenes_vencidas' => $bloqueo['ordenes'],
+                'tiempo_limite' => $bloqueo['tiempo_limite_texto'],
+            ]);
+        }
+        
         $servicios = \App\Models\ServicioEmpresa::select('id','nombre','usa_tamanos')
             ->orderBy('nombre')->get();
 
-        $canChooseCentro = $u && $u->hasAnyRole(['admin','facturacion','calidad']);
+    $canChooseCentro = $u && $u->hasAnyRole(['admin','facturacion','calidad','control','comercial']);
         $selectedCentroId = (int)($u->centro_trabajo_id ?? 0) ?: null;
 
         $centros = collect();
@@ -132,16 +187,33 @@ class SolicitudController extends Controller
             'selectedCentroId'  => $selectedCentroId,
             'iva'               => 0.16,
             'urls' => ['store' => route('solicitudes.store')],
+            'areas'             => $u->centro_trabajo_id 
+                ? \App\Models\Area::where('id_centrotrabajo', $u->centro_trabajo_id)->activas()->orderBy('nombre')->get()
+                : [],
+            'areasPorCentro'    => $canChooseCentro 
+                ? \App\Models\Area::activas()->get()->groupBy('id_centrotrabajo')->map(function($items) {
+                    return $items->sortBy('nombre')->values();
+                  })
+                : [],
         ]);
     }
 
     public function store(Request $req)
     {
+        $u = $req->user();
+        
+        // Verificar bloqueo por OTs vencidas sin autorizar
+        $bloqueo = $this->verificarBloqueoOTsVencidas($u);
+        if ($bloqueo) {
+            return back()->withErrors([
+                'bloqueo' => $bloqueo['mensaje']
+            ])->withInput();
+        }
+        
         $serv = ServicioEmpresa::findOrFail($req->id_servicio);
-        $u    = $req->user();
 
         // Determinar centro a usar
-        $canChooseCentro = $u && $u->hasAnyRole(['admin','facturacion','calidad']);
+    $canChooseCentro = $u && $u->hasAnyRole(['admin','facturacion','calidad','control','comercial']);
         $centroId = null;
         if ($canChooseCentro) {
             $req->validate(['id_centrotrabajo' => ['required','integer','exists:centros_trabajo,id']]);
@@ -157,7 +229,7 @@ class SolicitudController extends Controller
         }
 
         // Para roles no privilegiados, deben tener centro_trabajo_id asignado
-        if (!($u && $u->hasAnyRole(['admin','facturacion','calidad'])) && (!$u || !$u->centro_trabajo_id)) {
+    if (!($u && $u->hasAnyRole(['admin','facturacion','calidad','control','comercial'])) && (!$u || !$u->centro_trabajo_id)) {
             return back()->withErrors([
                 'centro' => 'Tu usuario no tiene un centro de trabajo asignado. Pide a un administrador que lo configure.'
             ])->withInput();
@@ -206,6 +278,7 @@ class SolicitudController extends Controller
                     'id_centrotrabajo' => $centroId,
                     'id_servicio'      => $serv->id,
                     'descripcion'      => $req->descripcion,
+                    // 'id_area' intentionally omitted: area will be assigned later when creating the OT by coordinador
                     'cantidad'         => $total,
                     'subtotal'         => $subtotal,
                     'iva'              => $iva,
@@ -249,6 +322,7 @@ class SolicitudController extends Controller
                         'id_centrotrabajo' => $centroId,
                         'id_servicio'      => $serv->id,
                         'descripcion'      => $req->descripcion,
+                        'id_area'          => $req->id_area,
                         'cantidad'         => (int)$req->cantidad,
                         'subtotal'         => $subtotal,
                         'iva'              => $iva,
@@ -277,6 +351,25 @@ class SolicitudController extends Controller
             throw $lastException ?? new \RuntimeException('No fue posible generar un folio único');
         }
 
+        // Manejar archivos adjuntos
+        if ($req->hasFile('archivos')) {
+            $archivos = $req->file('archivos');
+            // Filtrar archivos válidos (a veces vienen elementos vacíos en el array)
+            if (is_array($archivos)) {
+                foreach ($archivos as $file) {
+                    if ($file && $file->isValid()) {
+                        $path = $file->store('solicitudes/' . $sol->id, 'public');
+                        $sol->archivos()->create([
+                            'path'             => $path,
+                            'nombre_original'  => $file->getClientOriginalName(),
+                            'mime'             => $file->getClientMimeType(),
+                            'size'             => $file->getSize(),
+                            'subtipo'          => 'adjunto',
+                        ]);
+                    }
+                }
+            }
+        }
 
         // Notificar a coordinador del centro
         Notifier::toRoleInCentro(
@@ -319,8 +412,18 @@ class SolicitudController extends Controller
     {
         $this->authorize('aprobar', $solicitud);
         $this->authorizeCentro($solicitud->id_centrotrabajo);
+        $req->validate([
+            'motivo' => ['required','string','min:3','max:2000']
+        ]);
 
-    $solicitud->update(['estatus'=>'rechazada','aprobada_por'=>Auth::id(),'aprobada_at'=>now()]);
+        $motivo = $req->input('motivo');
+
+        $solicitud->update([
+            'estatus' => 'rechazada',
+            'aprobada_por' => Auth::id(),
+            'aprobada_at' => now(),
+            'motivo_rechazo' => $motivo,
+        ]);
         $this->act('solicitudes')
             ->performedOn($solicitud)
             ->event('rechazar')
@@ -379,7 +482,7 @@ class SolicitudController extends Controller
 
     public function show(Request $req, Solicitud $solicitud)
     {
-    $solicitud->load(['cliente','servicio','centro','archivos','tamanos','ordenes']);
+    $solicitud->load(['cliente','servicio','centro','area','archivos','tamanos','ordenes']);
         $user = $req->user();
 
         $canAprobar = $user->hasAnyRole(['coordinador','admin'])
@@ -462,5 +565,176 @@ class SolicitudController extends Controller
             'iva'       => $iva,
             'total'     => $total,
         ];
+    }
+
+    /**
+     * Verifica si hay OTs validadas por Calidad sin autorizar que hayan excedido el tiempo límite.
+     * Si encuentra alguna en el centro del usuario, bloquea la creación de nuevas solicitudes.
+     * 
+     * IMPORTANTE: El tiempo se cuenta desde que CALIDAD validó la OT, no desde que se completó.
+     * Esto permite que el cliente tenga el tiempo completo para revisar después de la validación.
+     * 
+     * @param \App\Models\User $user
+     * @return array|null ['mensaje' => string, 'ordenes' => array, 'tiempo_limite_texto' => string] o null si no hay bloqueo
+     */
+    private function verificarBloqueoOTsVencidas($user): ?array
+    {
+        // Solo aplicar a usuarios tipo cliente (no admin/coordinador/etc)
+        if (!$user || $user->hasAnyRole(['admin', 'coordinador', 'facturacion', 'calidad'])) {
+            return null;
+        }
+
+        // Verificar si el feature está habilitado
+        if (!config('business.bloquear_solicitudes_por_ots_vencidas', true)) {
+            return null;
+        }
+
+        $centroId = (int)($user->centro_trabajo_id ?? 0);
+        if (!$centroId) {
+            return null; // Sin centro asignado, no aplicar bloqueo
+        }
+
+    // Obtener tiempo límite en minutos desde config
+    // PARA PRUEBAS: 1 minuto
+    // PARA PRODUCCIÓN: 4320 minutos (72 horas)
+    $timeoutMinutos = (int)config('business.ot_autorizacion_timeout_minutos', 1);
+
+        // Buscar OTs que:
+        // 1. Estén en estado 'completada' (aún no autorizadas por cliente)
+        // 2. Tengan calidad_resultado = 'validado' (ya revisadas por calidad)
+        // 3. No tengan autorización del cliente
+        $otsValidadas = \App\Models\Orden::where('id_centrotrabajo', $centroId)
+            ->where('estatus', 'completada')
+            ->where('calidad_resultado', 'validado')
+            ->whereDoesntHave('aprobaciones', function($q) {
+                $q->where('tipo', 'cliente')->where('resultado', 'autorizado');
+            })
+            ->with('solicitud:id,folio')
+            ->get(['id', 'id_solicitud']);
+
+        if ($otsValidadas->isEmpty()) {
+            return null; // No hay OTs validadas pendientes
+        }
+
+        // Filtrar solo las que hayan excedido el tiempo DESDE LA VALIDACIÓN DE CALIDAD
+        // NOTE: aquí usamos tiempo "efectivo" que EXCLUYE sábados y domingos (se pausa el conteo)
+        $otsVencidas = $otsValidadas->filter(function($ot) use ($timeoutMinutos) {
+            // Buscar el registro de actividad cuando calidad validó
+            $activityLog = \Spatie\Activitylog\Models\Activity::where('log_name', 'ordenes')
+                ->where('subject_type', \App\Models\Orden::class)
+                ->where('subject_id', $ot->id)
+                ->where('event', 'calidad_validar')
+                ->orderBy('created_at', 'desc')
+                ->first();
+
+            if (!$activityLog) {
+                return false; // No se encontró registro de validación, no bloquear
+            }
+
+            $validadaEn = Carbon::parse($activityLog->created_at);
+            $ahora = Carbon::now();
+
+            // Calcular minutos efectivos excluyendo sábados y domingos
+            $minutosTranscurridos = $this->businessMinutesBetween($validadaEn, $ahora);
+
+            return $minutosTranscurridos >= $timeoutMinutos;
+        });
+
+        if ($otsVencidas->isEmpty()) {
+            return null; // No hay bloqueo (las OTs validadas aún están dentro del tiempo)
+        }
+
+        // Construir mensaje de bloqueo
+        $tiempoTexto = $timeoutMinutos >= 60 
+            ? round($timeoutMinutos / 60) . ' hora(s)'
+            : $timeoutMinutos . ' minuto(s)';
+
+        $ordenesDetalle = $otsVencidas->map(function($ot) use ($timeoutMinutos) {
+            // Obtener la fecha de validación de calidad
+            $activityLog = \Spatie\Activitylog\Models\Activity::where('log_name', 'ordenes')
+                ->where('subject_type', \App\Models\Orden::class)
+                ->where('subject_id', $ot->id)
+                ->where('event', 'calidad_validar')
+                ->orderBy('created_at', 'desc')
+                ->first();
+
+            $validadaEn = $activityLog ? Carbon::parse($activityLog->created_at) : Carbon::parse($ot->updated_at);
+            $transcurrido = $this->businessMinutesBetween($validadaEn, Carbon::now());
+            $folio = $ot->solicitud ? $ot->solicitud->folio : 'OT-' . $ot->id;
+            
+            return [
+                'id' => $ot->id,
+                'folio' => $folio,
+                'validada_hace' => $this->formatearTiempo($transcurrido),
+                'url' => route('ordenes.show', $ot->id),
+            ];
+        })->toArray();
+
+        $mensaje = sprintf(
+            'No puedes crear nuevas solicitudes. Hay %d orden(es) de trabajo validada(s) por Calidad hace más de %s sin autorización del cliente. Por favor, autoriza las órdenes pendientes antes de continuar.',
+            $otsVencidas->count(),
+            $tiempoTexto
+        );
+
+        return [
+            'mensaje' => $mensaje,
+            'ordenes' => $ordenesDetalle,
+            'tiempo_limite_texto' => $tiempoTexto,
+        ];
+    }
+
+    /**
+     * Formatea minutos en texto legible
+     */
+    private function formatearTiempo(int $minutos): string
+    {
+        if ($minutos < 60) {
+            return $minutos . ' minuto(s)';
+        }
+        if ($minutos < 1440) { // < 24h
+            $horas = round($minutos / 60, 1);
+            return $horas . ' hora(s)';
+        }
+        $dias = round($minutos / 1440, 1);
+        return $dias . ' día(s)';
+    }
+
+    /**
+     * Calcula la cantidad de minutos transcurridos entre dos instantes EXCLUYENDO
+     * sábados y domingos. El conteo incluye cualquier hora del día mientras el día
+     * sea lunes-viernes; si la ventana cruza sábado/domingo, esos minutos se omiten.
+     *
+     * @param \Carbon\Carbon|string $inicio
+     * @param \Carbon\Carbon|string $fin
+     * @return int minutos efectivos
+     */
+    public function businessMinutesBetween($inicio, $fin): int
+    {
+        $start = $inicio instanceof Carbon ? $inicio->copy() : Carbon::parse($inicio);
+        $end = $fin instanceof Carbon ? $fin->copy() : Carbon::parse($fin);
+        if ($end->lte($start)) return 0;
+
+        $total = 0;
+
+        $currentDay = $start->copy()->startOfDay();
+        $lastDay = $end->copy()->startOfDay();
+
+        while ($currentDay->lte($lastDay)) {
+            if ($currentDay->isWeekend()) {
+                $currentDay->addDay();
+                continue;
+            }
+
+            $dayStartTs = max($start->getTimestamp(), $currentDay->getTimestamp());
+            $dayEndTs = min($end->getTimestamp(), $currentDay->copy()->addDay()->getTimestamp());
+
+            if ($dayEndTs > $dayStartTs) {
+                $total += ($dayEndTs - $dayStartTs) / 60.0;
+            }
+
+            $currentDay->addDay();
+        }
+
+        return (int) round($total);
     }
 }

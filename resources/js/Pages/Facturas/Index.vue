@@ -6,14 +6,21 @@ const props = defineProps({
   items: { type: Array, default: () => [] },
   filtros: { type: Object, default: () => ({}) },
   urls: { type: Object, default: () => ({}) },
-  estatuses: { type: Array, default: () => [] }
+  estatuses: { type: Array, default: () => [] },
+  centros: { type: Array, default: () => [] }
 })
 
 // Filtros
 const sel = ref(props.filtros?.estatus || '')
+const centroSel = ref(props.filtros?.centro || '')
+const yearSel = ref(props.filtros?.year || new Date().getFullYear())
+const weekSel = ref(props.filtros?.week || '')
 function applyFilter(){
   const params = {}
   if (sel.value) params.estatus = sel.value
+  if (centroSel.value) params.centro = centroSel.value
+  if (yearSel.value) params.year = yearSel.value
+  if (weekSel.value) params.week = weekSel.value
   currentPage.value = 1
   router.get(props.urls.base, params, { preserveState: true, replace: true })
 }
@@ -22,20 +29,22 @@ function applyFilter(){
 // Utilidades UI
 function badgeClass(estatus){
   const e = String(estatus||'').toLowerCase()
-  if (e === 'pagado') return 'bg-green-100 text-green-700'
-  if (e === 'facturado') return 'bg-emerald-100 text-emerald-700'
-  if (e === 'por_pagar') return 'bg-amber-100 text-amber-700'
+  if (e === 'pagado') return 'bg-green-100 text-green-700'        // Pagado: verde
+  if (e === 'por_pagar') return 'bg-amber-100 text-amber-700'      // Por pagar: ámbar
+  if (e === 'facturado') return 'bg-cyan-100 text-cyan-700'        // Facturado: cian para distinguir
   if (e === 'autorizada_cliente') return 'bg-blue-100 text-blue-700'
+  if (e === 'sin_factura') return 'bg-slate-100 text-slate-700'
   return 'bg-gray-100 text-gray-700'
 }
 
 // Exportar/Copy (cliente)
 function toCsv(items){
-  const headers = ['ID','OT','Servicio','Centro','Total','Estatus','Folio','Fecha']
+  const headers = ['ID','OT','Servicio','Producto','Centro','Total','Estatus','Folio','Fecha']
   const rows = items.map(f => [
     f.id,
     `OT ${f.orden_id ?? ''}`,
     f.servicio ?? '',
+    f.descripcion_general ?? '',
     f.centro ?? '',
     f.total ?? '',
     f.estatus ?? '',
@@ -57,7 +66,7 @@ function downloadExcel(){
 }
 async function copyTable(){
   try{
-    const tsv = (props.items||[]).map(f => [f.id, `OT ${f.orden_id??''}`, f.servicio??'', f.centro??'', f.total??'', f.estatus??'', f.folio??'', (f.created_at||'').slice(0,16)].join('\t')).join('\n')
+    const tsv = (props.items||[]).map(f => [f.id, `OT ${f.orden_id??''}`, f.servicio??'', f.descripcion_general??'', f.centro??'', f.total??'', f.estatus??'', f.folio??'', (f.created_at||'').slice(0,16)].join('\t')).join('\n')
     await navigator.clipboard.writeText(tsv)
     // opcional: feedback simple
     // alert('Copiado al portapapeles')
@@ -87,6 +96,7 @@ function goToPage(p){
   currentPage.value = p
   const params = {}
   if (sel.value) params.estatus = sel.value
+  if (centroSel.value) params.centro = centroSel.value
   params.page = String(currentPage.value)
   router.get(props.urls.base, params, { preserveState: true, replace: true })
 }
@@ -107,10 +117,26 @@ function goToPage(p){
         </div>
 
         <div class="flex flex-wrap items-center gap-2 w-full lg:w-auto">
+          <!-- Centro -->
+          <select v-model="centroSel" @change="applyFilter" class="border p-2 rounded min-w-[180px]">
+            <option value="">Todos los centros</option>
+            <option v-for="c in (props.centros||[])" :key="c.id" :value="c.id">{{ c.nombre }}</option>
+          </select>
+          <!-- Año -->
+          <select v-model="yearSel" @change="applyFilter" class="border p-2 rounded min-w-[100px]">
+            <option v-for="y in [yearSel-2, yearSel-1, yearSel, yearSel+1]" :key="y" :value="y">{{ y }}</option>
+          </select>
+          
+          <!-- Semana -->
+          <select v-model="weekSel" @change="applyFilter" class="border p-2 rounded min-w-[120px]">
+            <option value="">Periodos</option>
+            <option v-for="w in 53" :key="w" :value="w">Periodo {{ w }}</option>
+          </select>
+          
           <!-- Filtros de estatus (píldoras) -->
           <div class="flex flex-wrap items-center gap-2">
-            <button @click="sel=''; applyFilter()" :class="['px-3 py-1 rounded-full text-sm border', sel==='' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-700 border-slate-300']">Todos</button>
-            <button v-for="e in estatuses" :key="e" @click="sel=e; applyFilter()" :class="['px-3 py-1 rounded-full text-sm border capitalize', sel===e ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-700 border-slate-300']">{{ e }}</button>
+            <button @click="sel=''; applyFilter()" :class="['px-4 py-2 rounded-full text-base border', sel==='' ? 'text-white border-[#1A73E8]' : 'bg-white text-slate-700 border-slate-300']" :style="sel==='' ? 'background-color: #1A73E8' : ''">Todos</button>
+            <button v-for="e in estatuses" :key="e" @click="sel=e; applyFilter()" :class="['px-4 py-2 rounded-full text-base border capitalize', sel===e ? 'text-white border-[#1A73E8]' : 'bg-white text-slate-700 border-slate-300']" :style="sel===e ? 'background-color: #1A73E8' : ''">{{ e }}</button>
           </div>
         </div>
       </div>
@@ -135,8 +161,16 @@ function goToPage(p){
         <tbody>
           <tr v-for="f in pageItems" :key="f.id" class="border-t even:bg-slate-50 hover:bg-slate-100/60">
             <td class="px-4 py-3 font-mono">#{{ f.id }}</td>
-            <td class="px-4 py-3">OT #{{ f.orden_id }}</td>
-            <td class="px-4 py-3">{{ f.servicio || '—' }}</td>
+            <td class="px-4 py-3">
+              <template v-if="f.ots_label">OTs: {{ f.ots_label }}</template>
+              <template v-else>OT #{{ f.orden_id }}</template>
+            </td>
+            <td class="px-4 py-3">
+              <div>{{ f.servicio || '—' }}</div>
+              <div v-if="f.descripcion_general" class="text-sm text-purple-600 font-medium mt-0.5">
+                {{ f.descripcion_general }}
+              </div>
+            </td>
             <td class="px-4 py-3">{{ f.centro || '—' }}</td>
             <td class="px-4 py-3 text-right">${{ f.total }}</td>
             <td class="px-4 py-3">

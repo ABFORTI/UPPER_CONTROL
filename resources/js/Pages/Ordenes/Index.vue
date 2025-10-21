@@ -6,13 +6,38 @@ const props = defineProps({
   data: Object,
   filters: Object,
   servicios: Array,
+  centros: Array,
   urls: Object
 })
 
 const rows = computed(()=> props.data?.data ?? [])
 
+// Selección múltiple para facturación
+const selected = ref(new Set())
+const anySelected = computed(()=> selected.value.size > 0)
+function toggleSelection(id, checked){
+  if(checked) selected.value.add(id); else selected.value.delete(id)
+}
+function clearSelection(){ selected.value.clear() }
+
+// Helper para saber si una OT es seleccionable para facturar
+function isSelectable(o){
+  const sinFactura = !o.facturacion || o.facturacion === 'sin_factura'
+  return o.estatus === 'autorizada_cliente' && sinFactura
+}
+
+// Ir a pantalla CreateBatch con las OTs seleccionadas
+function openBatch(){
+  const ids = Array.from(selected.value)
+  if (ids.length === 0) return
+  router.get(props.urls?.facturas_batch_create, { ids: ids.join(',') })
+}
+
 // Filtros unificados por estatus (píldoras) con conjunto fijo
 const sel = ref(props.filters?.estatus || '')
+const centroSel = ref(props.filters?.centro || '')
+const yearSel = ref(props.filters?.year || new Date().getFullYear())
+const weekSel = ref(props.filters?.week || '')
 const estatuses = computed(() => [
   'generada',
   'asignada',
@@ -23,30 +48,36 @@ const estatuses = computed(() => [
 function applyFilter(){
   const params = {}
   if (sel.value) params.estatus = sel.value
+  if (centroSel.value) params.centro = centroSel.value
+  if (yearSel.value) params.year = yearSel.value
+  if (weekSel.value) params.week = weekSel.value
   router.get(props.urls.index, params, { preserveState: true, replace: true })
 }
 
 // Badge para estatus de facturación
 function factBadgeClass(v){
   const e = String(v||'').toLowerCase()
-  if (e === 'pagado') return 'bg-green-100 text-green-700'
-  if (e === 'facturado') return 'bg-emerald-100 text-emerald-700'
-  if (e === 'por_pagar') return 'bg-amber-100 text-amber-700'
+  if (e === 'pagado') return 'bg-green-100 text-green-700'       // Pagado: verde
+  if (e === 'por_pagar') return 'bg-amber-100 text-amber-700'     // Por pagar: ámbar
+  if (e === 'facturado') return 'bg-cyan-100 text-cyan-700'       // Facturado: cian para diferenciar de verde
+  if (e === 'sin_factura') return 'bg-slate-100 text-slate-700'   // Sin factura: gris azulado
   return 'bg-gray-100 text-gray-700'
 }
 
 // Exportar/Copy (cliente)
 function toCsv(items){
-  const headers = ['ID','Servicio','Centro','Estatus','Calidad','Facturación','TL','Fecha']
+  const headers = ['ID','Producto','Servicio','Centro','Área','Estatus','Calidad','Facturación','TL','Fecha']
   const rows = items.map(o => [
     o.id,
+    o.producto || '-',
     o.servicio?.nombre || '-',
     o.centro?.nombre || '-',
+    o.area?.nombre || '-',
     o.estatus || '-',
     o.calidad_resultado || '-',
     o.facturacion || '-',
     o.team_leader?.name || '—',
-    o.created_at || ''
+    o.fecha || ''
   ])
   const csv = [headers, ...rows].map(r => r.map(v => `"${String(v??'').replaceAll('"','""')}"`).join(',')).join('\n')
   return csv
@@ -63,7 +94,7 @@ function downloadExcel(){
 }
 async function copyTable(){
   try{
-    const tsv = (rows.value||[]).map(o => [o.id, o.servicio?.nombre||'-', o.centro?.nombre||'-', o.estatus||'-', o.calidad_resultado||'-', o.facturacion||'-', o.team_leader?.name||'—', o.created_at||''].join('\t')).join('\n')
+  const tsv = (rows.value||[]).map(o => [o.id, o.servicio?.nombre||'-', o.centro?.nombre||'-', o.area?.nombre||'-', o.estatus||'-', o.calidad_resultado||'-', o.facturacion||'-', o.team_leader?.name||'—', o.fecha||''].join('\t')).join('\n')
     await navigator.clipboard.writeText(tsv)
   }catch(e){ console.warn('No se pudo copiar:', e) }
 }
@@ -79,12 +110,30 @@ async function copyTable(){
         <div class="flex items-center gap-2">
           <button @click="downloadExcel" class="px-4 py-2 rounded text-white" style="background:#22c55e">Excel</button>
           <button @click="copyTable" class="px-4 py-2 rounded text-white" style="background:#64748b">Copiar</button>
+          <button v-if="anySelected" @click="openBatch" class="px-4 py-2 rounded text-white" style="background:#1A73E8">Generar factura</button>
         </div>
 
         <div class="flex flex-wrap items-center gap-2 w-full lg:w-auto justify-end">
+          <!-- Centro -->
+          <select v-model="centroSel" @change="applyFilter" class="border p-2 rounded min-w-[180px]">
+            <option value="">Todos los centros</option>
+            <option v-for="c in (props.centros||[])" :key="c.id" :value="c.id">{{ c.nombre }}</option>
+          </select>
+
+          <!-- Año -->
+          <select v-model="yearSel" @change="applyFilter" class="border p-2 rounded min-w-[100px]">
+            <option v-for="y in [yearSel-2, yearSel-1, yearSel, yearSel+1]" :key="y" :value="y">{{ y }}</option>
+          </select>
+          
+          <!-- Semana -->
+          <select v-model="weekSel" @change="applyFilter" class="border p-2 rounded min-w-[120px]">
+            <option value="">Periodos</option>
+            <option v-for="w in 53" :key="w" :value="w">Periodo {{ w }}</option>
+          </select>
+          
           <div class="flex flex-wrap items-center gap-2">
-            <button @click="sel=''; applyFilter()" :class="['px-3 py-1 rounded-full text-sm border', sel==='' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-700 border-slate-300']">Todos</button>
-            <button v-for="e in estatuses" :key="e" @click="sel=e; applyFilter()" :class="['px-3 py-1 rounded-full text-sm border capitalize', sel===e ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-700 border-slate-300']">{{ e }}</button>
+            <button @click="sel=''; applyFilter()" :class="['px-4 py-2 rounded-full text-base border', sel==='' ? 'text-white border-[#1A73E8]' : 'bg-white text-slate-700 border-slate-300']" :style="sel==='' ? 'background-color: #1A73E8' : ''">Todos</button>
+            <button v-for="e in estatuses" :key="e" @click="sel=e; applyFilter()" :class="['px-4 py-2 rounded-full text-base border capitalize', sel===e ? 'text-white border-[#1A73E8]' : 'bg-white text-slate-700 border-slate-300']" :style="sel===e ? 'background-color: #1A73E8' : ''">{{ e }}</button>
           </div>
         </div>
       </div>
@@ -95,9 +144,12 @@ async function copyTable(){
           <table class="min-w-full text-base">
             <thead class="bg-slate-800 text-white uppercase text-sm">
               <tr>
+            <th class="p-2"></th>
             <th class="p-2">ID</th>
+            <th class="p-2">Producto</th>
             <th class="p-2">Servicio</th>
             <th class="p-2">Centro</th>
+            <th class="p-2">Área</th>
             <th class="p-2">Estatus</th>
             <th class="p-2">Calidad</th>
             <th class="p-2">Facturación</th>
@@ -108,24 +160,69 @@ async function copyTable(){
             </thead>
             <tbody>
               <tr v-for="o in rows" :key="o.id" class="border-t even:bg-slate-50 hover:bg-slate-100/60">
+                <td class="px-2 py-3">
+                  <input
+                    type="checkbox"
+                    :disabled="!isSelectable(o)"
+                    :class="!isSelectable(o)
+                      ? 'opacity-40 cursor-not-allowed accent-gray-300'
+                      : 'cursor-pointer accent-[#1A73E8] hover:accent-[#1557b0]'
+                    "
+                    :title="!isSelectable(o) ? 'No seleccionable: ya facturada o sin autorización del cliente' : 'Seleccionar para facturar'"
+                    :checked="selected.has(o.id)"
+                    @change="toggleSelection(o.id, $event.target.checked)"
+                  />
+                </td>
                 <td class="px-4 py-3 font-mono">#{{ o.id }}</td>
+                <td class="px-4 py-3">{{ o.producto || '-' }}</td>
                 <td class="px-4 py-3">{{ o.servicio?.nombre }}</td>
                 <td class="px-4 py-3">{{ o.centro?.nombre }}</td>
-                <td class="px-4 py-3">{{ o.estatus }}</td>
-                <td class="px-4 py-3">{{ o.calidad_resultado }}</td>
+                <td class="px-4 py-3">{{ o.area?.nombre || '-' }}</td>
                 <td class="px-4 py-3">
-                  <span class="px-2 py-1 rounded text-xs font-medium" :class="factBadgeClass(o.facturacion)">{{ o.facturacion }}</span>
+                  <span class="px-3 py-1.5 rounded-full text-xs font-semibold uppercase tracking-wide"
+                        :class="{
+                          'bg-blue-100 text-blue-700': o.estatus==='generada',
+                          'bg-indigo-100 text-indigo-700': o.estatus==='asignada',
+                          'bg-yellow-100 text-yellow-700': o.estatus==='en_proceso',
+                          'bg-green-100 text-green-700': o.estatus==='completada',
+                          'bg-emerald-100 text-emerald-700': o.estatus==='autorizada_cliente'
+                        }">{{ o.estatus }}</span>
+                </td>
+                <td class="px-4 py-3">
+                  <span class="px-3 py-1.5 rounded-full text-xs font-semibold uppercase tracking-wide"
+                        :class="{
+                          'bg-amber-100 text-amber-700': o.calidad_resultado==='pendiente',
+                          'bg-green-100 text-green-700': o.calidad_resultado==='validado',
+                          'bg-red-100 text-red-700': o.calidad_resultado==='rechazado'
+                        }">{{ o.calidad_resultado }}</span>
+                </td>
+                <td class="px-4 py-3">
+                  <span class="px-3 py-1.5 rounded-full text-xs font-semibold uppercase tracking-wide" :class="factBadgeClass(o.facturacion)">{{ o.facturacion }}</span>
                 </td>
                 <td class="px-4 py-3">{{ o.team_leader?.name || '—' }}</td>
-                <td class="px-4 py-3">{{ o.created_at }}</td>
-                <td class="px-4 py-3 space-x-2">
-                  <a :href="o.urls.show" class="text-blue-600 underline">Ver</a>
-                  <span v-if="o.estatus==='completada' && o.calidad_resultado==='pendiente'">
-                    · <a :href="o.urls.calidad" class="text-emerald-700 underline">Calidad</a>
-                  </span>
-                  <span v-if="o.estatus==='autorizada_cliente'">
-                    · <a :href="o.urls.facturar" class="text-indigo-700 underline">Facturar</a>
-                  </span>
+                <td class="px-4 py-3">{{ o.fecha }}</td>
+                <td class="px-4 py-3">
+                  <div class="flex items-center gap-2">
+                    <a :href="o.urls.show" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg transition-colors">
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                      </svg>
+                      Ver
+                    </a>
+                    <a v-if="o.estatus==='completada' && o.calidad_resultado==='pendiente'" :href="o.urls.calidad" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium rounded-lg transition-colors">
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                      </svg>
+                      Calidad
+                    </a>
+                    <a v-if="o.estatus==='autorizada_cliente'" :href="o.urls.facturar" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-lg transition-colors">
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                      </svg>
+                      Facturar
+                    </a>
+                  </div>
                 </td>
               </tr>
             </tbody>
@@ -142,4 +239,6 @@ async function copyTable(){
       </div>
     </div>
   </div>
+
+  
 </template>

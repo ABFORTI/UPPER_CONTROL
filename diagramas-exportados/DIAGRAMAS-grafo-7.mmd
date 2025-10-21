@@ -1,0 +1,25 @@
+﻿graph LR
+    Coord([👤 Coordinador])
+    Admin([👤 Admin])
+    Fact([👤 Facturación])
+    Todos([👥 Todos<br/>los Roles])
+    
+    subgraph " Dashboard y Reportes "
+        UC1[Ver<br/>Dashboard]
+        UC2[Exportar OTs<br/>a Excel]
+        UC3[Exportar Facturas<br/>a Excel]
+        UC4[Ver<br/>Notificaciones]
+    end
+    
+    Coord --> UC1
+    Admin --> UC1
+    Admin --> UC2
+    Admin --> UC3
+    Fact --> UC1
+    
+    Todos --> UC4
+    
+    style Coord fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    style Admin fill:#ffebee,stroke:#d32f2f,stroke-width:2px
+    style Fact fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    style Todos fill:#e0f2f1,stroke:#00796b,stroke-width:2px

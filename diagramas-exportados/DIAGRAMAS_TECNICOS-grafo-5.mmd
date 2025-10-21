@@ -1,0 +1,48 @@
+﻿graph TB
+    subgraph Triggers["🎯 Eventos que Disparan Notificaciones"]
+        T1[OT Asignada a TL (Team Leader)]
+        T2[OT Lista para Calidad]
+        T3[OT Validada para Cliente]
+        T4[Cliente Autorizó OT]
+        T5[Factura Generada]
+        T6[Backup Exitoso/Fallido]
+        T7[Recordatorio Validación]
+    end
+    
+    subgraph NotificationSystem["🔔 Sistema de Notificaciones"]
+        NS1[Crear Notification]
+        NS1 --> NS2{Channels}
+        NS2 -->|Database| NS3[Guardar en BD]
+        NS2 -->|Mail| NS4[Enviar Email]
+    end
+    
+    subgraph Storage["💾 Almacenamiento"]
+        DB[(notifications table)]
+        Email[📧 Mail Queue]
+    end
+    
+    subgraph Frontend["💻 Frontend"]
+        Bell[🔔 Campana Header]
+        Bell --> Count[Badge contador]
+        Count --> List[Lista notificaciones]
+        List --> Mark[Marcar como leída]
+        List --> Action[Click → Navegar]
+    end
+    
+    T1 --> NS1
+    T2 --> NS1
+    T3 --> NS1
+    T4 --> NS1
+    T5 --> NS1
+    T6 --> NS1
+    T7 --> NS1
+    
+    NS3 --> DB
+    NS4 --> Email
+    
+    DB --> Bell
+    
+    style Triggers fill:#e8eaf6,stroke:#3f51b5
+    style NotificationSystem fill:#fff3e0,stroke:#f57c00
+    style Storage fill:#e0f2f1,stroke:#00796b
+    style Frontend fill:#fce4ec,stroke:#c2185b

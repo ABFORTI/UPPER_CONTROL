@@ -6,6 +6,7 @@ namespace App\Notifications;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Notification;
+use Illuminate\Notifications\Messages\MailMessage;
 
 class SystemEventNotification extends Notification implements ShouldQueue
 {
@@ -17,7 +18,27 @@ class SystemEventNotification extends Notification implements ShouldQueue
         public ?string $url = null
     ) {}
 
-    public function via($notifiable){ return ['database']; }
+    public function via($notifiable){ 
+        return ['database', 'mail']; 
+    }
+
+    public function toMail($notifiable): MailMessage
+    {
+        $mail = (new MailMessage)
+            ->subject('🔔 ' . $this->title)
+            ->greeting('¡Hola ' . $notifiable->name . '!')
+            ->line($this->message)
+            ->line('');
+        
+        if ($this->url) {
+            $mail->action('🔗 Ver Detalles', $this->url)
+                 ->line('');
+        }
+        
+        return $mail->line('Este es un mensaje automático del sistema.')
+                    ->salutation('Atentamente,  
+**Sistema Upper Control**');
+    }
 
     public function toDatabase($notifiable){
         return [
@@ -27,4 +48,5 @@ class SystemEventNotification extends Notification implements ShouldQueue
         ];
     }
 }
+
 

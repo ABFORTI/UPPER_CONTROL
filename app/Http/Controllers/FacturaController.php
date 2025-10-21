@@ -18,14 +18,31 @@ class FacturaController extends Controller
   public function index(Request $request)
   {
     $u = $request->user();
-    if (!$u->hasRole('admin') && !$u->hasRole('facturacion')) abort(403);
+    
+    // Cliente solo puede ver sus propias facturas
+    $isCliente = $u->hasRole('cliente');
+    
+    if (!$u->hasRole('admin') && !$u->hasRole('facturacion') && !$isCliente) {
+      abort(403);
+    }
 
     $estatus = $request->get('estatus'); // opcional
+    $centro  = $request->integer('centro') ?: null;
+    $year = $request->integer('year') ?: null;
+    $week = $request->integer('week') ?: null;
 
   // 1) Facturas existentes
-  $qFact = Factura::query()->with(['orden.servicio','orden.centro']);
-  // Restricción por centro si no es admin -> usar centros asignados de facturación
-  if (!$u->hasRole('admin')) {
+  $qFact = Factura::query()->with(['orden.servicio','orden.centro','orden.solicitud','ordenes.centro']);
+  
+  // Si es cliente, solo mostrar SUS facturas
+  if ($isCliente) {
+    $qFact->whereHas('orden.solicitud', fn($qq) => $qq->where('id_cliente', $u->id));
+  }
+
+  
+  // Restricción por centro si no es admin NI facturacion
+  // Facturación puede ver todas las facturas (como admin)
+  elseif (!$u->hasRole('admin') && !$u->hasRole('facturacion')) {
     $ids = $this->allowedCentroIds($u);
     if (!empty($ids)) {
       $qFact->whereHas('orden', fn($qq) => $qq->whereIn('id_centrotrabajo', $ids));
@@ -33,16 +50,43 @@ class FacturaController extends Controller
       $qFact->whereRaw('1=0'); // sin centros asignados => nada
     }
   }
+  // Filtro por centro explícito (si se pasa y está permitido)
+  if ($centro) {
+    if ($u->hasAnyRole(['admin','facturacion'])) {
+      $qFact->whereHas('orden', fn($qq) => $qq->where('id_centrotrabajo', $centro));
+    } else {
+      $ids = $this->allowedCentroIds($u);
+      if (in_array((int)$centro, array_map('intval',$ids), true)) {
+        $qFact->whereHas('orden', fn($qq) => $qq->where('id_centrotrabajo', $centro));
+      }
+    }
+  }
   // Si el filtro es un estatus de factura, aplicarlo
   if ($estatus && in_array($estatus, ['pendiente','facturado','por_pagar','pagado'], true)) {
     $qFact->where('estatus', $estatus);
   }
+  // Filtros de año y semana
+  if ($year && $week) {
+    $qFact->whereRaw('YEAR(created_at) = ? AND WEEK(created_at, 1) = ?', [$year, $week]);
+  } elseif ($year) {
+    $qFact->whereYear('created_at', $year);
+  }
   $facturas = $qFact->latest('id')->limit(100)->get()->map(function($f){
+    $ots = $f->ordenes?->pluck('id')->all() ?: ( $f->id_orden ? [$f->id_orden] : [] );
+    $otsLabel = empty($ots) ? null : ('#'.implode(', #', $ots));
+    $multi = is_array($ots) && count($ots) > 1;
+    // Centro: ahora siempre un solo centro por factura (por validación en batch)
+    $centroName = $f->orden?->centro?->nombre;
+    if (!$centroName && $f->relationLoaded('ordenes') && $f->ordenes && $f->ordenes->count()>0) {
+      $centroName = $f->ordenes->first()?->centro?->nombre;
+    }
     return [
       'id' => (string) $f->id,
       'orden_id' => $f->id_orden,
-      'servicio' => $f->orden?->servicio?->nombre,
-      'centro'   => $f->orden?->centro?->nombre,
+      'ots_label' => $otsLabel,
+      'servicio' => $multi ? 'Varios' : ($f->orden?->servicio?->nombre),
+      'centro'   => $centroName ?: '—',
+      'descripcion_general' => $multi ? null : ($f->orden?->descripcion_general),
       'total'    => $f->total,
       'estatus'  => $f->estatus,
       'folio'    => $f->folio_externo,
@@ -51,25 +95,41 @@ class FacturaController extends Controller
     ];
   });
 
-  // 2) OTs autorizadas por cliente (sin factura)
+  // 2) OTs autorizadas por cliente (sin factura) - SOLO para facturacion/admin
   $items = collect();
 
-  if (!$estatus || $estatus === 'autorizada_cliente') {
-    // Excluir OTs que ya tengan factura
-    $ordenesConFactura = Factura::query()
-      ->when(!$u->hasRole('admin'), function($q) use ($u) {
+  // Cliente NO debe ver la lista de OTs pendientes de facturar (no puede crearlas)
+  if (!$isCliente && (!$estatus || $estatus === 'autorizada_cliente')) {
+    // Excluir OTs que ya tengan factura (directa o pivot)
+    $ordenesConFacturaDirecta = Factura::query()
+      ->when(!$u->hasRole('admin') && !$u->hasRole('facturacion'), function($q) use ($u) {
         $ids = $this->allowedCentroIds($u);
         $q->whereHas('orden', fn($qq) => $qq->whereIn('id_centrotrabajo', $ids));
       })
       ->pluck('id_orden');
+    $ordenesConFacturaPivot = \Illuminate\Support\Facades\DB::table('factura_orden')->pluck('id_orden');
+    $ordenesConFactura = $ordenesConFacturaDirecta->merge($ordenesConFacturaPivot)->unique()->values();
 
     $qOts = Orden::query()
       ->where('estatus','autorizada_cliente')
-      ->when(!$u->hasRole('admin'), function($qq) use ($u) {
+      ->when(!$u->hasRole('admin') && !$u->hasRole('facturacion'), function($qq) use ($u) {
         $ids = $this->allowedCentroIds($u);
         $qq->whereIn('id_centrotrabajo', $ids);
       })
-      ->whereNotIn('id', $ordenesConFactura)
+      ->when($centro !== null, function($qq) use ($u, $centro) {
+        if ($u->hasAnyRole(['admin','facturacion'])) { $qq->where('id_centrotrabajo', $centro); }
+        else {
+          $ids = $this->allowedCentroIds($u);
+          if (in_array((int)$centro, array_map('intval',$ids), true)) { $qq->where('id_centrotrabajo', $centro); }
+        }
+      })
+  ->whereNotIn('id', $ordenesConFactura->all())
+      ->when($year && $week, function($qq) use ($year, $week) {
+        $qq->whereRaw('YEAR(created_at) = ? AND WEEK(created_at, 1) = ?', [$year, $week]);
+      })
+      ->when($year && !$week, function($qq) use ($year) {
+        $qq->whereYear('created_at', $year);
+      })
       ->with(['servicio','centro'])
       ->latest('id')
       ->limit(100);
@@ -81,6 +141,7 @@ class FacturaController extends Controller
         'orden_id' => $o->id,
         'servicio' => $o->servicio?->nombre,
         'centro'   => $o->centro?->nombre,
+        'descripcion_general' => $o->descripcion_general,
         'total'    => $total,
         'estatus'  => 'autorizada_cliente',
         'folio'    => null,
@@ -101,17 +162,76 @@ class FacturaController extends Controller
     $items = $facturas;
   }
 
+  // Centros para selector
+  $centrosLista = $u->hasAnyRole(['admin','facturacion'])
+    ? \App\Models\CentroTrabajo::select('id','nombre')->orderBy('nombre')->get()
+    : \App\Models\CentroTrabajo::whereIn('id', $this->allowedCentroIds($u))->select('id','nombre')->orderBy('nombre')->get();
+
   return Inertia::render('Facturas/Index', [
     'items' => $items,
-    'filtros' => [ 'estatus' => $estatus ],
+    'filtros' => [ 'estatus' => $estatus, 'centro' => $centro, 'year' => $year, 'week' => $week ],
     'urls' => [ 'base' => route('facturas.index') ],
     'estatuses' => ['autorizada_cliente','pendiente','facturado','por_pagar','pagado'],
+    'centros' => $centrosLista,
   ]);
+  }
+
+  /** Formulario para facturar múltiples OTs (subida de XML y resumen) */
+  public function createBatch(Request $req)
+  {
+    $u = $req->user();
+    if (!$u->hasAnyRole(['admin','facturacion'])) abort(403);
+
+    // ids puede venir como array o string separado por comas
+    $idsParam = $req->input('ids');
+    $ids = [];
+    if (is_array($idsParam)) { $ids = $idsParam; }
+    elseif (is_string($idsParam)) { $ids = array_filter(array_map('intval', explode(',', $idsParam))); }
+    $ids = array_values(array_unique(array_filter($ids, fn($v)=>$v>0)));
+    if (empty($ids)) abort(422,'Selecciona al menos una OT.');
+
+    $ordenes = Orden::whereIn('id', $ids)
+      ->with(['servicio','centro','solicitud.cliente'])
+      ->get();
+    if ($ordenes->isEmpty()) abort(404,'No se encontraron OTs.');
+
+    // Validaciones de estatus/centro
+    foreach ($ordenes as $o) {
+      if ($o->estatus !== 'autorizada_cliente') {
+        abort(422, "La OT #{$o->id} no está autorizada por el cliente.");
+      }
+    }
+
+    // Validar que todas las OTs pertenezcan al mismo Centro de Trabajo
+    $centrosUnicos = $ordenes->pluck('id_centrotrabajo')->filter()->unique()->values();
+    if ($centrosUnicos->count() > 1) {
+      abort(422, 'No se puede generar una sola factura con OTs de diferentes Centros de Trabajo. Selecciona OTs del mismo centro.');
+    }
+
+    // Construir resumen (totales por OT y total general)
+    $rows = $ordenes->map(function($o){
+      $total = $o->total ?? (($o->subtotal ?? 0) + ($o->iva ?? 0));
+      return [
+        'id' => $o->id,
+        'centro' => $o->centro?->nombre,
+        'servicio' => $o->servicio?->nombre,
+        'descripcion_general' => $o->descripcion_general,
+        'total' => (float)$total,
+      ];
+    })->values();
+    $suma = (float)$rows->sum('total');
+
+    return Inertia::render('Facturas/CreateBatch', [
+      'ordenes' => $rows,
+      'suma_total' => $suma,
+      'ids' => $ids,
+      'urls' => [ 'store' => route('facturas.batch') ],
+    ]);
   }
   
 public function pdf(\App\Models\Factura $factura)
 {
-    $this->authorize('view', $factura->orden);
+    $this->authorize('view', $factura);
 
     $refresh = request()->boolean('refresh');
     $existing = $factura->pdf_path && Storage::exists($factura->pdf_path);
@@ -693,6 +813,7 @@ private function xmlElementToArray(\SimpleXMLElement $element): array
       'centro' => [ 'id' => $orden->centro?->id, 'nombre' => $orden->centro?->nombre ],
       'servicio' => [ 'id' => $orden->servicio?->id, 'nombre' => $orden->servicio?->nombre ],
       'cliente'  => $orden->solicitud?->cliente?->only(['id','name','email']),
+      'descripcion_general' => $orden->descripcion_general,
       'items'    => $items,
       'totales'  => [
         'subtotal' => (float) $subtotal,
@@ -775,29 +896,41 @@ private function xmlElementToArray(\SimpleXMLElement $element): array
       'fecha_facturado' => now()->toDateString(),
       'xml_path' => $xmlPath,
     ]);
-    // Notificar al cliente
-    Notifier::toUser(
-        $orden->solicitud->id_cliente,
-        'Factura generada',
-        "Se generó la factura de la OT #{$orden->id}.",
-        route('facturas.show',$factura->id)
-    );
-        $this->act('facturas')
-            ->performedOn($factura)
-            ->event('crear_factura')
-            ->withProperties(['orden_id' => $orden->id, 'total' => $factura->total])
-            ->log("Factura #{$factura->id} creada para OT #{$orden->id}");
-        GenerateFacturaPdf::dispatch($factura->id);
+    
+    // Registrar actividad
+    $this->act('facturas')
+        ->performedOn($factura)
+        ->event('crear_factura')
+        ->withProperties(['orden_id' => $orden->id, 'total' => $factura->total])
+        ->log("Factura #{$factura->id} creada para OT #{$orden->id}");
+    
+    // Generar PDF y enviar notificación al cliente con el PDF adjunto
+    GenerateFacturaPdf::dispatch($factura->id, true);
+    
     return redirect()->route('facturas.show',$factura->id)->with('ok','Factura registrada');
   }
 
   public function show(\App\Models\Factura $factura) {
   $this->authorize('view', $factura);
-  $this->authFacturacion($factura->orden);
-    $factura->load('orden.servicio','orden.centro','orden.solicitud.cliente');
+  // Cliente puede ver, pero authFacturacion solo verifica que pertenezca al centro
+  // Removido: $this->authFacturacion($factura->orden);
+    $factura->load(
+      'orden.servicio','orden.centro','orden.solicitud.cliente',
+      'ordenes.servicio','ordenes.centro'
+    );
 
   return \Inertia\Inertia::render('Facturas/Show', [
     'factura' => $factura->toArray(),
+    'ordenes' => $factura->ordenes?->map(function($o){
+      return [
+        'id' => $o->id,
+        'servicio' => $o->servicio?->nombre,
+        'centro' => $o->centro?->nombre,
+        'descripcion_general' => $o->descripcion_general,
+        'total' => $o->total ?? (($o->subtotal ?? 0)+($o->iva ?? 0)),
+        'url' => route('ordenes.show', $o),
+      ];
+    })->values(),
     'cfdi'    => $this->parseCfdi($factura),
     'urls'    => [
       'facturado' => route('facturas.facturado', $factura),
@@ -858,6 +991,132 @@ private function xmlElementToArray(\SimpleXMLElement $element): array
       $this->pdf($factura);
     } catch (\Throwable $e) { /* noop */ }
     return back()->with('ok','XML actualizado');
+  }
+
+  /**
+   * Facturación múltiple: crear una factura que agrupe varias OTs.
+   * Requisitos: rol facturacion|admin, OTs en estatus 'autorizada_cliente'.
+   * Entrada: orden_ids[] (int), folio_externo (string opcional), fecha (date opcional)
+   */
+  public function storeBatch(Request $req)
+  {
+    $u = $req->user();
+    if (!$u->hasAnyRole(['admin','facturacion'])) abort(403);
+    $data = $req->validate([
+      'orden_ids' => ['required','array','min:1'],
+      'orden_ids.*' => ['integer','exists:ordenes_trabajo,id'],
+      'folio' => ['nullable','string','max:100'],
+      'folio_externo' => ['nullable','string','max:100'],
+      'fecha' => ['nullable','date'],
+      'xml' => ['nullable','file','mimetypes:text/xml,application/xml','max:4096'],
+    ]);
+
+    // Cargar OTs y validar estatus y centros
+    $ordenes = Orden::whereIn('id', $data['orden_ids'])->with(['solicitud','centro'])->get();
+    if ($ordenes->count() === 0) abort(422,'Sin órdenes válidas');
+
+    // Validar que NINGUNA de las OTs ya tenga factura (directa o vía pivot)
+    $idsSel = $ordenes->pluck('id')->map(fn($v)=>(int)$v)->all();
+    $usadasDirecto = Factura::query()->whereIn('id_orden', $idsSel)->pluck('id_orden')->map(fn($v)=>(int)$v)->all();
+    $usadasPivot   = \Illuminate\Support\Facades\DB::table('factura_orden')->whereIn('id_orden', $idsSel)->pluck('id_orden')->map(fn($v)=>(int)$v)->all();
+    $ocupadas = array_values(array_unique(array_merge($usadasDirecto, $usadasPivot)));
+    if (!empty($ocupadas)) {
+      $txt = '#'.implode(', #', $ocupadas);
+      abort(422, 'Algunas OTs seleccionadas ya están asociadas a una factura: '.$txt);
+    }
+    foreach ($ordenes as $o) {
+      // Estatus requerido
+      if ($o->estatus !== 'autorizada_cliente') {
+        abort(422, "La OT #{$o->id} no está autorizada por el cliente.");
+      }
+      // Centro permitido (facturación tiene bypass, admin tiene bypass)
+      if (!$u->hasAnyRole(['admin','facturacion'])) {
+        $ids = $this->allowedCentroIds($u);
+        if (!in_array((int)$o->id_centrotrabajo, array_map('intval',$ids), true)) abort(403);
+      }
+    }
+
+    // Validar que todas las OTs pertenezcan al mismo Centro de Trabajo
+    $centrosUnicos = $ordenes->pluck('id_centrotrabajo')->filter()->unique()->values();
+    if ($centrosUnicos->count() > 1) {
+      abort(422, 'No se puede generar una sola factura con OTs de diferentes Centros de Trabajo. Selecciona OTs del mismo centro.');
+    }
+
+    // Calcular total (fallback a subtotal+iva si total está nulo)
+    $total = $ordenes->sum(function($o){
+      $t = $o->total; if ($t === null) $t = (float)($o->subtotal ?? 0) + (float)($o->iva ?? 0); return (float)$t;
+    });
+
+    // Manejo opcional de XML (si se envía): extraer folio/uuid/total y almacenar
+    $xmlPath = null; $xmlFolio = null; $xmlUUID = null; $xmlTotal = null;
+    if ($req->hasFile('xml')) {
+      $xmlPath = $req->file('xml')->store('facturas/xml','local');
+      try {
+        $xmlString = \Illuminate\Support\Facades\Storage::get($xmlPath);
+        $xml = simplexml_load_string($xmlString);
+        if ($xml) {
+          $a = $xml->attributes();
+          $xmlFolio = (string)($a['Folio'] ?? $a['folio'] ?? '');
+          $xmlTotal = (string)($a['Total'] ?? $a['total'] ?? '');
+          $uuid = null; $nodes = $xml->xpath('//@UUID'); if (!empty($nodes)) { $uuid = (string)$nodes[0]; }
+          if (!$uuid) { $nodes = $xml->xpath('//@Uuid'); if (!empty($nodes)) { $uuid = (string)$nodes[0]; } }
+          $xmlUUID = $uuid ?: null;
+          // Renombrar con RFC/UUID si es posible
+          $rfcEm = null; $nodesEm = $xml->xpath('//*[local-name()="Emisor"]/@Rfc | //*[@*="Emisor"]/@Rfc');
+          if (!empty($nodesEm)) { $rfcEm = (string)$nodesEm[0]; }
+          $safeUuid = $xmlUUID ? preg_replace('/[^A-Za-z0-9-]/','',$xmlUUID) : null;
+          $safeRfc  = $rfcEm ? preg_replace('/[^A-Za-z0-9]/','',$rfcEm) : null;
+          if ($safeUuid || $safeRfc) {
+            $fileName = trim(($safeRfc ?: 'CFDI').'_'.($safeUuid ?: uniqid()).'.xml','_');
+            $newPath = 'facturas/xml/'.$fileName;
+            \Illuminate\Support\Facades\Storage::move($xmlPath, $newPath);
+            $xmlPath = $newPath;
+          }
+        }
+      } catch (\Throwable $e) { /* noop */ }
+    }
+
+  // Usar una OT como "ancla" para cumplir con la FK id_orden en facturas (debe estar libre de factura)
+  $anchor = $ordenes->first(function($o) use ($usadasDirecto){ return !in_array((int)$o->id, $usadasDirecto, true); }) ?: $ordenes->first();
+    // Si el XML trae total numérico, usarlo como total
+    if ($xmlTotal !== null && is_numeric($xmlTotal)) {
+      $total = (float)$xmlTotal;
+    }
+
+    $factura = \Illuminate\Support\Facades\DB::transaction(function() use ($anchor, $total, $data, $xmlFolio, $xmlUUID, $xmlPath, $ordenes) {
+      $f = Factura::create([
+        'id_orden' => $anchor->id, // ancla para compatibilidad
+        'total' => $total,
+        'folio' => ($data['folio'] ?? null) ?: ($xmlFolio ?: null),
+        'folio_externo' => ($data['folio_externo'] ?? null) ?: ($xmlUUID ?: null),
+        'estatus' => 'facturado',
+        'fecha_facturado' => ($data['fecha'] ?? now()->toDateString()),
+        'xml_path' => $xmlPath,
+      ]);
+      // Asociar todas las OTs a la factura (incluida la ancla)
+      $ids = $ordenes->pluck('id')->all();
+      $f->ordenes()->syncWithoutDetaching($ids);
+      // Cambiar estatus de OTs a 'facturada'
+      Orden::whereIn('id', $ids)->update(['estatus' => 'facturada']);
+      return $f;
+    });
+
+    // Notificaciones mínimas
+    try {
+      foreach ($ordenes as $o) {
+        Notifier::toUser(
+          $o->solicitud?->id_cliente,
+          'Factura generada',
+          "Tu OT #{$o->id} fue facturada (Factura #{$factura->id}).",
+          route('facturas.show', $factura->id)
+        );
+      }
+    } catch (\Throwable $e) { /* noop */ }
+
+    // Generar PDF asíncronamente
+    try { GenerateFacturaPdf::dispatch($factura->id); } catch (\Throwable $e) { /* noop */ }
+
+    return redirect()->route('facturas.show', $factura->id)->with('ok','Factura generada para las OTs seleccionadas');
   }
 
   public function marcarFacturado(Request $req, Factura $factura) {
@@ -928,6 +1187,9 @@ private function xmlElementToArray(\SimpleXMLElement $element): array
   private function authFacturacion(\App\Models\Orden $orden): void {
     $u = request()->user();
     if ($u->hasRole('admin')) return;
+    // Facturación tiene acceso a todas las órdenes
+    if ($u->hasRole('facturacion')) return;
+    // Para otros roles, verificar centros asignados
     if (!$u->hasRole('facturacion')) abort(403);
     $ids = $this->allowedCentroIds($u);
     if (!in_array((int)$orden->id_centrotrabajo, array_map('intval', $ids), true)) abort(403);
