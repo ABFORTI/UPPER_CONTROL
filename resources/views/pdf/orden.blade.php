@@ -67,7 +67,7 @@
 
 <!-- Línea info -->
 <div class="row mb12">
-  <div class="box" style="flex:1; margin-right:8px;">DEPARTAMENTO: <strong>{{ optional($o->centro)->nombre ?? '—' }}</strong></div>
+  <div class="box" style="flex:1; margin-right:8px;">AREA: <strong>{{ $areaNombre ?? (optional($o->centro)->nombre ?? '—') }}</strong></div>
   <div class="box" style="width:200px;">CODIGO: <strong>{{ optional($o->servicio)->codigo ?? 'KPI 01' }}</strong></div>
   </div>
 
