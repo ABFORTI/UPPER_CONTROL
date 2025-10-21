@@ -101,14 +101,16 @@ class CalidadController extends Controller
         $it->save();
       }
 
-      // Update orden totals and calidad status
-      $orden->total_real = 0;
-      $orden->calidad_resultado = 'rechazado';
-      $orden->motivo_rechazo = $req->observaciones;
-      $orden->acciones_correctivas = $req->input('acciones_correctivas');
-  // Move back to en_proceso so TL can re-open work (if previously completed)
-  $orden->estatus = 'en_proceso';
-      $orden->save();
+    // Update orden totals and calidad status
+    $orden->total_real = 0;
+    $orden->calidad_resultado = 'rechazado';
+    $orden->motivo_rechazo = $req->observaciones;
+    $orden->acciones_correctivas = $req->input('acciones_correctivas');
+    // Move back to en_proceso so TL can re-open work (if previously completed)
+    $orden->estatus = 'en_proceso';
+    // Limpiar fecha_completada para indicar que la OT ya no está completada
+    $orden->fecha_completada = null;
+    $orden->save();
     });
     // Registrar un avance informativo en el historial con motivo y acciones
     $coment = '[RECHAZO CALIDAD] ' . $req->observaciones;

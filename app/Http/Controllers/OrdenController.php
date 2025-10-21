@@ -307,11 +307,14 @@ class OrdenController extends Controller
             $orden->total_real = $orden->items()
                 ->selectRaw('COALESCE(SUM(cantidad_real * precio_unitario),0) as t')->value('t');
 
+
             $justCompleted = ($orden->estatus !== 'completada') && ($sumReal >= $sumPlan && $sumPlan > 0);
             if ($justCompleted) {
                 $orden->estatus = 'completada';
                 // Cuando la OT se completa de nuevo, reiniciar el marcador de calidad a 'pendiente'
                 $orden->calidad_resultado = 'pendiente';
+                // Persistir fecha de completado para estabilidad en reportes y PDFs
+                $orden->fecha_completada = now();
                 $orden->save();
 
                 // Notificar a calidad del centro con notificación específica

@@ -15,6 +15,22 @@ const props = defineProps({
 const items   = computed(() => props.orden?.items   ?? [])
 const avances = computed(() => props.orden?.avances ?? [])
 
+// Utilidad: formatear fecha/hora a local (CDMX) desde ISO/Date
+function fmtDate (input) {
+  if (!input) return '—'
+  try {
+    const d = (typeof input === 'string' || typeof input === 'number') ? new Date(input) : input
+    if (isNaN(d?.getTime?.())) return String(input)
+    // es-MX: 21 oct 2025 14:35 -> estilo compacto y legible
+    return new Intl.DateTimeFormat('es-MX', {
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit'
+    }).format(d)
+  } catch (e) {
+    return String(input)
+  }
+}
+
 // Devuelve true si el comentario viene marcado como corregido
 function isCorregidoComentario(c) {
   return typeof c === 'string' && c.startsWith('[CORREGIDO]')
@@ -85,7 +101,17 @@ function registrarAvance () {
     .filter(x => x.cantidad > 0)
 
   if (!avForm.items.length) return
-  avForm.post(props.urls.avances_store, { preserveScroll: true })
+  avForm.post(props.urls.avances_store, {
+    preserveScroll: true,
+    // Al completar, recargar la data desde el servidor para reflejar cantidades reales actualizadas
+    onSuccess: () => {
+      // resetear inputs
+      avForm.reset('comentario')
+      avForm.items = (items.value || []).map(i => ({ id_item: i.id, cantidad: 0 }))
+      // recargar únicamente props necesarias para performance
+      router.reload({ only: ['orden','cotizacion'], preserveScroll: true })
+    },
+  })
 }
 
 // ----- Evidencias (archivos por avance / ítem) -----
@@ -518,7 +544,7 @@ const closePreview = () => { archivoPreview.value = null }
                       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
                       </svg>
-                      {{ ev.created_at }}
+                      {{ fmtDate(ev.created_at) }}
                     </div>
                     <div class="text-sm font-semibold text-gray-800 mb-1 flex items-center gap-1">
                       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -632,7 +658,7 @@ const closePreview = () => { archivoPreview.value = null }
                       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
                       </svg>
-                      {{ a?.created_at || 'Fecha no disponible' }}
+                      {{ fmtDate(a?.created_at) }}
                     </div>
                   </div>
                 </div>
