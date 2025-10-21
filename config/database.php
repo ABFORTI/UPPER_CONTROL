@@ -53,6 +53,8 @@ return [
             'unix_socket' => env('DB_SOCKET', ''),
             'charset' => env('DB_CHARSET', 'utf8mb4'),
             'collation' => env('DB_COLLATION', 'utf8mb4_unicode_ci'),
+            // Alinear la zona horaria de la sesión MySQL con la app para evitar desfases en TIMESTAMP
+            'timezone' => env('DB_TIMEZONE', '-06:00'),
             'prefix' => '',
             'prefix_indexes' => true,
             'strict' => true,
@@ -78,6 +80,7 @@ return [
             'unix_socket' => env('DB_SOCKET', ''),
             'charset' => env('DB_CHARSET', 'utf8mb4'),
             'collation' => env('DB_COLLATION', 'utf8mb4_unicode_ci'),
+            'timezone' => env('DB_TIMEZONE', '-06:00'),
             'prefix' => '',
             'prefix_indexes' => true,
             'strict' => true,

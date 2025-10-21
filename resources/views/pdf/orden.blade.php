@@ -67,7 +67,7 @@
 
 <!-- Línea info -->
 <div class="row mb12">
-  <div class="box" style="flex:1; margin-right:8px;">AREA: <strong>{{ $areaNombre ?? (optional($o->centro)->nombre ?? '—') }}</strong></div>
+  <div class="box" style="flex:1; margin-right:8px;">CENTRO: <strong>{{ optional($o->centro)->nombre ?? ($areaNombre ?? '—') }}</strong></div>
   <div class="box" style="width:200px;">CODIGO: <strong>{{ optional($o->servicio)->codigo ?? 'KPI 01' }}</strong></div>
   </div>
 
@@ -79,7 +79,7 @@
       <th class="w-15">CLIENTE</th>
       <th class="w-15">CLAVE</th>
       <th class="w-30">DESCRIPCIÓN DEL PRODUCTO</th>
-      <th class="w-25">ÁREA OPERATIVA</th>
+  <th class="w-25">CENTRO OPERATIVO</th>
     </tr>
   </thead>
   <tbody>
@@ -89,7 +89,7 @@
       <td class="center">{{ $clienteName ?? '—' }}</td>
       <td class="center">{{ $it->tamano ? strtoupper($it->tamano) : '—' }}</td>
       <td>{{ $it->descripcion ?: ($o->descripcion_general ?: '—') }}</td>
-      <td class="center">{{ $areaNombre ?? '—' }}</td>
+  <td class="center">{{ optional($o->centro)->nombre ?? ($areaNombre ?? '—') }}</td>
     </tr>
   @endforeach
   @if($o->items->count() === 0)
@@ -103,7 +103,7 @@
 <!-- Descripción del proceso y precio pza -->
 <table class="mb12">
   <tr>
-  <td style="width:75%;"><span class="label">DESCRIPCIÓN DEL PROCESO</span><br>{{ $o->descripcion_general ?: (optional($o->servicio)->nombre ?? '—') }}</td>
+  <td style="width:75%;"><span class="label">DESCRIPCIÓN DEL PROCESO</span><br>{{ optional($o->servicio)->nombre ?? ($o->descripcion_general ?: '—') }}</td>
     <td style="width:25%;" class="right"><span class="label">PRECIO PZA $</span><br><span style="font-size:14px; font-weight:700;">{{ $puLabel }}</span></td>
   </tr>
   </table>
@@ -120,7 +120,31 @@
 <!-- Control del proceso -->
 @php
   $fechaInicio = $o->created_at ? Carbon::parse($o->created_at) : null;
-  $fechaFin = $o->updated_at ? Carbon::parse($o->updated_at) : null;
+  // Fecha de término: preferir la fecha persistida en la orden (fecha_completada).
+  // Si no existe, intentar recuperar la fecha del avance que causó la completación.
+  $fechaFin = null;
+  if (!empty($o->fecha_completada)) {
+    try { $fechaFin = Carbon::parse($o->fecha_completada); } catch (\Throwable $e) { $fechaFin = null; }
+  }
+  if (!$fechaFin) {
+    try {
+      // Cantidad total necesaria para completar (piezas planeadas)
+      $needed = (int)($pzas ?? $o->items->sum(fn($it)=>(int)($it->cantidad_planeada ?? 0)));
+      if ($needed > 0) {
+        $cumulative = 0;
+        $avances = \App\Models\Avance::where('id_orden', $o->id)->orderBy('created_at')->get();
+        foreach ($avances as $av) {
+          $cumulative += (int)($av->cantidad ?? 0);
+          if ($cumulative >= $needed) {
+            $fechaFin = Carbon::parse($av->created_at);
+            break;
+          }
+        }
+      }
+    } catch (\Throwable $e) {
+      $fechaFin = null;
+    }
+  }
 @endphp
 <div class="label mb6">CONTROL DEL PROCESO</div>
 <table class="mb16">
