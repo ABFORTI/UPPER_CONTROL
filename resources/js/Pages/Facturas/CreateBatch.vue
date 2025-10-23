@@ -58,69 +58,96 @@ const totalOTs = computed(()=> Number(props.suma_total || 0))
 </script>
 
 <template>
-  <div class="p-6 max-w-screen-xl mx-auto">
-    <div class="mb-6">
-      <h1 class="text-2xl font-bold">Registrar factura (múltiples OTs)</h1>
-      <div class="text-sm text-slate-600 mt-1">OTs seleccionadas: {{ ids.length }}</div>
-    </div>
-
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-      <!-- Columna izquierda: captura y XML -->
-      <aside class="space-y-4">
-        <div class="bg-white dark:bg-slate-800 rounded border p-4">
-          <div class="text-sm font-medium mb-3">Datos de la factura</div>
-
-          <label class="block mb-2 text-sm">Cargar XML CFDI</label>
-          <input type="file" accept=".xml,text/xml" @change="onPickXml" class="mb-4" />
-
-          <label class="block mb-2 text-sm">Folio timbrado / externo (UUID)</label>
-          <input v-model="form.folio_externo" readonly placeholder="Se llena desde el XML" class="border p-2 rounded w-full mb-3 bg-gray-50 cursor-not-allowed" />
-
-          <label class="block mb-2 text-sm">Folio</label>
-          <input v-model="form.folio" readonly placeholder="Se llena desde el XML" class="border p-2 rounded w-full mb-3 bg-gray-50 cursor-not-allowed" />
-
-          <label class="block mb-2 text-sm">Fecha</label>
-          <input type="date" v-model="form.fecha" class="border p-2 rounded w-full mb-4" />
-
-          <button @click="submit" class="btn btn-primary w-full">Registrar factura</button>
-        </div>
-      </aside>
-
-      <!-- Columna derecha: listado de OTs y totales -->
-      <div class="md:col-span-2 space-y-4">
-        <div class="overflow-auto rounded border bg-white dark:bg-slate-800">
-          <table class="min-w-full text-sm">
-            <thead class="bg-gray-50 dark:bg-slate-700 text-left">
-              <tr>
-                <th class="p-2">OT</th>
-                <th class="p-2">Centro</th>
-                <th class="p-2">Servicio</th>
-                <th class="p-2">Producto/Descripción</th>
-                <th class="p-2 text-right">Total OT</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="o in ordenes" :key="o.id" class="border-t">
-                <td class="p-2">#{{ o.id }}</td>
-                <td class="p-2">{{ o.centro || '—' }}</td>
-                <td class="p-2">{{ o.servicio || '—' }}</td>
-                <td class="p-2">{{ o.descripcion_general || '—' }}</td>
-                <td class="p-2 text-right">${{ Number(o.total || 0).toFixed(2) }}</td>
-              </tr>
-              <tr v-if="!ordenes || ordenes.length===0">
-                <td colspan="5" class="p-4 text-center text-slate-500">Sin OTs</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <div class="bg-white dark:bg-slate-800 rounded border">
-          <div class="px-4 py-3 border-b text-sm font-medium">Resumen de totales</div>
-          <div class="p-4">
-            <div class="flex justify-between text-base font-semibold">
-              <span>Total seleccionado</span>
-              <span>${{ totalOTs.toFixed(2) }}</span>
+  <div class="min-h-screen bg-gradient-to-br from-slate-50 via-indigo-50 to-indigo-50 py-8 px-4 sm:px-6 lg:px-8">
+    <div class="max-w-7xl mx-auto space-y-6">
+      <!-- Header Card -->
+      <div class="bg-white rounded-2xl shadow-xl border-2 border-indigo-100 overflow-hidden">
+        <div class="bg-[#1E1C8F] px-8 py-6">
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <h1 class="text-3xl font-bold text-white">Registrar factura (múltiples OTs)</h1>
+              <div class="text-indigo-100 mt-1">OTs seleccionadas: {{ ids.length }}</div>
             </div>
-            <div class="text-xs text-slate-500 mt-2">Nota: Si el XML tiene un total diferente, se usará el total del XML como definitivo.</div>
+            <div class="px-4 py-2 rounded-xl bg-white/10 text-white font-semibold border-2 border-white/20 backdrop-blur-sm">
+              Total seleccionado: ${{ totalOTs.toFixed(2) }}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <!-- Columna izquierda: captura y XML -->
+        <aside class="space-y-4">
+          <div class="bg-white rounded-2xl shadow-lg border-2 border-orange-100 overflow-hidden">
+            <div class="bg-gradient-to-r from-orange-600 to-amber-600 px-6 py-4">
+              <h2 class="text-lg font-bold text-white">Datos de la factura</h2>
+            </div>
+            <div class="p-6 space-y-4">
+              <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-2">Cargar XML CFDI</label>
+                <input type="file" accept=".xml,text/xml" @change="onPickXml"
+                  class="block w-full text-sm text-gray-700 file:mr-4 file:py-3 file:px-5 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-orange-100 file:text-orange-700 hover:file:bg-orange-200 file:transition-all file:duration-200 border-2 border-gray-200 rounded-xl" />
+              </div>
+
+              <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-2">Folio timbrado / externo (UUID)</label>
+                <input v-model="form.folio_externo" readonly placeholder="Se llena desde el XML"
+                  class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl bg-gray-50 cursor-not-allowed" />
+              </div>
+
+              <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-2">Folio</label>
+                <input v-model="form.folio" readonly placeholder="Se llena desde el XML"
+                  class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl bg-gray-50 cursor-not-allowed" />
+              </div>
+
+              <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-2">Fecha</label>
+                <input type="date" v-model="form.fecha" class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl" />
+              </div>
+
+              <button @click="submit" class="w-full px-6 py-3 bg-gradient-to-r from-orange-600 to-amber-600 text-white font-bold rounded-xl shadow-lg hover:shadow-xl hover:scale-105 transform transition-all duration-200">Registrar factura</button>
+            </div>
+          </div>
+        </aside>
+
+        <!-- Columna derecha: listado de OTs y totales -->
+        <div class="md:col-span-2 space-y-4">
+          <div class="overflow-auto rounded-2xl border-2 border-indigo-100 bg-white">
+            <table class="min-w-full text-sm">
+              <thead class="bg-indigo-50 text-left">
+                <tr class="text-indigo-900">
+                  <th class="p-3 font-bold">OT</th>
+                  <th class="p-3 font-bold">Centro</th>
+                  <th class="p-3 font-bold">Servicio</th>
+                  <th class="p-3 font-bold">Producto/Descripción</th>
+                  <th class="p-3 text-right font-bold">Total OT</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="o in ordenes" :key="o.id" class="border-t border-indigo-100 hover:bg-indigo-50/40">
+                  <td class="p-3">#{{ o.id }}</td>
+                  <td class="p-3">{{ o.centro || '—' }}</td>
+                  <td class="p-3">{{ o.servicio || '—' }}</td>
+                  <td class="p-3">{{ o.descripcion_general || '—' }}</td>
+                  <td class="p-3 text-right">${{ Number(o.total || 0).toFixed(2) }}</td>
+                </tr>
+                <tr v-if="!ordenes || ordenes.length===0">
+                  <td colspan="5" class="p-4 text-center text-slate-500">Sin OTs</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="bg-white rounded-2xl border-2 border-emerald-100 overflow-hidden">
+            <div class="px-6 py-4 bg-gradient-to-r from-emerald-600 to-emerald-500 text-white font-bold">Resumen de totales</div>
+            <div class="p-6">
+              <div class="flex justify-between text-base font-semibold">
+                <span>Total seleccionado</span>
+                <span class="text-emerald-700">${{ totalOTs.toFixed(2) }}</span>
+              </div>
+              <div class="text-xs text-slate-500 mt-2">Nota: Si el XML tiene un total diferente, se usará el total del XML como definitivo.</div>
+            </div>
           </div>
         </div>
       </div>

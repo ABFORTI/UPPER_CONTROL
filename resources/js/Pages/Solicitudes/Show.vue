@@ -45,16 +45,16 @@ function canPreview(mime) {
 
 
 <template>
-  <div class="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 py-8 px-4 sm:px-6 lg:px-8">
+  <div class="min-h-screen bg-slate-50 py-8 px-4 sm:px-6 lg:px-8">
     <div class="max-w-5xl mx-auto space-y-6">
       
       <!-- Header Card -->
-      <div class="bg-white rounded-2xl shadow-xl border-2 border-indigo-100 overflow-hidden">
-        <div class="bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-5">
+      <div class="bg-white rounded-2xl shadow-xl border-2 border-upper-50 overflow-hidden">
+  <div class="px-6 py-5 bg-[#1E1C8F]">
           <div class="flex items-center justify-between">
             <div>
               <h1 class="text-3xl font-bold text-white mb-1">{{ solicitud.folio }}</h1>
-              <p class="text-indigo-100 text-sm">Revisión de Solicitud</p>
+              <p class="text-white text-sm">Revisión de Solicitud</p>
             </div>
             <!-- Status Badge -->
             <div class="flex items-center gap-2">
@@ -84,17 +84,17 @@ function canPreview(mime) {
         </div>
 
         <!-- Action Buttons -->
-        <div v-if="can?.aprobar" class="bg-gradient-to-r from-indigo-50 to-purple-50 px-6 py-4 border-b border-indigo-100">
+  <div v-if="can?.aprobar" class="px-6 py-4 border-b border-upper-50 bg-white">
           <div class="flex gap-3">
-            <button @click="aprobar" 
-                    class="flex-1 px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-semibold shadow-lg hover:shadow-xl hover:scale-105 transform transition-all duration-200 flex items-center justify-center gap-2">
+      <button @click="aprobar" 
+        class="flex-1 px-6 py-3 rounded-xl bg-emerald-600 text-white font-semibold shadow-lg hover:bg-emerald-700 hover:shadow-xl hover:scale-105 transform transition-all duration-200 flex items-center justify-center gap-2">
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
               </svg>
               Aprobar Solicitud
             </button>
-            <button @click="rechazar" 
-                    class="flex-1 px-6 py-3 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 text-white font-semibold shadow-lg hover:shadow-xl hover:scale-105 transform transition-all duration-200 flex items-center justify-center gap-2">
+      <button @click="rechazar" 
+        class="flex-1 px-6 py-3 rounded-xl bg-red-600 text-white font-semibold shadow-lg hover:bg-red-700 hover:shadow-xl hover:scale-105 transform transition-all duration-200 flex items-center justify-center gap-2">
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/>
               </svg>
@@ -111,8 +111,8 @@ function canPreview(mime) {
         <div class="lg:col-span-2 space-y-6">
           
           <!-- Información General -->
-          <div class="bg-white rounded-2xl shadow-lg border-2 border-blue-100 overflow-hidden hover:shadow-xl transition-shadow duration-300">
-            <div class="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-4">
+          <div class="bg-white rounded-2xl shadow-lg border-2 border-upper-50 overflow-hidden hover:shadow-xl transition-shadow duration-300">
+            <div class="px-6 py-4 bg-[#1E1C8F]">
               <h2 class="text-xl font-bold text-white flex items-center gap-2">
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
@@ -122,12 +122,12 @@ function canPreview(mime) {
             </div>
             <div class="p-6 space-y-4">
               <div class="grid md:grid-cols-2 gap-4">
-                <div class="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-100">
-                  <label class="text-xs font-semibold text-blue-600 uppercase tracking-wide">Servicio</label>
+                <div class="bg-upper-50 rounded-xl p-4 border border-upper-50">
+                  <label class="text-xs font-semibold text-[#1E1C8F] uppercase tracking-wide">Servicio</label>
                   <p class="mt-1 text-lg font-bold text-gray-800">{{ solicitud.servicio?.nombre }}</p>
                 </div>
-                <div class="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl p-4 border border-purple-100">
-                  <label class="text-xs font-semibold text-purple-600 uppercase tracking-wide">Centro de Trabajo</label>
+                <div class="bg-upper-50 rounded-xl p-4 border border-upper-50">
+                  <label class="text-xs font-semibold text-[#1E1C8F] uppercase tracking-wide">Centro de Trabajo</label>
                   <p class="mt-1 text-lg font-bold text-gray-800">{{ solicitud.centro?.nombre }}</p>
                 </div>
               </div>
@@ -176,8 +176,8 @@ function canPreview(mime) {
           </div>
 
           <!-- Desglose por tamaño -->
-          <div v-if="solicitud.tamanos?.length" class="bg-white rounded-2xl shadow-lg border-2 border-purple-100 overflow-hidden hover:shadow-xl transition-shadow duration-300">
-            <div class="bg-gradient-to-r from-purple-600 to-pink-600 px-6 py-4">
+          <div v-if="solicitud.tamanos?.length" class="bg-white rounded-2xl shadow-lg border-2 border-upper-50 overflow-hidden hover:shadow-xl transition-shadow duration-300">
+            <div class="px-6 py-4 bg-[#1E1C8F]">
               <h2 class="text-xl font-bold text-white flex items-center gap-2">
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
@@ -187,14 +187,14 @@ function canPreview(mime) {
             </div>
             <div class="overflow-x-auto">
               <table class="min-w-full">
-                <thead class="bg-gradient-to-r from-purple-50 to-pink-50">
+                <thead class="bg-upper-50">
                   <tr>
-                    <th class="text-left px-6 py-4 text-sm font-bold text-purple-700 uppercase tracking-wider">Tamaño</th>
-                    <th class="text-right px-6 py-4 text-sm font-bold text-purple-700 uppercase tracking-wider">Cantidad</th>
+                    <th class="text-left px-6 py-4 text-sm font-bold text-[#1E1C8F] uppercase tracking-wider">Tamaño</th>
+                    <th class="text-right px-6 py-4 text-sm font-bold text-[#1E1C8F] uppercase tracking-wider">Cantidad</th>
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-100">
-                  <tr v-for="t in solicitud.tamanos" :key="t.id" class="hover:bg-purple-50 transition-colors duration-150">
+                  <tr v-for="t in solicitud.tamanos" :key="t.id" class="hover:bg-upper-50 transition-colors duration-150">
                     <td class="px-6 py-4 text-gray-800 font-medium capitalize">{{ t.tamano }}</td>
                     <td class="px-6 py-4 text-right text-gray-800 font-bold">{{ t.cantidad }}</td>
                   </tr>
@@ -205,7 +205,7 @@ function canPreview(mime) {
 
           <!-- Archivos Adjuntos -->
           <div v-if="solicitud.archivos?.length" class="bg-white rounded-2xl shadow-lg border-2 border-indigo-100 overflow-hidden hover:shadow-xl transition-shadow duration-300">
-            <div class="bg-gradient-to-r from-indigo-600 to-blue-600 px-6 py-4">
+            <div class="px-6 py-4 bg-[#1E1C8F]">
               <h2 class="text-xl font-bold text-white flex items-center gap-2">
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/>
@@ -214,10 +214,10 @@ function canPreview(mime) {
               </h2>
             </div>
             <div class="p-4 space-y-2">
-              <div v-for="archivo in solicitud.archivos" :key="archivo.id" 
-                   class="flex items-center justify-between p-4 bg-gradient-to-r from-gray-50 to-blue-50 rounded-xl border border-gray-200 hover:border-indigo-300 hover:shadow-md transition-all duration-200">
+           <div v-for="archivo in solicitud.archivos" :key="archivo.id" 
+             class="flex items-center justify-between p-4 bg-white rounded-xl border border-gray-200 hover:border-upper-200 hover:shadow-md transition-all duration-200">
                 <div class="flex items-center gap-4">
-                  <div class="bg-gradient-to-br from-indigo-500 to-blue-500 p-3 rounded-xl">
+                  <div class="p-3 rounded-xl bg-[#1E1C8F]">
                     <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                     </svg>
@@ -233,17 +233,17 @@ function canPreview(mime) {
                   </div>
                 </div>
                 <div class="flex gap-2">
-                  <button v-if="canPreview(archivo.mime)"
-                          @click="openPreview(archivo)"
-                          class="px-4 py-2 rounded-xl bg-gradient-to-r from-gray-600 to-gray-700 text-white font-medium hover:from-gray-700 hover:to-gray-800 shadow-md hover:shadow-lg transform hover:scale-105 transition-all duration-200 flex items-center gap-2">
+      <button v-if="canPreview(archivo.mime)"
+        @click="openPreview(archivo)"
+        class="px-4 py-2 rounded-xl bg-gray-600 text-white font-medium hover:bg-gray-700 shadow-md hover:shadow-lg transform hover:scale-105 transition-all duration-200 flex items-center gap-2">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
                     </svg>
                     Ver
                   </button>
-                  <a :href="route('archivos.download', archivo.id)" 
-                     class="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-medium hover:from-blue-700 hover:to-indigo-700 shadow-md hover:shadow-lg transform hover:scale-105 transition-all duration-200 flex items-center gap-2">
+            <a :href="route('archivos.download', archivo.id)" 
+              class="px-4 py-2 rounded-xl bg-[#1E1C8F] text-white font-medium hover:opacity-95 shadow-md hover:shadow-lg transform hover:scale-105 transition-all duration-200 flex items-center gap-2">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
                     </svg>
@@ -260,7 +260,7 @@ function canPreview(mime) {
           
           <!-- Cotización Sticky Card -->
           <div class="bg-white rounded-2xl shadow-lg border-2 border-emerald-100 overflow-hidden sticky top-6 hover:shadow-xl transition-shadow duration-300">
-            <div class="bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-4">
+            <div class="px-6 py-4 bg-[#1E1C8F]">
               <h2 class="text-xl font-bold text-white flex items-center gap-2">
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"/>
@@ -272,14 +272,14 @@ function canPreview(mime) {
             <div v-if="cotizacion?.lines?.length" class="p-5">
               <!-- Items -->
               <div class="space-y-3 mb-4">
-                <div v-for="(l,i) in cotizacion.lines" :key="i" 
-                     class="bg-gradient-to-br from-gray-50 to-emerald-50 rounded-xl p-4 border border-emerald-100">
+       <div v-for="(l,i) in cotizacion.lines" :key="i" 
+         class="bg-gray-50 rounded-xl p-4 border border-upper-50">
                   <div class="font-semibold text-gray-800 mb-2">{{ l.label }}</div>
                   <div class="grid grid-cols-2 gap-2 text-sm">
                     <div class="text-gray-600">Cantidad:</div>
                     <div class="text-right font-bold text-gray-800">{{ l.cantidad }}</div>
                     <div class="text-gray-600">P. Unitario:</div>
-                    <div class="text-right font-bold text-emerald-600">${{ (l.pu||0).toFixed(2) }}</div>
+                    <div class="text-right font-bold text-[#1E1C8F]">${{ (l.pu||0).toFixed(2) }}</div>
                     <div class="text-gray-600">Subtotal:</div>
                     <div class="text-right font-bold text-gray-800">${{ (l.subtotal||0).toFixed(2) }}</div>
                   </div>
@@ -287,7 +287,7 @@ function canPreview(mime) {
               </div>
 
               <!-- Totales -->
-              <div class="border-t-2 border-emerald-200 pt-4 space-y-3">
+              <div class="border-t-2 border-upper-50 pt-4 space-y-3">
                 <div class="flex justify-between items-center text-sm">
                   <span class="text-gray-600 font-medium">Subtotal:</span>
                   <span class="font-bold text-gray-800 text-lg">${{ (cotizacion.subtotal||0).toFixed(2) }}</span>
@@ -296,7 +296,7 @@ function canPreview(mime) {
                   <span class="text-gray-600 font-medium">IVA ({{ ((cotizacion.iva_rate||0)*100).toFixed(0) }}%):</span>
                   <span class="font-bold text-gray-800 text-lg">${{ (cotizacion.iva||0).toFixed(2) }}</span>
                 </div>
-                <div class="bg-gradient-to-r from-emerald-600 to-teal-600 rounded-xl px-4 py-3 flex justify-between items-center">
+                <div class="rounded-xl px-4 py-3 flex justify-between items-center bg-[#FF7A00]">
                   <span class="text-white font-bold text-lg">Total:</span>
                   <span class="text-white font-bold text-2xl">${{ (cotizacion.total||0).toFixed(2) }}</span>
                 </div>
