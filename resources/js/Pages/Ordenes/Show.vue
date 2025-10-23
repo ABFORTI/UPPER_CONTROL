@@ -142,12 +142,12 @@ const closePreview = () => { archivoPreview.value = null }
 </script>
 
 <template>
-  <div class="min-h-screen bg-gradient-to-br from-slate-50 via-indigo-50 to-purple-50 py-8 px-4 sm:px-6 lg:px-8">
+  <div class="min-h-screen bg-gradient-to-br from-slate-50 via-indigo-50 to-indigo-50 py-8 px-4 sm:px-6 lg:px-8">
     <div class="max-w-7xl mx-auto space-y-6">
       
       <!-- Header Card -->
       <div class="bg-white rounded-2xl shadow-xl border-2 border-indigo-100 overflow-hidden">
-        <div class="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 px-8 py-6">
+  <div class="bg-[#1E1C8F] px-8 py-6">
           <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div class="flex items-center gap-4">
               <div class="bg-white bg-opacity-20 p-4 rounded-xl backdrop-blur-sm">
@@ -165,11 +165,16 @@ const closePreview = () => { archivoPreview.value = null }
             <div class="flex flex-wrap gap-3">
               <span class="px-4 py-2 rounded-xl font-semibold text-sm backdrop-blur-sm border-2"
                     :class="{
-                      'bg-yellow-500 bg-opacity-20 text-yellow-100 border-yellow-300 border-opacity-30': orden?.estatus === 'nueva' || orden?.estatus === 'asignada',
-                      'bg-blue-500 bg-opacity-20 text-blue-100 border-blue-300 border-opacity-30': orden?.estatus === 'en_proceso',
-                      'bg-purple-500 bg-opacity-20 text-purple-100 border-purple-300 border-opacity-30': orden?.estatus === 'completada',
-                      'bg-emerald-500 bg-opacity-20 text-emerald-100 border-emerald-300 border-opacity-30': orden?.estatus === 'validada_calidad' || orden?.estatus === 'validada_cliente',
-                      'bg-indigo-500 bg-opacity-20 text-indigo-100 border-indigo-300 border-opacity-30': orden?.estatus === 'facturada'
+                      'bg-white text-[#1E1C8F] border-white': orden?.estatus === 'generada',
+                      'bg-yellow-500 text-white border-yellow-600': orden?.estatus === 'nueva',
+                      'bg-blue-100 text-blue-800 border-blue-200': orden?.estatus === 'asignada',
+                      'bg-orange-100 text-orange-800 border-orange-200': orden?.estatus === 'en_proceso',
+                      'bg-emerald-600 text-white border-emerald-700': orden?.estatus === 'completada',
+                      'bg-teal-600 text-white border-teal-700': orden?.estatus === 'validada_calidad',
+                      'bg-slate-700 text-white border-slate-800': orden?.estatus === 'validada_cliente' || orden?.estatus === 'autorizada_cliente',
+                      'bg-gray-800 text-white border-gray-900': orden?.estatus === 'facturada',
+                      'bg-red-600 text-white border-red-700': orden?.estatus === 'cancelada',
+                      'bg-gray-200 text-gray-800 border-gray-300': orden?.estatus === 'pendiente'
                     }">
                 <svg class="w-4 h-4 inline-block mr-1" fill="currentColor" viewBox="0 0 20 20">
                   <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/>
@@ -179,9 +184,9 @@ const closePreview = () => { archivoPreview.value = null }
               
               <span class="px-4 py-2 rounded-xl font-semibold text-sm backdrop-blur-sm border-2"
                     :class="{
-                      'bg-yellow-500 bg-opacity-20 text-yellow-100 border-yellow-300 border-opacity-30': orden?.calidad_resultado === 'pendiente',
-                      'bg-emerald-500 bg-opacity-20 text-emerald-100 border-emerald-300 border-opacity-30': orden?.calidad_resultado === 'validado',
-                      'bg-red-500 bg-opacity-20 text-red-100 border-red-300 border-opacity-30': orden?.calidad_resultado === 'rechazado'
+                      'bg-orange-500 text-white border-orange-600': orden?.calidad_resultado === 'pendiente',
+                      'bg-emerald-600 text-white border-emerald-700': orden?.calidad_resultado === 'validado',
+                      'bg-red-600 text-white border-red-700': orden?.calidad_resultado === 'rechazado'
                     }">
                 <svg class="w-4 h-4 inline-block mr-1" fill="currentColor" viewBox="0 0 20 20">
                   <path fill-rule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
@@ -201,7 +206,7 @@ const closePreview = () => { archivoPreview.value = null }
         </div>
         
         <!-- Info Bar -->
-        <div class="bg-gradient-to-r from-indigo-50 to-purple-50 px-8 py-4 border-b border-indigo-100">
+  <div class="bg-gradient-to-r from-indigo-50 to-[#eef2ff] px-8 py-4 border-b border-indigo-100">
           <div class="flex flex-wrap items-center gap-6 text-sm">
             <div class="flex items-center gap-2">
               <svg class="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -210,13 +215,13 @@ const closePreview = () => { archivoPreview.value = null }
               <span class="text-gray-700"><strong>Centro:</strong> {{ orden?.centro?.nombre }}</span>
             </div>
             <div class="flex items-center gap-2">
-              <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg class="w-5 h-5 text-[#1E1C8F]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
               </svg>
               <span class="text-gray-700"><strong>Team Leader:</strong> {{ orden?.team_leader?.name ?? 'No asignado' }}</span>
             </div>
             <div v-if="orden?.area" class="flex items-center gap-2">
-              <svg class="w-5 h-5 text-pink-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg class="w-5 h-5 text-[#1E1C8F]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/>
               </svg>
               <span class="text-gray-700"><strong>Área:</strong> {{ orden.area.nombre }}</span>
@@ -393,8 +398,8 @@ const closePreview = () => { archivoPreview.value = null }
           </div>
 
           <!-- Subir Evidencias -->
-          <div v-if="can?.reportarAvance" class="bg-white rounded-2xl shadow-lg border-2 border-purple-100 overflow-hidden">
-            <div class="bg-gradient-to-r from-purple-600 to-pink-600 px-6 py-4">
+          <div v-if="can?.reportarAvance" class="bg-white rounded-2xl shadow-lg border-2 border-orange-100 overflow-hidden">
+            <div class="bg-gradient-to-r from-orange-600 to-amber-600 px-6 py-4">
               <h3 class="text-lg font-bold text-white flex items-center gap-2">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
@@ -406,8 +411,8 @@ const closePreview = () => { archivoPreview.value = null }
               <div>
                 <label class="block text-sm font-semibold text-gray-700 mb-2">Asociar a ítem (opcional)</label>
                 <div class="relative">
-                  <select v-model="evForm.id_item" 
-                          class="w-full px-4 py-3 pr-10 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-purple-100 focus:border-purple-400 transition-all duration-200 appearance-none bg-white text-gray-800 font-medium">
+      <select v-model="evForm.id_item" 
+        class="w-full px-4 py-3 pr-10 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-orange-100 focus:border-orange-400 transition-all duration-200 appearance-none bg-white text-gray-800 font-medium">
                     <option :value="null">— Sin asociar a ítem específico —</option>
                     <option v-for="it in orden.items" :key="it.id" :value="it.id">
                       #{{it.id}} — {{ it.tamano ? ('Tamaño: '+it.tamano) : it.descripcion }}
@@ -423,12 +428,12 @@ const closePreview = () => { archivoPreview.value = null }
               
               <div>
                 <label class="block text-sm font-semibold text-gray-700 mb-2">Seleccionar archivos</label>
-                <input type="file" multiple accept="image/*,application/pdf,video/mp4" @change="onPickEvidencias"
-                       class="block w-full text-sm text-gray-700 file:mr-4 file:py-3 file:px-5 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-purple-100 file:text-purple-700 hover:file:bg-purple-200 file:transition-all file:duration-200 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-4 focus:ring-purple-100" />
+      <input type="file" multiple accept="image/*,application/pdf,video/mp4" @change="onPickEvidencias"
+        class="block w-full text-sm text-gray-700 file:mr-4 file:py-3 file:px-5 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-orange-100 file:text-orange-700 hover:file:bg-orange-200 file:transition-all file:duration-200 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-4 focus:ring-orange-100" />
               </div>
 
-              <button @click="subirEvidencias" :disabled="evForm.processing"
-                      class="w-full px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold rounded-xl shadow-lg hover:shadow-xl hover:scale-105 transform transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:scale-100 flex items-center justify-center gap-2">
+        <button @click="subirEvidencias" :disabled="evForm.processing"
+          class="w-full px-6 py-3 bg-gradient-to-r from-orange-600 to-amber-600 text-white font-bold rounded-xl shadow-lg hover:shadow-xl hover:scale-105 transform transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:scale-100 flex items-center justify-center gap-2">
                 <svg v-if="!evForm.processing" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
                 </svg>
@@ -500,7 +505,7 @@ const closePreview = () => { archivoPreview.value = null }
 
           <!-- Galería de Evidencias -->
           <div class="bg-white rounded-2xl shadow-lg border-2 border-indigo-100 overflow-hidden">
-            <div class="bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-4">
+            <div class="bg-gradient-to-r from-indigo-600 to-[#1E1C8F] px-6 py-4">
               <h3 class="text-lg font-bold text-white flex items-center gap-2">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
@@ -679,7 +684,7 @@ const closePreview = () => { archivoPreview.value = null }
           
           <!-- Acciones de Calidad/Cliente/Facturación -->
           <div class="bg-white rounded-2xl shadow-lg border-2 border-indigo-100 overflow-hidden sticky top-6">
-            <div class="bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-4">
+            <div class="bg-gradient-to-r from-indigo-600 to-[#1E1C8F] px-6 py-4">
               <h3 class="text-lg font-bold text-white flex items-center gap-2">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
@@ -701,7 +706,7 @@ const closePreview = () => { archivoPreview.value = null }
               <!-- Rechazar Calidad (modal) -->
               <div v-if="can?.calidad_validar" class="space-y-2">
     <button @click="openRechazo" 
-                        class="w-full px-5 py-3 bg-gradient-to-r from-red-600 to-rose-600 text-white font-bold rounded-xl shadow-lg hover:shadow-xl hover:scale-105 transform transition-all duration-200 flex items-center justify-center gap-2">
+                        class="w-full px-5 py-3 bg-red-600 text-white font-bold rounded-xl shadow-lg hover:shadow-xl hover:scale-105 transform transition-all duration-200 flex items-center justify-center gap-2">
                   <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/>
                   </svg>
@@ -721,7 +726,7 @@ const closePreview = () => { archivoPreview.value = null }
 
               <!-- Ir a Facturación -->
               <a v-if="can?.facturar" :href="urls.facturar"
-                 class="block w-full px-5 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold text-center rounded-xl shadow-lg hover:shadow-xl hover:scale-105 transform transition-all duration-200 flex items-center justify-center gap-2">
+                 class="block w-full px-5 py-3 bg-gradient-to-r from-indigo-600 to-[#1E1C8F] text-white font-bold text-center rounded-xl shadow-lg hover:shadow-xl hover:scale-105 transform transition-all duration-200 flex items-center justify-center gap-2">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                 </svg>
@@ -742,7 +747,7 @@ const closePreview = () => { archivoPreview.value = null }
 
           <!-- Motivo de Rechazo / Acciones Correctivas (si existen) -->
           <div v-if="orden?.motivo_rechazo || orden?.acciones_correctivas" class="bg-white rounded-2xl shadow-lg border-2 border-red-100 overflow-hidden">
-            <div class="bg-gradient-to-r from-red-600 to-rose-600 px-6 py-4">
+            <div class="bg-red-600 px-6 py-4">
               <h4 class="text-lg font-bold text-white">Rechazo por Calidad</h4>
             </div>
             <div class="p-4 space-y-3">
