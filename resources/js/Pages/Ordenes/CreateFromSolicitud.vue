@@ -96,12 +96,12 @@ function submit() {
 </script>
 
 <template>
-  <div class="min-h-screen bg-gradient-to-br from-slate-50 via-purple-50 to-pink-50 py-8 px-4 sm:px-6 lg:px-8">
+  <div class="min-h-screen bg-gradient-to-br from-slate-50 via-upper-50 to-upper-100 py-8 px-4 sm:px-6 lg:px-8">
     <div class="max-w-6xl mx-auto space-y-6">
       
       <!-- Header Card -->
-      <div class="bg-white rounded-2xl shadow-xl border-2 border-purple-100 overflow-hidden">
-        <div class="bg-gradient-to-r from-purple-600 to-pink-600 px-8 py-6">
+      <div class="bg-white rounded-2xl shadow-xl border-2 border-upper-50 overflow-hidden">
+        <div class="px-8 py-6 bg-[#1E1C8F]">
           <div class="flex items-center gap-4">
             <div class="bg-white bg-opacity-20 p-3 rounded-xl backdrop-blur-sm">
               <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -110,20 +110,20 @@ function submit() {
             </div>
             <div>
               <h1 class="text-3xl font-bold text-white">Generar Orden de Trabajo</h1>
-              <p class="text-purple-100 text-sm mt-1">{{ folio }}</p>
+              <p class="text-white text-sm mt-1">{{ folio }}</p>
             </div>
           </div>
         </div>
-        <div class="bg-gradient-to-r from-purple-50 to-pink-50 px-8 py-4 border-b border-purple-100">
+  <div class="bg-upper-50 px-8 py-4 border-b border-upper-50">
           <div class="flex items-center gap-6 text-sm">
             <div class="flex items-center gap-2">
-              <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg class="w-5 h-5 text-[#1E1C8F]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
               </svg>
               <span class="text-gray-700"><strong>Servicio:</strong> {{ solicitud?.servicio?.nombre || solicitud?.id_servicio }}</span>
             </div>
             <div class="flex items-center gap-2">
-              <svg class="w-5 h-5 text-pink-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg class="w-5 h-5 text-[#1E1C8F]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
               </svg>
               <span class="text-gray-700"><strong>Centro:</strong> {{ solicitud?.id_centrotrabajo }}</span>
@@ -139,27 +139,27 @@ function submit() {
       </div>
 
       <!-- Main Content Grid -->
-      <div class="grid lg:grid-cols-3 gap-6">
+        <div class="grid lg:grid-cols-3 gap-6">
         
         <!-- Left Column: Form -->
         <div class="lg:col-span-2 space-y-6">
           
           <!-- Descripción General del Producto/Servicio -->
-          <div v-if="descripcionGeneral" class="bg-gradient-to-r from-purple-50 to-pink-50 rounded-2xl shadow-lg border-2 border-purple-200 overflow-hidden">
+          <div v-if="descripcionGeneral" class="bg-upper-50 rounded-2xl shadow-lg border-2 border-upper-50 overflow-hidden">
             <div class="p-6">
               <div class="flex items-start gap-4">
-                <div class="bg-purple-100 p-3 rounded-xl flex-shrink-0">
-                  <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div class="bg-upper-50 p-3 rounded-xl flex-shrink-0">
+                  <svg class="w-6 h-6 text-[#1E1C8F]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/>
                   </svg>
                 </div>
                 <div class="flex-1">
-                  <h3 class="text-sm font-bold text-purple-900 uppercase tracking-wide mb-2">Producto/Servicio Solicitado</h3>
+                  <h3 class="text-sm font-bold text-[#1E1C8F] uppercase tracking-wide mb-2">Producto/Servicio Solicitado</h3>
                   <div class="flex items-baseline gap-3">
-                    <p class="text-2xl font-bold text-purple-700">{{ descripcionGeneral }}</p>
-                    <span class="text-lg font-semibold text-purple-600">— {{ cantidadTotal }} pz</span>
+                    <p class="text-2xl font-bold text-[#1E1C8F]">{{ descripcionGeneral }}</p>
+                    <span class="text-lg font-semibold text-[#1E1C8F]">— {{ cantidadTotal }} pz</span>
                   </div>
-                  <p class="text-xs text-purple-600 mt-3" v-if="!usaTamanos">
+                    <p class="text-xs text-[#1E1C8F] mt-3" v-if="!usaTamanos">
                     💡 Puedes dividir esta cantidad en diferentes ítems con nombres específicos (marca, modelo, etc.)
                   </p>
                 </div>
@@ -215,8 +215,8 @@ function submit() {
             </div>
 
             <!-- Items Section -->
-            <div class="bg-white rounded-2xl shadow-lg border-2 border-emerald-100 overflow-hidden hover:shadow-xl transition-shadow duration-300">
-              <div class="bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-4">
+        <div class="bg-white rounded-2xl shadow-lg border-2 border-emerald-100 overflow-hidden hover:shadow-xl transition-shadow duration-300">
+          <div class="bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-4">
                 <h2 class="text-xl font-bold text-white flex items-center gap-2">
                   <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
@@ -287,7 +287,7 @@ function submit() {
                 </div>
 
                 <!-- Contador de Cantidades (Solo para servicios SIN tamaños) -->
-                <div v-if="!usaTamanos" class="sticky top-4 z-10 bg-gradient-to-r rounded-xl p-5 border-2 shadow-lg"
+       <div v-if="!usaTamanos" class="sticky top-4 z-10 rounded-xl p-5 border-2 shadow-lg bg-white"
                      :class="{
                        'from-yellow-50 to-orange-50 border-yellow-300': alertaSuma === 'warning',
                        'from-red-50 to-pink-50 border-red-300': alertaSuma === 'error',
@@ -356,7 +356,7 @@ function submit() {
                 <!-- Item List -->
                 <div class="space-y-4">
                   <div v-for="(it, i) in form.items" :key="i" 
-                       class="bg-gradient-to-br from-gray-50 to-emerald-50 rounded-xl p-5 border-2 border-emerald-100 hover:border-emerald-300 transition-all duration-200">
+                       class="bg-gray-50 rounded-xl p-5 border-2 border-emerald-100 hover:border-emerald-300 transition-all duration-200">
                     
                     <div class="flex items-center justify-between mb-4">
                       <span class="text-sm font-bold text-emerald-700 bg-emerald-100 px-3 py-1 rounded-full">
@@ -428,13 +428,13 @@ function submit() {
                 </div>
 
                 <!-- Add Item Button (Solo para servicios SIN tamaños) -->
-                <button v-if="!usaTamanos" 
+    <button v-if="!usaTamanos" 
                         type="button" 
                         @click="addItem"
                         :disabled="!puedeAgregarItem"
                         class="w-full px-5 py-3 border-2 border-dashed rounded-xl font-semibold transition-all duration-200 flex items-center justify-center gap-2"
                         :class="puedeAgregarItem 
-                          ? 'bg-gradient-to-r from-emerald-100 to-teal-100 border-emerald-300 text-emerald-700 hover:from-emerald-200 hover:to-teal-200 hover:border-emerald-400' 
+                          ? 'bg-emerald-50 border-emerald-300 text-emerald-700 hover:bg-emerald-100 hover:border-emerald-400' 
                           : 'bg-gray-100 border-gray-300 text-gray-400 cursor-not-allowed'">
                   <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
@@ -469,11 +469,11 @@ function submit() {
             </div>
 
             <!-- Submit Button -->
-            <div class="bg-white rounded-2xl shadow-lg border-2 border-purple-100 overflow-hidden">
+            <div class="bg-white rounded-2xl shadow-lg border-2 border-upper-50 overflow-hidden">
               <div class="p-6">
                 <button type="submit" 
                         :disabled="form.processing || (!usaTamanos && alertaSuma !== 'success')"
-                        class="w-full px-8 py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-lg rounded-xl shadow-xl hover:shadow-2xl hover:scale-105 transform transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:scale-100 flex items-center justify-center gap-3">
+                        class="w-full px-8 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold text-lg rounded-xl shadow-xl hover:shadow-2xl hover:scale-105 transform transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:scale-100 flex items-center justify-center gap-3">
                   <svg v-if="!form.processing" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
                   </svg>
@@ -523,8 +523,8 @@ function submit() {
             <div class="p-5">
               <!-- Items -->
               <div class="space-y-3 mb-5">
-                <div v-for="(l,i) in cotizacion.lines" :key="i" 
-                     class="bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl p-4 border border-orange-100">
+       <div v-for="(l,i) in cotizacion.lines" :key="i" 
+         class="bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl p-4 border border-orange-100">
                   <div class="font-semibold text-gray-800 mb-3">{{ l.label }}</div>
                   <div class="space-y-2 text-sm">
                     <div class="flex justify-between items-center">

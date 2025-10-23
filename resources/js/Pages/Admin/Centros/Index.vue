@@ -125,7 +125,7 @@ function toggle(id){
                     <button @click="toggle(c.id)" 
                             :class="[
                               'inline-flex items-center gap-1 px-4 py-2 font-medium rounded-lg transition-colors duration-200',
-                              c.activo ? 'bg-red-100 text-red-700 hover:bg-red-200' : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                              c.activo ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-emerald-600 text-white hover:bg-emerald-700'
                             ]">
                       <svg v-if="c.activo" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/>

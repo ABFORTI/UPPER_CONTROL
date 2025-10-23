@@ -18,18 +18,18 @@ function impersonate(url){
 </script>
 
 <template>
-  <div class="min-h-screen bg-gradient-to-br from-slate-50 via-purple-50 to-pink-50 py-8 px-4 sm:px-6 lg:px-8">
+  <div class="min-h-screen bg-gradient-to-br from-slate-50 via-indigo-50 to-blue-50 py-8 px-4 sm:px-6 lg:px-8">
     <div class="max-w-7xl mx-auto">
       
       <!-- Header con gradiente -->
-      <div class="bg-gradient-to-r from-purple-600 to-pink-600 rounded-2xl shadow-xl p-8 mb-6">
+  <div class="bg-gradient-to-r from-indigo-600 to-[#1E1C8F] rounded-2xl shadow-xl p-8 mb-6">
         <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
             <h1 class="text-3xl font-extrabold text-white mb-2">👥 Usuarios</h1>
-            <p class="text-purple-100">Administra los usuarios del sistema</p>
+            <p class="text-indigo-100">Administra los usuarios del sistema</p>
           </div>
-          <a :href="route('admin.users.create')" 
-             class="inline-flex items-center gap-2 px-6 py-3 bg-white text-purple-600 font-bold rounded-xl hover:bg-purple-50 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105">
+       <a :href="route('admin.users.create')" 
+         class="inline-flex items-center gap-2 px-6 py-3 bg-white text-[#1E1C8F] font-bold rounded-xl hover:bg-indigo-50 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
             </svg>
@@ -46,13 +46,13 @@ function impersonate(url){
             <input name="search" 
                    :value="filters.search || ''" 
                    placeholder="Nombre o email..."
-                   class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-purple-100 focus:border-purple-400 transition-all duration-200">
+                   class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-indigo-100 focus:border-indigo-400 transition-all duration-200">
           </div>
           <div>
             <label class="block text-sm font-semibold text-gray-700 mb-2">Rol</label>
             <select name="role" 
                     :value="filters.role || ''" 
-                    class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-purple-100 focus:border-purple-400 transition-all duration-200">
+                    class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-indigo-100 focus:border-indigo-400 transition-all duration-200">
               <option value="">Todos los roles</option>
               <option v-for="r in roles" :key="r" :value="r">{{ r }}</option>
             </select>
@@ -61,13 +61,13 @@ function impersonate(url){
             <label class="block text-sm font-semibold text-gray-700 mb-2">Centro</label>
             <select name="centro" 
                     :value="filters.centro || ''" 
-                    class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-purple-100 focus:border-purple-400 transition-all duration-200">
+                    class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-indigo-100 focus:border-indigo-400 transition-all duration-200">
               <option value="">Todos los centros</option>
               <option v-for="c in centros" :key="c.id" :value="c.id">{{ c.nombre }}</option>
             </select>
           </div>
           <div class="flex items-end">
-            <button class="w-full px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold rounded-xl hover:shadow-xl transition-all duration-200 transform hover:scale-105">
+            <button class="w-full px-6 py-3 bg-gradient-to-r from-indigo-600 to-[#1E1C8F] text-white font-bold rounded-xl hover:shadow-xl transition-all duration-200 transform hover:scale-105">
               Filtrar
             </button>
           </div>
@@ -89,10 +89,10 @@ function impersonate(url){
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-100">
-              <tr v-for="u in data.data" :key="u.id" class="hover:bg-purple-50 transition-colors duration-150">
+              <tr v-for="u in data.data" :key="u.id" class="hover:bg-indigo-50 transition-colors duration-150">
                 <td class="px-6 py-4">
                   <div class="flex items-center gap-3">
-                    <div class="flex-shrink-0 h-10 w-10 bg-gradient-to-br from-purple-400 to-pink-400 rounded-full flex items-center justify-center text-white font-bold">
+                    <div class="flex-shrink-0 h-10 w-10 bg-[#1E1C8F] rounded-full flex items-center justify-center text-white font-bold">
                       {{ u.name?.charAt(0)?.toUpperCase() || '?' }}
                     </div>
                     <div>
@@ -106,8 +106,8 @@ function impersonate(url){
                 </td>
                 <td class="px-6 py-4">
                   <div v-if="u.centros_nombres?.length" class="flex flex-wrap gap-1">
-                    <span v-for="(centro, idx) in u.centros_nombres" :key="idx"
-                          class="px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-medium">
+        <span v-for="(centro, idx) in u.centros_nombres" :key="idx"
+          class="px-2 py-1 bg-indigo-100 text-indigo-700 rounded-full text-xs font-medium">
                       {{ centro }}
                     </span>
                   </div>
@@ -134,8 +134,8 @@ function impersonate(url){
                 </td>
                 <td class="px-6 py-4">
                   <div class="flex items-center justify-end gap-2">
-                    <a :href="route('admin.users.edit', u.id)" 
-                       class="inline-flex items-center gap-1 px-3 py-2 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 transition-colors duration-200">
+              <a :href="route('admin.users.edit', u.id)" 
+                class="inline-flex items-center gap-1 px-3 py-2 bg-[#1E1C8F] text-white text-sm font-medium rounded-lg hover:bg-indigo-800 transition-colors duration-200">
                       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
                       </svg>
@@ -144,7 +144,7 @@ function impersonate(url){
                     <button @click="toggle(u.id)" 
                             :class="[
                               'inline-flex items-center gap-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors duration-200',
-                              u.activo ? 'bg-red-100 text-red-700 hover:bg-red-200' : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                              u.activo ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-emerald-600 text-white hover:bg-emerald-700'
                             ]">
                       <svg v-if="u.activo" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/>
@@ -186,9 +186,9 @@ function impersonate(url){
                :class="[
                  'px-4 py-2 rounded-lg font-medium transition-all duration-200',
                  link.active 
-                   ? 'bg-purple-600 text-white shadow-lg' 
+                   ? 'bg-indigo-600 text-white shadow-lg' 
                    : link.url 
-                     ? 'bg-white text-gray-700 hover:bg-purple-50 border-2 border-gray-200' 
+                     ? 'bg-white text-gray-700 hover:bg-indigo-50 border-2 border-gray-200' 
                      : 'bg-gray-100 text-gray-400 cursor-not-allowed'
                ]">
             </a>

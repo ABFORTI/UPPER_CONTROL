@@ -87,7 +87,7 @@ function asignarTL () { tlForm.patch(props.urls.asignar_tl, { preserveScroll: tr
 
 // ----- Registrar avances -----
 const avForm = useForm({
-  items: items.value.map(i => ({ id_item: i.id, cantidad: 0 })), // captura incremental
+  items: items.value.map(i => ({ id_item: i.id, cantidad: '' })), // iniciar vacío para evitar el '0'
   comentario: ''
 })
 const restante = (it) => Math.max(0, (it?.cantidad_planeada ?? 0) - (it?.cantidad_real ?? 0))
@@ -107,7 +107,7 @@ function registrarAvance () {
     onSuccess: () => {
       // resetear inputs
       avForm.reset('comentario')
-      avForm.items = (items.value || []).map(i => ({ id_item: i.id, cantidad: 0 }))
+      avForm.items = (items.value || []).map(i => ({ id_item: i.id, cantidad: '' }))
       // recargar únicamente props necesarias para performance
       router.reload({ only: ['orden','cotizacion'], preserveScroll: true })
     },
@@ -342,9 +342,11 @@ const closePreview = () => { archivoPreview.value = null }
                     <!-- Captura de avance -->
                     <td v-if="can?.reportarAvance" class="px-6 py-4">
                       <div class="flex flex-col items-center gap-2">
-                        <input type="number" min="0"
+         <input type="number" min="0" step="1" inputmode="numeric" pattern="[0-9]*"
                                :max="restante(it)"
-                               v-model.number="avForm.items[idx].cantidad"
+           v-model.number="avForm.items[idx].cantidad"
+           placeholder="0"
+           @focus="if(avForm.items[idx].cantidad===0 || avForm.items[idx].cantidad===''){ avForm.items[idx].cantidad=''; }"
                                class="w-24 px-3 py-2 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400 text-center font-semibold" />
                         <span class="text-xs text-gray-500">máx: {{ restante(it) }}</span>
                       </div>

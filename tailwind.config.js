@@ -24,6 +24,22 @@ export default {
                     danger: '#EA4335',
                     text: '#2E3A59',
                     surface: '#F5F7FA',
+                    // Paleta Upper Logistics
+                    upper: {
+                        50: '#F3F4FF',
+                        100: '#E6E6FF',
+                        200: '#C9C8FF',
+                        300: '#ABABFF',
+                        400: '#8E8AFF',
+                        500: '#1E1C8F', // principal
+                        600: '#19176F',
+                        700: '#14134F',
+                        800: '#0F0F30',
+                    },
+                    accent: {
+                        orange: '#FF7A00',
+                        lime: '#7ED321',
+                    },
                 },
             },
             boxShadow: {
