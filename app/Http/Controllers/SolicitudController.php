@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\DB;
 use App\Models\SolicitudTamano;
 use Illuminate\Support\Facades\Auth;
 use App\Domain\Servicios\PricingService;
+use Illuminate\Support\Facades\Schema;
 
 class SolicitudController extends Controller
 {
@@ -178,7 +179,11 @@ class SolicitudController extends Controller
             }
         }
 
-        return Inertia::render('Solicitudes/Create', [
+    // Cargar catálogos adicionales (centrados en existencia de tablas para evitar fallos si faltan migraciones)
+    $hasCC = Schema::hasTable('centros_costos');
+    $hasMarcas = Schema::hasTable('marcas');
+
+    return Inertia::render('Solicitudes/Create', [
             'servicios'         => $servicios,
             'precios'           => $precios,
             'preciosPorCentro'  => $preciosPorCentro,
@@ -196,18 +201,18 @@ class SolicitudController extends Controller
                   })
                 : [],
             // Centros de costos y Marcas
-            'centrosCostos' => (!$canChooseCentro && $u->centro_trabajo_id)
+            'centrosCostos' => ($hasCC && !$canChooseCentro && $u->centro_trabajo_id)
                 ? \App\Models\CentroCosto::where('id_centrotrabajo', $u->centro_trabajo_id)->activos()->orderBy('nombre')->get()
                 : [],
-            'centrosCostosPorCentro' => $canChooseCentro
+            'centrosCostosPorCentro' => ($hasCC && $canChooseCentro)
                 ? \App\Models\CentroCosto::activos()->get()->groupBy('id_centrotrabajo')->map(function($items){
                     return $items->sortBy('nombre')->values();
                   })
                 : [],
-            'marcas' => (!$canChooseCentro && $u->centro_trabajo_id)
+            'marcas' => ($hasMarcas && !$canChooseCentro && $u->centro_trabajo_id)
                 ? \App\Models\Marca::where('id_centrotrabajo', $u->centro_trabajo_id)->activos()->orderBy('nombre')->get()
                 : [],
-            'marcasPorCentro' => $canChooseCentro
+            'marcasPorCentro' => ($hasMarcas && $canChooseCentro)
                 ? \App\Models\Marca::activos()->get()->groupBy('id_centrotrabajo')->map(function($items){
                     return $items->sortBy('nombre')->values();
                   })
