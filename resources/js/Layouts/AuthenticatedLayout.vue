@@ -136,6 +136,20 @@ function leave (e) {
                 <span class="w-0 opacity-0 group-hover:w-auto group-hover:opacity-100 overflow-hidden transition-all duration-200">Áreas</span>
               </Link>
             </li>
+            <!-- Centros de costos -->
+            <li v-if="isAdmin || isCoord || isControl || isComercial">
+              <Link :href="route('centros_costos.index')" class="flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-3 p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all" :class="{ 'bg-blue-50 text-blue-700 dark:bg-slate-800': url.includes('/centros-costos') }">
+                <Icon name="chart" :size="24" />
+                <span class="w-0 opacity-0 group-hover:w-auto group-hover:opacity-100 overflow-hidden transition-all duration-200">Centros de costos</span>
+              </Link>
+            </li>
+            <!-- Marcas -->
+            <li v-if="isAdmin || isCoord || isControl || isComercial">
+              <Link :href="route('marcas.index')" class="flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-3 p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all" :class="{ 'bg-blue-50 text-blue-700 dark:bg-slate-800': url.includes('/marcas') }">
+                <Icon name="tag" :size="24" />
+                <span class="w-0 opacity-0 group-hover:w-auto group-hover:opacity-100 overflow-hidden transition-all duration-200">Marcas</span>
+              </Link>
+            </li>
             <li v-if="isAdmin">
               <Link :href="route('admin.users.index')" class="flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-3 p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all" :class="{ 'bg-blue-50 text-blue-700 dark:bg-slate-800': url.includes('/admin/users') }">
                 <Icon name="document" :size="24" />
