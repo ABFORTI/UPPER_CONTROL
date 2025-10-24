@@ -115,7 +115,7 @@ function submit() {
           </div>
         </div>
   <div class="bg-upper-50 px-8 py-4 border-b border-upper-50">
-          <div class="flex items-center gap-6 text-sm">
+    <div class="flex items-center gap-6 text-sm flex-wrap">
             <div class="flex items-center gap-2">
               <svg class="w-5 h-5 text-[#1E1C8F]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
@@ -126,7 +126,19 @@ function submit() {
               <svg class="w-5 h-5 text-[#1E1C8F]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
               </svg>
-              <span class="text-gray-700"><strong>Centro:</strong> {{ solicitud?.id_centrotrabajo }}</span>
+              <span class="text-gray-700"><strong>Centro:</strong> {{ solicitud?.centro?.nombre || solicitud?.id_centrotrabajo }}</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <svg class="w-5 h-5 text-[#1E1C8F]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l9-9h5l3 3v5l-9 9-8-8zM16 6h.01"/>
+              </svg>
+              <span class="text-gray-700"><strong>Centro de costos:</strong> {{ solicitud?.centroCosto?.nombre || '—' }}</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <svg class="w-5 h-5 text-[#1E1C8F]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l9-9h5l3 3v5l-9 9-8-8zM16 6h.01"/>
+              </svg>
+              <span class="text-gray-700"><strong>Marca:</strong> {{ solicitud?.marca?.nombre || '—' }}</span>
             </div>
             <div class="flex items-center gap-2">
               <span class="px-3 py-1 rounded-full text-xs font-bold"

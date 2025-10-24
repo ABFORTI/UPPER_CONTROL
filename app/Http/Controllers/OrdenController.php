@@ -54,8 +54,8 @@ class OrdenController extends Controller
                 ->withErrors(['ot' => 'Ya existe una Orden de Trabajo para esta solicitud.']);
         }
 
-        // Cargar relaciones necesarias
-        $solicitud->load(['servicio','centro','tamanos']);
+    // Cargar relaciones necesarias
+    $solicitud->load(['servicio','centro','tamanos','centroCosto','marca']);
 
         // Determinar si el servicio usa tamaños
         $usaTamanos = (bool)($solicitud->servicio->usa_tamanos ?? false);
@@ -109,7 +109,17 @@ class OrdenController extends Controller
         $cot = ['lines'=>$cotLines, 'subtotal'=>$sub, 'iva_rate'=>$ivaRate, 'iva'=>$sub*$ivaRate, 'total'=>$sub*(1+$ivaRate)];
 
         return Inertia::render('Ordenes/CreateFromSolicitud', [
-            'solicitud'           => $solicitud->only('id','descripcion','cantidad','id_servicio','id_centrotrabajo'),
+            'solicitud'           => [
+                'id' => $solicitud->id,
+                'descripcion' => $solicitud->descripcion,
+                'cantidad' => (int)$solicitud->cantidad,
+                'id_servicio' => (int)$solicitud->id_servicio,
+                'id_centrotrabajo' => (int)$solicitud->id_centrotrabajo,
+                'servicio' => [ 'nombre' => $solicitud->servicio->nombre ?? null ],
+                'centro'   => [ 'nombre' => $solicitud->centro->nombre ?? null ],
+                'centroCosto' => $solicitud->centroCosto ? $solicitud->centroCosto->only(['id','nombre']) : null,
+                'marca'       => $solicitud->marca ? $solicitud->marca->only(['id','nombre']) : null,
+            ],
             'folio'               => $this->buildFolioOT($solicitud->id_centrotrabajo),
             'teamLeaders'         => $teamLeaders,
             'prefill'             => $prefill,
@@ -380,7 +390,8 @@ class OrdenController extends Controller
         $this->authorizeFromCentro($orden->id_centrotrabajo, $orden);
 
         $orden->load([
-            'solicitud.archivos','servicio','centro','area','items','teamLeader',
+            'solicitud.archivos','solicitud.centroCosto','solicitud.marca',
+            'servicio','centro','area','items','teamLeader',
             'avances' => fn($q) => $q->with(['usuario', 'item'])->orderByDesc('created_at'),
             'evidencias' => fn($q)=>$q->with('usuario')->orderByDesc('id'),
         ]);
@@ -520,7 +531,7 @@ class OrdenController extends Controller
 
     // Centros permitidos para el usuario
     $centrosPermitidos = $this->allowedCentroIds($u);
-    $q = Orden::with(['servicio','centro','teamLeader','solicitud','factura','facturas','area'])
+    $q = Orden::with(['servicio','centro','teamLeader','solicitud.centroCosto','solicitud.marca','factura','facturas','area'])
         ->when(!$isAdminOrFact, function($qq) use ($centrosPermitidos){
             if (!empty($centrosPermitidos)) { $qq->whereIn('id_centrotrabajo', $centrosPermitidos); }
             else { $qq->whereRaw('1=0'); }
@@ -585,6 +596,8 @@ class OrdenController extends Controller
                 'servicio' => ['nombre' => $o->servicio?->nombre],
                 'centro'   => ['nombre' => $o->centro?->nombre],
                 'area'     => ['nombre' => $o->area?->nombre],
+                'centro_costo' => ['nombre' => optional($o->solicitud?->centroCosto)->nombre],
+                'marca'        => ['nombre' => optional($o->solicitud?->marca)->nombre],
                 'team_leader' => ['name' => $o->teamLeader?->name],
                 'urls' => [
                     'show'     => route('ordenes.show', $o),
