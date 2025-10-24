@@ -75,6 +75,26 @@ Route::middleware(['auth', 'check.servicios'])->group(function () {
     Route::post('/servicios/eliminar', [PrecioController::class,'eliminar'])->name('servicios.eliminar');
 });
 
+/* ======================
+ |  CENTROS DE COSTOS
+ * ====================== */
+Route::middleware(['auth', 'check.areas'])->group(function () {
+    Route::get('/centros-costos', [\App\Http\Controllers\CentroCostoController::class,'index'])->name('centros_costos.index');
+    Route::post('/centros-costos', [\App\Http\Controllers\CentroCostoController::class,'store'])->name('centros_costos.store');
+    Route::put('/centros-costos/{centroCosto}', [\App\Http\Controllers\CentroCostoController::class,'update'])->name('centros_costos.update');
+    Route::delete('/centros-costos/{centroCosto}', [\App\Http\Controllers\CentroCostoController::class,'destroy'])->name('centros_costos.destroy');
+});
+
+/* ==========
+ |  MARCAS
+ * ========== */
+Route::middleware(['auth', 'check.areas'])->group(function () {
+    Route::get('/marcas', [\App\Http\Controllers\MarcaController::class,'index'])->name('marcas.index');
+    Route::post('/marcas', [\App\Http\Controllers\MarcaController::class,'store'])->name('marcas.store');
+    Route::put('/marcas/{marca}', [\App\Http\Controllers\MarcaController::class,'update'])->name('marcas.update');
+    Route::delete('/marcas/{marca}', [\App\Http\Controllers\MarcaController::class,'destroy'])->name('marcas.destroy');
+});
+
 /* ==========
  |  ÁREAS
  * ========== */
