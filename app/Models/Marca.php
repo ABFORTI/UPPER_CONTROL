@@ -27,4 +27,10 @@ class Marca extends Model
     {
         return $q->where('activo', true);
     }
+
+    // Alias para compatibilidad con llamadas "activos()"
+    public function scopeActivos($q)
+    {
+        return $q->where('activo', true);
+    }
 }
