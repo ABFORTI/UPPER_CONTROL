@@ -151,7 +151,8 @@ async function copyTable(){
             <th class="p-2">Centro</th>
             <th class="p-2">Área</th>
             <th class="p-2">Estatus</th>
-            <th class="p-2">Calidad</th>
+            <th class="p-2">Centro de costo</th>
+            <th class="p-2">Marca</th>
             <th class="p-2">Facturación</th>
             <th class="p-2">TL</th>
             <th class="p-2">Fecha</th>
@@ -174,13 +175,7 @@ async function copyTable(){
                   />
                 </td>
                 <td class="px-4 py-3 font-mono">#{{ o.id }}</td>
-                <td class="px-4 py-3">
-                  <div>{{ o.producto || '-' }}</div>
-                  <div class="text-xs text-slate-500 mt-0.5 space-x-2">
-                    <span v-if="o?.centro_costo?.nombre" class="inline-block px-2 py-0.5 rounded bg-slate-100">CC: {{ o.centro_costo.nombre }}</span>
-                    <span v-if="o?.marca?.nombre" class="inline-block px-2 py-0.5 rounded bg-slate-100">Marca: {{ o.marca.nombre }}</span>
-                  </div>
-                </td>
+                <td class="px-4 py-3">{{ o.producto || '-' }}</td>
                 <td class="px-4 py-3">{{ o.servicio?.nombre }}</td>
                 <td class="px-4 py-3">{{ o.centro?.nombre }}</td>
                 <td class="px-4 py-3">{{ o.area?.nombre || '-' }}</td>
@@ -194,14 +189,8 @@ async function copyTable(){
                           'bg-emerald-100 text-emerald-700': o.estatus==='autorizada_cliente'
                         }">{{ o.estatus }}</span>
                 </td>
-                <td class="px-4 py-3">
-                  <span class="px-3 py-1.5 rounded-full text-xs font-semibold uppercase tracking-wide"
-                        :class="{
-                          'bg-amber-100 text-amber-700': o.calidad_resultado==='pendiente',
-                          'bg-green-100 text-green-700': o.calidad_resultado==='validado',
-                          'bg-red-100 text-red-700': o.calidad_resultado==='rechazado'
-                        }">{{ o.calidad_resultado }}</span>
-                </td>
+                <td class="px-4 py-3">{{ o.centro_costo?.nombre || '-' }}</td>
+                <td class="px-4 py-3">{{ o.marca?.nombre || '-' }}</td>
                 <td class="px-4 py-3">
                   <span class="px-3 py-1.5 rounded-full text-xs font-semibold uppercase tracking-wide" :class="factBadgeClass(o.facturacion)">{{ o.facturacion }}</span>
                 </td>
