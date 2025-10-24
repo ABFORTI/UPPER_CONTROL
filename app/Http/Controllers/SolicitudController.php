@@ -33,7 +33,7 @@ class SolicitudController extends Controller
             'week'     => $req->integer('week') ?: null,
         ];
 
-        $q = Solicitud::with(['servicio','centro'])
+    $q = Solicitud::with(['servicio','centro','centroCosto','marca'])
             ->when(!$u->hasAnyRole(['admin','facturacion','calidad','control','comercial']),
                 fn($qq) => $qq->where('id_centrotrabajo', $u->centro_trabajo_id))
             ->when($u->hasAnyRole(['facturacion','calidad','control','comercial']) && !$u->hasRole('admin'), function($qq) use ($u) {
@@ -57,7 +57,7 @@ class SolicitudController extends Controller
 
         $data = $q->paginate(10)->withQueryString();
 
-        $paginator = $q->with(['servicio','centro','cliente','area','archivos'])->paginate(10)->withQueryString();
+    $paginator = $q->with(['servicio','centro','cliente','area','archivos','centroCosto','marca'])->paginate(10)->withQueryString();
         // Transform each item to include a formatted 'fecha' field expected by the frontend
         $paginator->getCollection()->transform(function($s) {
             // Mostrar exactamente lo guardado en BD (sin conversión de huso). Se formatea una sola vez a 'Y-m-d H:i'.
@@ -81,6 +81,8 @@ class SolicitudController extends Controller
                 'cliente' => ['name' => $s->cliente?->name ?? null],
                 'servicio' => ['nombre' => $s->servicio?->nombre ?? null],
                 'centro' => ['nombre' => $s->centro?->nombre ?? null],
+                'centroCosto' => ['nombre' => $s->centroCosto?->nombre ?? null],
+                'marca' => ['nombre' => $s->marca?->nombre ?? null],
                 'area' => ['nombre' => $s->area?->nombre ?? null],
                 'cantidad' => $s->cantidad,
                 'archivos' => $s->archivos ?? [],
@@ -279,74 +281,29 @@ class SolicitudController extends Controller
         while ($attempts < $maxAttempts) {
             try {
                 if ($serv->usa_tamanos) {
-            // Normaliza payload y valida total
-            $t = $req->input('tamanos');
-            if (is_string($t)) {
-                $t = json_decode($t, true) ?: [];
-            }
+                    // NUEVO: flujo diferido. Solo capturamos TOTAL de piezas, sin desglose ni precios.
+                    $req->validate([
+                        'cantidad' => ['required','integer','min:1'],
+                    ]);
 
-            $chico   = (int)($t['chico']   ?? 0);
-            $mediano = (int)($t['mediano'] ?? 0);
-            $grande  = (int)($t['grande']  ?? 0);
-            $jumbo   = (int)($t['jumbo']   ?? 0);
-
-            $total   = $chico + $mediano + $grande + $jumbo;
-
-            if ($total <= 0) {
-                return back()
-                    ->withErrors(['tamanos' => 'Debes capturar al menos 1 pieza.'])
-                    ->withInput();
-            }
-
-            // Calcula importes
-            $pricing = app(\App\Domain\Servicios\PricingService::class);
-            $pu = [
-                'chico'  => (float)$pricing->precioUnitario($centroId, $serv->id, 'chico'),
-                'mediano'=> (float)$pricing->precioUnitario($centroId, $serv->id, 'mediano'),
-                'grande' => (float)$pricing->precioUnitario($centroId, $serv->id, 'grande'),
-                'jumbo'  => (float)$pricing->precioUnitario($centroId, $serv->id, 'jumbo'),
-            ];
-            $subtotal = ($chico*$pu['chico']) + ($mediano*$pu['mediano']) + ($grande*$pu['grande']) + ($jumbo*$pu['jumbo']);
-            $ivaRate = 0.16; $iva = $subtotal*$ivaRate; $totalImporte = $subtotal+$iva;
-
-            // Guarda solicitud + desglose por tamaño en transacción
-            $sol = DB::transaction(function () use ($req, $serv, $u, $centroId, $chico, $mediano, $grande, $jumbo, $total, $subtotal, $iva, $totalImporte) {
-                $sol = Solicitud::create([
-                    'folio'            => $this->generarFolio($centroId),
-                    'id_cliente'       => $u->id,
-                    'id_centrotrabajo' => $centroId,
-                    'id_servicio'      => $serv->id,
-                    'descripcion'      => $req->descripcion,
-                    'id_centrocosto'   => (int)$req->id_centrocosto,
-                    'id_marca'         => $req->filled('id_marca') ? (int)$req->id_marca : null,
-                    // 'id_area' intentionally omitted: area will be assigned later when creating the OT by coordinador
-                    'cantidad'         => $total,
-                    'subtotal'         => $subtotal,
-                    'iva'              => $iva,
-                    'total'            => $totalImporte,
-                    'tamanos_json'     => json_encode(['chico'=>$chico,'mediano'=>$mediano,'grande'=>$grande,'jumbo'=>$jumbo]),
-                    'notas'            => $req->notas,
-                    'estatus'          => 'pendiente',
-                ]);
-
-                $rows = [];
-                foreach (['chico'=>$chico, 'mediano'=>$mediano, 'grande'=>$grande, 'jumbo'=>$jumbo] as $tam => $cant) {
-                    if ($cant > 0) {
-                        $rows[] = [
-                            'id_solicitud' => $sol->id,
-                            'tamano'       => $tam,
-                            'cantidad'     => $cant,
-                            'created_at'   => now(),
-                            'updated_at'   => now(),
-                        ];
-                    }
-                }
-                if ($rows) {
-                    DB::table('solicitud_tamanos')->insert($rows);
-                }
-
-                return $sol;
-            });
+                    $sol = Solicitud::create([
+                        'folio'            => $this->generarFolio($centroId),
+                        'id_cliente'       => $u->id,
+                        'id_centrotrabajo' => $centroId,
+                        'id_servicio'      => $serv->id,
+                        'descripcion'      => $req->descripcion,
+                        'id_centrocosto'   => (int)$req->id_centrocosto,
+                        'id_marca'         => $req->filled('id_marca') ? (int)$req->id_marca : null,
+                        // 'id_area' se asigna al crear la OT por un coordinador
+                        'cantidad'         => (int)$req->cantidad,
+                        // Importes diferidos a la finalización de OT
+                        'subtotal'         => 0,
+                        'iva'              => 0,
+                        'total'            => 0,
+                        'tamanos_json'     => null,
+                        'notas'            => $req->notas,
+                        'estatus'          => 'pendiente',
+                    ]);
         } else {
             $req->validate([
                 'cantidad' => ['required','integer','min:1'],
@@ -582,7 +539,7 @@ class SolicitudController extends Controller
                 ];
             }
             $mode = 'tamanos';
-        } else {
+        } else if (!$solicitud->servicio?->usa_tamanos) {
             // Servicio por pieza
             $pu = (float)$pricing->precioUnitario($solicitud->id_centrotrabajo, $solicitud->id_servicio, null);
             $subtotal = $pu * (int)($solicitud->cantidad ?? 0);
@@ -596,6 +553,11 @@ class SolicitudController extends Controller
                 ]
             ];
             $mode = 'pieza';
+        } else {
+            // Servicio usa tamaños pero aún no hay desglose: precios diferidos
+            $mode = 'pendiente_tamanos';
+            $lines = [];
+            $subtotal = 0.0;
         }
 
         $iva = $subtotal * $ivaRate;

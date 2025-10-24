@@ -72,7 +72,8 @@ class OrdenController extends Controller
                 ];
             }
         } else {
-            // Servicios SIN tamaños: item único separable
+            // Caso 1: Servicios CON tamaños PERO sin desglose aún (flujo diferido)
+            // Caso 2: Servicios SIN tamaños
             $prefill[] = [
                 'descripcion' => $solicitud->descripcion ?? 'Item',
                 'cantidad'    => (int)($solicitud->cantidad ?? 1),
@@ -101,6 +102,10 @@ class OrdenController extends Controller
                 $sub += $lineSub;
                 $cotLines[] = ['label'=>ucfirst($tam), 'cantidad'=>$cant, 'pu'=>$pu, 'subtotal'=>$lineSub];
             }
+        } elseif ($usaTamanos) {
+            // Flujo diferido: sin desglose aún, mostrar totales en cero explícitamente
+            $cotLines[] = ['label'=>'Item', 'cantidad'=>(int)($solicitud->cantidad ?? 0), 'pu'=>0.0, 'subtotal'=>0.0];
+            $sub = 0.0;
         } else {
             $pu = (float)$pricing->precioUnitario($solicitud->id_centrotrabajo, $solicitud->id_servicio, null);
             $sub = $pu * (int)($solicitud->cantidad ?? 0);
@@ -162,21 +167,30 @@ class OrdenController extends Controller
         $separarItems = (bool)($data['separar_items'] ?? false);
 
         if ($usaTamanos) {
-            // Servicios CON tamaños: validar tamaños obligatorios
-            $req->validate([
-                'items.*.tamano' => ['required','in:chico,mediano,grande,jumbo'],
-            ]);
-            
-            // Validar que las cantidades NO se hayan modificado
-            $expectedItems = $solicitud->tamanos->keyBy('tamano')->map(fn($t) => (int)$t->cantidad)->toArray();
-            
-            foreach ($data['items'] as $item) {
-                $tamano = $item['tamano'] ?? null;
-                if (!isset($expectedItems[$tamano])) {
-                    return back()->withErrors(['items' => "El tamaño '{$tamano}' no existe en la solicitud aprobada."]);
+            if ($solicitud->tamanos->count() > 0) {
+                // Servicios CON tamaños: validar tamaños obligatorios y cantidades exactas
+                $req->validate([
+                    'items.*.tamano' => ['required','in:chico,mediano,grande,jumbo'],
+                ]);
+
+                $expectedItems = $solicitud->tamanos->keyBy('tamano')->map(fn($t) => (int)$t->cantidad)->toArray();
+                foreach ($data['items'] as $item) {
+                    $tamano = $item['tamano'] ?? null;
+                    if (!isset($expectedItems[$tamano])) {
+                        return back()->withErrors(['items' => "El tamaño '{$tamano}' no existe en la solicitud aprobada."]);
+                    }
+                    if ((int)$item['cantidad'] !== $expectedItems[$tamano]) {
+                        return back()->withErrors(['items' => "La cantidad del tamaño '{$tamano}' no coincide con la solicitud aprobada ({$expectedItems[$tamano]} esperado)."]);
+                    }
                 }
-                if ((int)$item['cantidad'] !== $expectedItems[$tamano]) {
-                    return back()->withErrors(['items' => "La cantidad del tamaño '{$tamano}' no coincide con la solicitud aprobada ({$expectedItems[$tamano]} esperado)."]);
+            } else {
+                // Flujo diferido: permitir crear OT sin desglose; validar solo suma de cantidades
+                $cantidadTotal = (int)$solicitud->cantidad;
+                $sumaCantidades = collect($data['items'])->sum(fn($i) => (int)($i['cantidad'] ?? 0));
+                if ($sumaCantidades !== $cantidadTotal) {
+                    return back()->withErrors([
+                        'items' => "La suma de las cantidades ({$sumaCantidades}) debe ser igual al total aprobado ({$cantidadTotal})."
+                    ]);
                 }
             }
         } else {
@@ -232,7 +246,10 @@ class OrdenController extends Controller
                     $descripcion = $solicitud->descripcion ?? 'Sin descripción';
                 }
                 
-                $pu = (float)$pricing->precioUnitario($solicitud->id_centrotrabajo, $solicitud->id_servicio, $tamano);
+                // Flujo diferido (usa_tamanos sin desglose): PU = 0 hasta finalizar OT
+                $pu = ($usaTamanos && $solicitud->tamanos->count() === 0)
+                    ? 0.0
+                    : (float)$pricing->precioUnitario($solicitud->id_centrotrabajo, $solicitud->id_servicio, $tamano);
 
                 OrdenItem::create([
                     'id_orden'          => $orden->id,
@@ -390,11 +407,14 @@ class OrdenController extends Controller
         $this->authorizeFromCentro($orden->id_centrotrabajo, $orden);
 
         $orden->load([
-            'solicitud.archivos','solicitud.centroCosto','solicitud.marca',
+            'solicitud.archivos','solicitud.centroCosto','solicitud.marca','solicitud.tamanos',
             'servicio','centro','area','items','teamLeader',
             'avances' => fn($q) => $q->with(['usuario', 'item'])->orderByDesc('created_at'),
             'evidencias' => fn($q)=>$q->with('usuario')->orderByDesc('id'),
         ]);
+
+        // Flag para flujo diferido: usa tamaños y aún no hay desglose en solicitud
+        $pendienteTamanos = (bool)($orden->servicio?->usa_tamanos) && ($orden->solicitud && $orden->solicitud->tamanos->count() === 0);
 
         $canReportar = Gate::allows('reportarAvance', $orden);
         $authUser = Auth::user();
@@ -415,6 +435,8 @@ class OrdenController extends Controller
                     $idsPermitidos = $this->allowedCentroIds($authUser);
                     $canCalidad = in_array((int)$orden->id_centrotrabajo, array_map('intval', $idsPermitidos), true);
                 }
+                // Regla de negocio: si es un servicio por tamaños y falta desglose, NO permitir validar calidad
+                if ($pendienteTamanos) { $canCalidad = false; }
             }
 
             // Cliente autoriza: dueño de la solicitud (o admin) y calidad validada
@@ -451,6 +473,18 @@ class OrdenController extends Controller
         }
         $cot = ['lines'=>$lines, 'subtotal'=>$sub, 'iva_rate'=>$ivaRate, 'iva'=>$sub*$ivaRate, 'total'=>$sub*(1+$ivaRate)];
 
+        // Precios unitarios por tamaño para vista de desglose (flujo diferido)
+        $preciosTamaño = null;
+        if ($orden->servicio && (bool)$orden->servicio->usa_tamanos) {
+            $pricing = app(\App\Domain\Servicios\PricingService::class);
+            $preciosTamaño = [
+                'chico'   => (float)$pricing->precioUnitario($orden->id_centrotrabajo, $orden->id_servicio, 'chico'),
+                'mediano' => (float)$pricing->precioUnitario($orden->id_centrotrabajo, $orden->id_servicio, 'mediano'),
+                'grande'  => (float)$pricing->precioUnitario($orden->id_centrotrabajo, $orden->id_servicio, 'grande'),
+                'jumbo'   => (float)$pricing->precioUnitario($orden->id_centrotrabajo, $orden->id_servicio, 'jumbo'),
+            ];
+        }
+
         return Inertia::render('Ordenes/Show', [
             'orden'       => $orden,
             'can'         => [
@@ -473,8 +507,109 @@ class OrdenController extends Controller
                 'pdf'               => route('ordenes.pdf', $orden),
                 'evidencias_store'  => route('evidencias.store', $orden),
                 'evidencias_destroy'=> route('evidencias.destroy', 0),
+                'definir_tamanos'   => route('ordenes.definirTamanos', $orden),
             ],
+            'flags' => [ 'pendiente_tamanos' => $pendienteTamanos ],
+            'precios_tamano' => $preciosTamaño,
         ]);
+    }
+
+    /** Definir desglose por tamaños para OT (flujo diferido) */
+    public function definirTamanos(Request $req, Orden $orden)
+    {
+        $this->authorize('createFromSolicitud', [Orden::class, $orden->id_centrotrabajo]);
+        $this->authorizeFromCentro($orden->id_centrotrabajo, $orden);
+
+        $orden->load(['servicio','solicitud.tamanos','items']);
+        if (!$orden->servicio || !(bool)$orden->servicio->usa_tamanos) {
+            abort(422, 'La OT no corresponde a un servicio por tamaños.');
+        }
+        if ($orden->solicitud && $orden->solicitud->tamanos->count() > 0) {
+            return back()->withErrors(['tamanos' => 'La solicitud ya tiene un desglose por tamaños.']);
+        }
+        // Permitir definir tamaños incluso si hubo avances previos; los avances quedarán desacoplados del ítem (fk null)
+
+        $data = $req->validate([
+            'chico'   => ['nullable','integer','min:0'],
+            'mediano' => ['nullable','integer','min:0'],
+            'grande'  => ['nullable','integer','min:0'],
+            'jumbo'   => ['nullable','integer','min:0'],
+        ]);
+
+        $cantidades = [
+            'chico'   => (int)($data['chico'] ?? 0),
+            'mediano' => (int)($data['mediano'] ?? 0),
+            'grande'  => (int)($data['grande'] ?? 0),
+            'jumbo'   => (int)($data['jumbo'] ?? 0),
+        ];
+        $suma = array_sum($cantidades);
+        $totalAprobado = (int)($orden->solicitud->cantidad ?? 0);
+        if ($suma !== $totalAprobado) {
+            return back()->withErrors(['tamanos' => "La suma ($suma) debe ser igual al total aprobado ($totalAprobado)."]);
+        }
+
+        DB::transaction(function () use ($orden, $cantidades) {
+            // Reemplazar items en la OT
+            $orden->items()->delete();
+
+            $pricing = app(\App\Domain\Servicios\PricingService::class);
+            $sub = 0.0;
+
+            foreach ($cantidades as $tam => $qty) {
+                if ($qty <= 0) continue;
+                $pu = (float)$pricing->precioUnitario($orden->id_centrotrabajo, $orden->id_servicio, $tam);
+                $lineSub = $pu * (int)$qty;
+
+                \App\Models\OrdenItem::create([
+                    'id_orden'          => $orden->id,
+                    'descripcion'       => $orden->descripcion_general ?? 'Item',
+                    'tamano'            => $tam,
+                    'cantidad_planeada' => (int)$qty,
+                    'cantidad_real'     => (int)$qty, // marcar como completado si la OT ya estaba al 100%
+                    'precio_unitario'   => $pu,
+                    'subtotal'          => $lineSub,
+                ]);
+                $sub += $lineSub;
+            }
+
+            // Actualizar totales en OT
+            $ivaRate = 0.16; $iva = $sub * $ivaRate; $total = $sub + $iva;
+            $orden->subtotal = $sub; $orden->iva = $iva; $orden->total = $total;
+            // total_real como suma monetaria de cantidad_real * precio_unitario (consistente con registrarAvance)
+            $orden->total_real = $orden->items()->selectRaw('COALESCE(SUM(cantidad_real * precio_unitario),0) as t')->value('t');
+            $orden->save();
+
+            // Persistir tamaños en la Solicitud y recalcular sus totales
+            $orden->solicitud->tamanos()->delete();
+            $payloadJson = [];
+            $pricing2 = $pricing; $subSol = 0.0;
+            foreach ($cantidades as $tam => $qty) {
+                if ($qty <= 0) continue;
+                \App\Models\SolicitudTamano::create([
+                    'id_solicitud' => $orden->id_solicitud,
+                    'tamano' => $tam,
+                    'cantidad' => (int)$qty,
+                ]);
+                $payloadJson[] = ['tamano'=>$tam,'cantidad'=>(int)$qty];
+
+                $pu = (float)$pricing2->precioUnitario($orden->id_centrotrabajo, $orden->id_servicio, $tam);
+                $subSol += $pu * (int)$qty;
+            }
+            $orden->solicitud->tamanos_json = json_encode($payloadJson);
+            $orden->solicitud->subtotal = $subSol;
+            $orden->solicitud->iva = $subSol * 0.16;
+            $orden->solicitud->total = $orden->solicitud->subtotal + $orden->solicitud->iva;
+            $orden->solicitud->save();
+
+            // Registrar actividad
+            $this->act('ordenes')
+                ->performedOn($orden)
+                ->event('definir_tamanos')
+                ->withProperties(['cantidades' => $cantidades])
+                ->log("OT #{$orden->id}: tamaños definidos y precios calculados");
+        });
+
+        return back()->with('ok','Desglose por tamaños aplicado correctamente');
     }
 
     /** Asignar Team Leader */
@@ -518,19 +653,29 @@ class OrdenController extends Controller
     $isClienteCentro = $u && method_exists($u, 'hasRole') ? $u->hasRole('cliente_centro') : false;
 
         $filters = [
-            'estatus'  => $req->string('estatus')->toString(),
-            'calidad'  => $req->string('calidad')->toString(),
-            'servicio' => $req->integer('servicio') ?: null,
-            'centro'   => $req->integer('centro') ?: null,
-            'desde'    => $req->date('desde'),
-            'hasta'    => $req->date('hasta'),
-            'id'       => $req->integer('id') ?: null,
-            'year'     => $req->integer('year') ?: null,
-            'week'     => $req->integer('week') ?: null,
+            'estatus'      => $req->string('estatus')->toString(),
+            'calidad'      => $req->string('calidad')->toString(),
+            'servicio'     => $req->integer('servicio') ?: null,
+            'centro'       => $req->integer('centro') ?: null,
+            'centro_costo' => $req->integer('centro_costo') ?: null,
+            'desde'        => $req->date('desde'),
+            'hasta'        => $req->date('hasta'),
+            'id'           => $req->integer('id') ?: null,
+            'year'         => $req->integer('year') ?: null,
+            'week'         => $req->integer('week') ?: null,
         ];
 
     // Centros permitidos para el usuario
     $centrosPermitidos = $this->allowedCentroIds($u);
+
+    // Si se solicitó filtrar por centro de costo y el usuario no es admin/facturacion,
+    // validar que el centro de costo pertenezca a un centro permitido; si no, ignorar el filtro
+    if (!$isAdminOrFact && !empty($filters['centro_costo'])) {
+        $cc = \App\Models\CentroCosto::find($filters['centro_costo']);
+        if (!$cc || !in_array((int)$cc->id_centrotrabajo, array_map('intval', $centrosPermitidos), true)) {
+            $filters['centro_costo'] = null;
+        }
+    }
     $q = Orden::with(['servicio','centro','teamLeader','solicitud.centroCosto','solicitud.marca','factura','facturas','area'])
         ->when(!$isAdminOrFact, function($qq) use ($centrosPermitidos){
             if (!empty($centrosPermitidos)) { $qq->whereIn('id_centrotrabajo', $centrosPermitidos); }
@@ -549,6 +694,9 @@ class OrdenController extends Controller
             ->when($filters['estatus'], fn($qq,$v)=>$qq->where('estatus',$v))
             ->when($filters['calidad'], fn($qq,$v)=>$qq->where('calidad_resultado',$v))
             ->when($filters['servicio'], fn($qq,$v)=>$qq->where('id_servicio',$v))
+            ->when($filters['centro_costo'], function($qq,$v){
+                $qq->whereHas('solicitud', function($q) use ($v) { $q->where('id_centrocosto', $v); });
+            })
             ->when($filters['desde'] && $filters['hasta'], fn($qq)=>$qq->whereBetween('created_at', [
                 request()->date('desde')->startOfDay(), request()->date('hasta')->endOfDay(),
             ]))
@@ -617,9 +765,12 @@ class OrdenController extends Controller
 
         return Inertia::render('Ordenes/Index', [
             'data'      => $data,
-            'filters'   => $req->only(['id','estatus','calidad','servicio','centro','desde','hasta','year','week']),
+            'filters'   => $req->only(['id','estatus','calidad','servicio','centro','centro_costo','desde','hasta','year','week']),
             'servicios' => \App\Models\ServicioEmpresa::select('id','nombre')->orderBy('nombre')->get(),
             'centros'   => $centrosLista,
+            'centrosCostos' => $u->hasAnyRole(['admin','facturacion'])
+                ? \App\Models\CentroCosto::select('id','nombre','id_centrotrabajo')->orderBy('nombre')->get()
+                : \App\Models\CentroCosto::whereIn('id_centrotrabajo', $centrosPermitidos)->select('id','nombre','id_centrotrabajo')->orderBy('nombre')->get(),
             'urls'      => [
                 'index' => route('ordenes.index'),
                 'facturas_batch' => route('facturas.batch'),

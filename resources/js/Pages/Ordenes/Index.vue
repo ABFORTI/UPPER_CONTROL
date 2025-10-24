@@ -7,6 +7,7 @@ const props = defineProps({
   filters: Object,
   servicios: Array,
   centros: Array,
+  centrosCostos: Array,
   urls: Object
 })
 
@@ -36,6 +37,7 @@ function openBatch(){
 // Filtros unificados por estatus (píldoras) con conjunto fijo
 const sel = ref(props.filters?.estatus || '')
 const centroSel = ref(props.filters?.centro || '')
+const centroCostoSel = ref(props.filters?.centro_costo || '')
 const yearSel = ref(props.filters?.year || new Date().getFullYear())
 const weekSel = ref(props.filters?.week || '')
 const estatuses = computed(() => [
@@ -49,6 +51,7 @@ function applyFilter(){
   const params = {}
   if (sel.value) params.estatus = sel.value
   if (centroSel.value) params.centro = centroSel.value
+  if (centroCostoSel.value) params.centro_costo = centroCostoSel.value
   if (yearSel.value) params.year = yearSel.value
   if (weekSel.value) params.week = weekSel.value
   router.get(props.urls.index, params, { preserveState: true, replace: true })
@@ -118,6 +121,12 @@ async function copyTable(){
           <select v-model="centroSel" @change="applyFilter" class="border p-2 rounded min-w-[180px]">
             <option value="">Todos los centros</option>
             <option v-for="c in (props.centros||[])" :key="c.id" :value="c.id">{{ c.nombre }}</option>
+          </select>
+
+          <!-- Centro de costo -->
+          <select v-model="centroCostoSel" @change="applyFilter" class="border p-2 rounded min-w-[200px]">
+            <option value="">Todos los centros de costo</option>
+            <option v-for="cc in (props.centrosCostos||[])" :key="cc.id" :value="cc.id">{{ cc.nombre }}</option>
           </select>
 
           <!-- Año -->

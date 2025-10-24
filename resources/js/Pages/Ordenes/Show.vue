@@ -9,6 +9,7 @@ const props = defineProps({
   can:         { type: Object, default: () => ({}) }, // { reportarAvance:bool, asignar_tl:bool }
   teamLeaders: { type: Array,  default: () => [] },
   cotizacion:  { type: Object, default: () => ({}) },
+  precios_tamano: { type: Object, default: () => null },
 })
 
 // colecciones “a prueba de null”
@@ -139,6 +140,45 @@ const archivoPreview = ref(null)
 const canPreview = (mime) => mime?.startsWith('image/') || mime === 'application/pdf'
 const openPreview = (archivo) => { archivoPreview.value = archivo }
 const closePreview = () => { archivoPreview.value = null }
+
+// ----- Definir tamaños (flujo diferido) -----
+const tamanosForm = ref({ chico: 0, mediano: 0, grande: 0, jumbo: 0 })
+const totalAprobado = computed(() => Number(props.orden?.solicitud?.cantidad || 0))
+const sumaTamanos = computed(() =>
+  Number(tamanosForm.value.chico||0) + Number(tamanosForm.value.mediano||0) +
+  Number(tamanosForm.value.grande||0) + Number(tamanosForm.value.jumbo||0)
+)
+const tamanosValid = computed(() => totalAprobado.value > 0 && sumaTamanos.value === totalAprobado.value)
+const faltanRaw = computed(() => totalAprobado.value - sumaTamanos.value)
+const faltanCalc = computed(() => Math.max(0, faltanRaw.value))
+
+// Precios por tamaño y previsualización de totales
+const ivaRate = computed(() => Number(props.cotizacion?.iva_rate ?? 0.16))
+const precios = computed(() => props.precios_tamano || {})
+const subPrev = computed(() => {
+  const p = precios.value || {}
+  return (Number(tamanosForm.value.chico||0)   * Number(p.chico||0))
+       + (Number(tamanosForm.value.mediano||0) * Number(p.mediano||0))
+       + (Number(tamanosForm.value.grande||0)  * Number(p.grande||0))
+       + (Number(tamanosForm.value.jumbo||0)   * Number(p.jumbo||0))
+})
+const ivaPrev = computed(() => subPrev.value * ivaRate.value)
+const totalPrev = computed(() => subPrev.value + ivaPrev.value)
+function definirTamanos() {
+  if (!tamanosValid.value) return
+  router.post(props.urls.definir_tamanos, {
+    chico:   tamanosForm.value.chico || 0,
+    mediano: tamanosForm.value.mediano || 0,
+    grande:  tamanosForm.value.grande || 0,
+    jumbo:   tamanosForm.value.jumbo || 0,
+  }, {
+    preserveScroll: true,
+    onSuccess: () => {
+      // Forzar visita a la misma ruta para garantizar render con props nuevas
+      router.visit(window.location.href, { replace: true, preserveScroll: true })
+    },
+  })
+}
 </script>
 
 <template>
@@ -695,6 +735,74 @@ const closePreview = () => { archivoPreview.value = null }
 
         <!-- Right Column: Acciones -->
         <div class="lg:col-span-1 space-y-6">
+          <!-- Panel: Desglose por Tamaños (pendiente) -->
+          <div v-if="orden?.servicio?.usa_tamanos && (!orden?.solicitud?.tamanos || orden?.solicitud?.tamanos.length === 0)"
+               class="bg-white rounded-2xl shadow-lg border-2 border-blue-100 overflow-hidden sticky top-6">
+            <div class="bg-blue-700 px-6 py-4">
+              <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h8"/>
+                </svg>
+                Definir desglose por tamaños
+              </h3>
+            </div>
+            <div class="p-5 space-y-4">
+              <div class="text-sm text-blue-800 bg-blue-50 border-2 border-blue-200 rounded-xl p-3">
+                La suma de piezas por tamaño debe ser <strong>{{ totalAprobado }}</strong>.
+              </div>
+              <div class="grid grid-cols-2 gap-3">
+                <div class="space-y-1">
+                  <label class="block text-xs font-semibold text-gray-600 uppercase">Chico</label>
+                  <input type="number" min="0" v-model.number="tamanosForm.chico" class="w-full px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
+                </div>
+                <div class="space-y-1">
+                  <label class="block text-xs font-semibold text-gray-600 uppercase">Mediano</label>
+                  <input type="number" min="0" v-model.number="tamanosForm.mediano" class="w-full px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
+                </div>
+                <div class="space-y-1">
+                  <label class="block text-xs font-semibold text-gray-600 uppercase">Grande</label>
+                  <input type="number" min="0" v-model.number="tamanosForm.grande" class="w-full px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
+                </div>
+                <div class="space-y-1">
+                  <label class="block text-xs font-semibold text-gray-600 uppercase">Jumbo</label>
+                  <input type="number" min="0" v-model.number="tamanosForm.jumbo" class="w-full px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
+                </div>
+              </div>
+              <div class="space-y-2">
+                <div class="flex items-center justify-between text-sm">
+                  <span class="text-gray-600">Suma actual:</span>
+                  <span class="font-bold" :class="{ 'text-red-600': sumaTamanos !== totalAprobado, 'text-emerald-700': sumaTamanos === totalAprobado }">{{ sumaTamanos }}</span>
+                </div>
+                <div class="flex items-center justify-between text-xs">
+                  <span class="text-gray-500">Faltantes:</span>
+                  <span :class="{
+                          'text-emerald-700 font-semibold': faltanRaw === 0,
+                          'text-orange-600 font-semibold': faltanRaw > 0,
+                          'text-red-700 font-semibold': faltanRaw < 0
+                        }">
+                    <template v-if="faltanRaw > 0">{{ faltanCalc }}</template>
+                    <template v-else-if="faltanRaw < 0">Exceso: {{ Math.abs(faltanRaw) }}</template>
+                    <template v-else>Listo</template>
+                  </span>
+                </div>
+                <div class="grid grid-cols-2 gap-3 mt-2">
+                  <div class="bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-xl p-3 border-2 border-indigo-200">
+                    <div class="text-[11px] font-semibold text-indigo-700 uppercase">Subtotal</div>
+                    <div class="text-lg font-bold text-indigo-900">${{ subPrev.toFixed(2) }}</div>
+                  </div>
+                  <div class="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl p-3 border-2 border-emerald-200">
+                    <div class="text-[11px] font-semibold text-emerald-700 uppercase">Total (IVA {{ (ivaRate*100).toFixed(0) }}%)</div>
+                    <div class="text-lg font-bold text-emerald-900">${{ totalPrev.toFixed(2) }}</div>
+                  </div>
+                </div>
+              </div>
+              <button @click="definirTamanos" :disabled="!tamanosValid"
+                      class="w-full px-5 py-3 rounded-xl font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-600 disabled:opacity-60 disabled:cursor-not-allowed">
+                Aplicar desglose
+              </button>
+              <div class="text-xs text-gray-500">Se recalcularán los precios y totales de la OT y la Solicitud.</div>
+            </div>
+          </div>
           
           <!-- Acciones de Calidad/Cliente/Facturación -->
           <div class="bg-white rounded-2xl shadow-lg border-2 border-indigo-100 overflow-hidden sticky top-6">
