@@ -214,6 +214,18 @@ const closePreview = () => { archivoPreview.value = null }
               </svg>
               <span class="text-gray-700"><strong>Centro:</strong> {{ orden?.centro?.nombre }}</span>
             </div>
+            <div v-if="orden?.solicitud?.centro_costo || orden?.solicitud?.centroCosto" class="flex items-center gap-2">
+              <svg class="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l9-9h5l3 3v5l-9 9-8-8zM16 6h.01"/>
+              </svg>
+              <span class="text-gray-700"><strong>Centro de costos:</strong> {{ (orden?.solicitud?.centroCosto?.nombre) || (orden?.solicitud?.centro_costo?.nombre) || '—' }}</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <svg class="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l9-9h5l3 3v5l-9 9-8-8zM16 6h.01"/>
+              </svg>
+              <span class="text-gray-700"><strong>Marca:</strong> {{ (orden?.solicitud?.marca?.nombre) || '—' }}</span>
+            </div>
             <div class="flex items-center gap-2">
               <svg class="w-5 h-5 text-[#1E1C8F]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>

@@ -174,7 +174,13 @@ async function copyTable(){
                   />
                 </td>
                 <td class="px-4 py-3 font-mono">#{{ o.id }}</td>
-                <td class="px-4 py-3">{{ o.producto || '-' }}</td>
+                <td class="px-4 py-3">
+                  <div>{{ o.producto || '-' }}</div>
+                  <div class="text-xs text-slate-500 mt-0.5 space-x-2">
+                    <span v-if="o?.centro_costo?.nombre" class="inline-block px-2 py-0.5 rounded bg-slate-100">CC: {{ o.centro_costo.nombre }}</span>
+                    <span v-if="o?.marca?.nombre" class="inline-block px-2 py-0.5 rounded bg-slate-100">Marca: {{ o.marca.nombre }}</span>
+                  </div>
+                </td>
                 <td class="px-4 py-3">{{ o.servicio?.nombre }}</td>
                 <td class="px-4 py-3">{{ o.centro?.nombre }}</td>
                 <td class="px-4 py-3">{{ o.area?.nombre || '-' }}</td>
