@@ -195,6 +195,23 @@ class SolicitudController extends Controller
                     return $items->sortBy('nombre')->values();
                   })
                 : [],
+            // Centros de costos y Marcas
+            'centrosCostos' => (!$canChooseCentro && $u->centro_trabajo_id)
+                ? \App\Models\CentroCosto::where('id_centrotrabajo', $u->centro_trabajo_id)->activos()->orderBy('nombre')->get()
+                : [],
+            'centrosCostosPorCentro' => $canChooseCentro
+                ? \App\Models\CentroCosto::activos()->get()->groupBy('id_centrotrabajo')->map(function($items){
+                    return $items->sortBy('nombre')->values();
+                  })
+                : [],
+            'marcas' => (!$canChooseCentro && $u->centro_trabajo_id)
+                ? \App\Models\Marca::where('id_centrotrabajo', $u->centro_trabajo_id)->activos()->orderBy('nombre')->get()
+                : [],
+            'marcasPorCentro' => $canChooseCentro
+                ? \App\Models\Marca::activos()->get()->groupBy('id_centrotrabajo')->map(function($items){
+                    return $items->sortBy('nombre')->values();
+                  })
+                : [],
         ]);
     }
 
@@ -233,6 +250,23 @@ class SolicitudController extends Controller
             return back()->withErrors([
                 'centro' => 'Tu usuario no tiene un centro de trabajo asignado. Pide a un administrador que lo configure.'
             ])->withInput();
+        }
+
+        // Validaciones de centro de costo (obligatorio) y marca (opcional) según el centro elegido
+        $req->validate([
+            'id_centrocosto' => ['required','integer','exists:centros_costos,id'],
+            'id_marca' => ['nullable','integer','exists:marcas,id'],
+        ]);
+        $cc = \App\Models\CentroCosto::find($req->id_centrocosto);
+        if (!$cc || (int)$cc->id_centrotrabajo !== (int)$centroId) {
+            return back()->withErrors(['id_centrocosto' => 'El centro de costos no pertenece al centro seleccionado.'])->withInput();
+        }
+        $marca = null;
+        if ($req->filled('id_marca')) {
+            $marca = \App\Models\Marca::find($req->id_marca);
+            if (!$marca || (int)$marca->id_centrotrabajo !== (int)$centroId) {
+                return back()->withErrors(['id_marca' => 'La marca seleccionada no pertenece al centro seleccionado.'])->withInput();
+            }
         }
 
         // Usar un pequeño retry para evitar colisiones de folio bajo concurrencia
@@ -278,6 +312,8 @@ class SolicitudController extends Controller
                     'id_centrotrabajo' => $centroId,
                     'id_servicio'      => $serv->id,
                     'descripcion'      => $req->descripcion,
+                    'id_centrocosto'   => (int)$req->id_centrocosto,
+                    'id_marca'         => $req->filled('id_marca') ? (int)$req->id_marca : null,
                     // 'id_area' intentionally omitted: area will be assigned later when creating the OT by coordinador
                     'cantidad'         => $total,
                     'subtotal'         => $subtotal,
@@ -323,6 +359,8 @@ class SolicitudController extends Controller
                         'id_servicio'      => $serv->id,
                         'descripcion'      => $req->descripcion,
                         'id_area'          => $req->id_area,
+                        'id_centrocosto'   => (int)$req->id_centrocosto,
+                        'id_marca'         => $req->filled('id_marca') ? (int)$req->id_marca : null,
                         'cantidad'         => (int)$req->cantidad,
                         'subtotal'         => $subtotal,
                         'iva'              => $iva,
@@ -482,7 +520,7 @@ class SolicitudController extends Controller
 
     public function show(Request $req, Solicitud $solicitud)
     {
-    $solicitud->load(['cliente','servicio','centro','area','archivos','tamanos','ordenes']);
+    $solicitud->load(['cliente','servicio','centro','area','centroCosto','marca','archivos','tamanos','ordenes']);
         $user = $req->user();
 
         $canAprobar = $user->hasAnyRole(['coordinador','admin'])

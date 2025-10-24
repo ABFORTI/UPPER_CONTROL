@@ -131,6 +131,17 @@ function canPreview(mime) {
                   <p class="mt-1 text-lg font-bold text-gray-800">{{ solicitud.centro?.nombre }}</p>
                 </div>
               </div>
+
+              <div class="grid md:grid-cols-2 gap-4">
+                <div class="bg-indigo-50 rounded-xl p-4 border border-indigo-100">
+                  <label class="text-xs font-semibold text-indigo-700 uppercase tracking-wide">Centro de Costos</label>
+                  <p class="mt-1 text-lg font-bold text-gray-800">{{ solicitud.centro_costo?.nombre || solicitud.centroCosto?.nombre }}</p>
+                </div>
+                <div class="bg-fuchsia-50 rounded-xl p-4 border border-fuchsia-100" v-if="solicitud.marca">
+                  <label class="text-xs font-semibold text-fuchsia-700 uppercase tracking-wide">Marca</label>
+                  <p class="mt-1 text-lg font-bold text-gray-800">{{ solicitud.marca?.nombre }}</p>
+                </div>
+              </div>
               
               <div v-if="solicitud.area" class="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl p-4 border border-emerald-100">
                 <label class="text-xs font-semibold text-emerald-600 uppercase tracking-wide">Área</label>

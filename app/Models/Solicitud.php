@@ -11,13 +11,15 @@ class Solicitud extends Model {
   protected $table='solicitudes';
   protected $fillable=[
     'folio','id_cliente','id_centrotrabajo','id_servicio',
-    'tamano','descripcion','id_area','cantidad','subtotal','iva','total','notas','estatus','aprobada_por','aprobada_at','tamanos_json',
+    'tamano','descripcion','id_area','id_centrocosto','id_marca','cantidad','subtotal','iva','total','notas','estatus','aprobada_por','aprobada_at','tamanos_json',
     'motivo_rechazo'
   ];
   public function cliente(){ return $this->belongsTo(User::class,'id_cliente'); }
   public function centro(){ return $this->belongsTo(CentroTrabajo::class,'id_centrotrabajo'); }
   public function servicio(){ return $this->belongsTo(ServicioEmpresa::class,'id_servicio'); }
   public function area(){ return $this->belongsTo(Area::class,'id_area'); }
+  public function centroCosto(){ return $this->belongsTo(CentroCosto::class,'id_centrocosto'); }
+  public function marca(){ return $this->belongsTo(Marca::class,'id_marca'); }
   public function archivos(){ return $this->morphMany(\App\Models\Archivo::class,'fileable'); }
 
   public function getActivitylogOptions(): LogOptions

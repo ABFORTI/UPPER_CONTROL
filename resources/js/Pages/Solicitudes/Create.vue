@@ -14,6 +14,10 @@ const props = defineProps({
   urls:      { type: Object, required: true }, // { store }
   areas:     { type: Array, required: false, default: () => ([]) },
   areasPorCentro: { type: Object, required: false, default: () => ({}) },
+  centrosCostos: { type: Array, required: false, default: () => ([]) },
+  centrosCostosPorCentro: { type: Object, required: false, default: () => ({}) },
+  marcas: { type: Array, required: false, default: () => ([]) },
+  marcasPorCentro: { type: Object, required: false, default: () => ({}) },
 })
 
 
@@ -25,6 +29,8 @@ cantidad: 1,
 tamanos: { chico:0, mediano:0, grande:0, jumbo:0 },
 notas: '',
 archivos: [],
+id_centrocosto: null,
+id_marca: null,
 })
 // Inicializar centro si aplica
 if (props.canChooseCentro) {
@@ -51,6 +57,22 @@ const filteredAreas = computed(() => {
     return props.areasPorCentro?.[cid] || []
   }
   return props.areas || []
+})
+
+// Centros de Costos y Marcas por centro
+const filteredCentrosCostos = computed(() => {
+  if (props.canChooseCentro) {
+    const cid = Number(form.id_centrotrabajo)
+    return props.centrosCostosPorCentro?.[cid] || []
+  }
+  return props.centrosCostos || []
+})
+const filteredMarcas = computed(() => {
+  if (props.canChooseCentro) {
+    const cid = Number(form.id_centrotrabajo)
+    return props.marcasPorCentro?.[cid] || []
+  }
+  return props.marcas || []
 })
 
 const servicio = computed(() => filteredServicios.value.find(s => s.id === Number(form.id_servicio)) || null)
@@ -116,6 +138,8 @@ id_servicio: form.id_servicio,
 descripcion: form.descripcion,
 notas: form.notas,
 archivos: form.archivos,
+id_centrocosto: form.id_centrocosto,
+id_marca: form.id_marca,
 }
 if (usaTamanos.value) payload.tamanos = {
   chico:  +form.tamanos.chico  || 0,
@@ -192,6 +216,59 @@ function handleFiles(e) {
                   </svg>
                   {{ form.errors.id_centrotrabajo }}
                 </p>
+              </div>
+
+              <!-- Centro de Costos (Obligatorio) y Marca (Opcional) -->
+              <div class="grid md:grid-cols-2 gap-5">
+                <div class="form-group">
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">
+                    <span class="flex items-center gap-2">
+                      <svg class="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h10"/>
+                      </svg>
+                      Centro de Costos
+                      <span class="text-red-500">*</span>
+                    </span>
+                  </label>
+                  <select 
+                    v-model="form.id_centrocosto" 
+                    class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all outline-none bg-gray-50 hover:bg-white"
+                  >
+                    <option :value="null">— Seleccione —</option>
+                    <option v-for="cc in filteredCentrosCostos" :key="cc.id" :value="cc.id">{{ cc.nombre }}</option>
+                  </select>
+                  <p v-if="form.errors.id_centrocosto" class="text-red-600 text-sm mt-2 flex items-center gap-1">
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                    </svg>
+                    {{ form.errors.id_centrocosto }}
+                  </p>
+                </div>
+
+                <div class="form-group">
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">
+                    <span class="flex items-center gap-2">
+                      <svg class="w-4 h-4 text-fuchsia-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/>
+                      </svg>
+                      Marca
+                      <span class="text-xs text-gray-500 font-normal">(Opcional)</span>
+                    </span>
+                  </label>
+                  <select 
+                    v-model="form.id_marca" 
+                    class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-fuchsia-500 focus:ring-4 focus:ring-fuchsia-100 transition-all outline-none bg-gray-50 hover:bg-white"
+                  >
+                    <option :value="null">— Seleccione —</option>
+                    <option v-for="m in filteredMarcas" :key="m.id" :value="m.id">{{ m.nombre }}</option>
+                  </select>
+                  <p v-if="form.errors.id_marca" class="text-red-600 text-sm mt-2 flex items-center gap-1">
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                    </svg>
+                    {{ form.errors.id_marca }}
+                  </p>
+                </div>
               </div>
 
               <!-- Servicio y Descripción -->
