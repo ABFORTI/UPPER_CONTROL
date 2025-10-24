@@ -144,6 +144,9 @@ Route::middleware('auth')->group(function () {
     Route::patch('/ordenes/{orden}/asignar-tl', [OrdenController::class,'asignarTL'])->name('ordenes.asignarTL');
     Route::post('/ordenes/{orden}/avances', [OrdenController::class,'registrarAvance'])->name('ordenes.avances.store');
 
+    // Definir desglose por tamaños (flujo diferido)
+    Route::post('/ordenes/{orden}/tamanos/definir', [OrdenController::class,'definirTamanos'])->name('ordenes.definirTamanos');
+
     // PDFs
     Route::get('/ordenes/{orden}/pdf',  [OrdenController::class,'pdf'])->name('ordenes.pdf');
 

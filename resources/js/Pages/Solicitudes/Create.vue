@@ -26,6 +26,7 @@ id_centrotrabajo: null,
 id_servicio: '',
 descripcion: '',
 cantidad: 1,
+// Modo diferido: ya no capturamos por tamaño en la solicitud
 tamanos: { chico:0, mediano:0, grande:0, jumbo:0 },
 notas: '',
 archivos: [],
@@ -116,19 +117,16 @@ const puTam = computed(() => {
 // Subtotal, IVA y total
 const subtotal = computed(() => {
   if (!servicio.value) return 0
-  if (usaTamanos.value) {
-    return (Number(form.tamanos.chico||0)   * puTam.value.chico)
-         + (Number(form.tamanos.mediano||0) * puTam.value.mediano)
-         + (Number(form.tamanos.grande||0)  * puTam.value.grande)
-         + (Number(form.tamanos.jumbo||0)   * puTam.value.jumbo)
-  }
+  // Para servicios por tamaños (flujo diferido), no calcular precios en la solicitud
+  if (usaTamanos.value) return 0
   return Number(form.cantidad||0) * precioUnitario.value
 })
 const ivaMonto = computed(() => subtotal.value * (props.iva || 0))
 const total = computed(() => subtotal.value + ivaMonto.value)
 
 
-watch(usaTamanos, v => { if (v) form.cantidad = 0; else form.tamanos = {chico:0,mediano:0,grande:0,jumbo:0} })
+// En el nuevo flujo diferido: si usa tamaños, seguimos capturando 'cantidad'
+watch(usaTamanos, v => { if (!v) form.tamanos = {chico:0,mediano:0,grande:0,jumbo:0} })
 
 
 function guardar(){
@@ -142,12 +140,12 @@ id_centrocosto: form.id_centrocosto,
 id_marca: form.id_marca,
 }
 if (usaTamanos.value) payload.tamanos = {
-  chico:  +form.tamanos.chico  || 0,
-  mediano:+form.tamanos.mediano|| 0,
-  grande: +form.tamanos.grande || 0,
-  jumbo:  +form.tamanos.jumbo  || 0,
+  // Ya no se envían tamaños; sólo total de piezas
 }
 else payload.cantidad = +form.cantidad||0
+
+// Para usa_tamanos, enviar cantidad total
+if (usaTamanos.value) payload.cantidad = +form.cantidad||0
 
 
 form.transform(() => payload).post(props.urls.store, { 
@@ -377,78 +375,40 @@ function handleFiles(e) {
                 </div>
               </div>
 
-              <!-- Cantidades por Tamaño -->
+              <!-- Modo por tamaños (flujo diferido): capturar solo total -->
               <div v-else>
-                <label class="block text-sm font-semibold text-gray-700 mb-3">
-                  <span class="flex items-center gap-2">
-                    <svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"/>
+                <div class="mb-4 bg-blue-50 border-2 border-blue-200 rounded-xl p-4">
+                  <div class="flex gap-3">
+                    <svg class="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
                     </svg>
-                    Cantidades por Tamaño
-                  </span>
-                </label>
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                  <div class="bg-gradient-to-br from-upper-50 to-upper-100 rounded-xl p-4 border-2 border-upper-200">
-                    <label class="text-xs font-bold text-[#1E1C8F] uppercase mb-2 block">Chico</label>
-                    <input 
-                      type="number" 
-                      min="0" 
-                      v-model.number="form.tamanos.chico" 
-                      class="w-full px-3 py-2 text-lg font-semibold rounded-lg border-2 border-upper-200 focus:border-[#1E1C8F] focus:ring-2 focus:ring-upper-50 transition-all outline-none bg-white"
-                    />
-                    <div v-if="preciosServicio" class="text-xs text-[#1E1C8F] mt-2 font-semibold">$ {{ puTam.chico.toFixed(2) }}</div>
-                  </div>
-                  <div class="bg-gradient-to-br from-upper-50 to-upper-100 rounded-xl p-4 border-2 border-upper-200">
-                    <label class="text-xs font-bold text-blue-700 uppercase mb-2 block">Mediano</label>
-                    <input 
-                      type="number" 
-                      min="0" 
-                      v-model.number="form.tamanos.mediano" 
-                      class="w-full px-3 py-2 text-lg font-semibold rounded-lg border-2 border-blue-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all outline-none bg-white"
-                    />
-                    <div v-if="preciosServicio" class="text-xs text-blue-600 mt-2 font-semibold">$ {{ puTam.mediano.toFixed(2) }}</div>
-                  </div>
-                  <div class="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl p-4 border-2 border-emerald-200">
-                    <label class="text-xs font-bold text-emerald-700 uppercase mb-2 block">Grande</label>
-                    <input 
-                      type="number" 
-                      min="0" 
-                      v-model.number="form.tamanos.grande" 
-                      class="w-full px-3 py-2 text-lg font-semibold rounded-lg border-2 border-emerald-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 transition-all outline-none bg-white"
-                    />
-                    <div v-if="preciosServicio" class="text-xs text-emerald-600 mt-2 font-semibold">$ {{ puTam.grande.toFixed(2) }}</div>
-                  </div>
-                  <div class="bg-gradient-to-br from-orange-50 to-red-50 rounded-xl p-4 border-2 border-orange-200">
-                    <label class="text-xs font-bold text-orange-700 uppercase mb-2 block">Jumbo</label>
-                    <input 
-                      type="number" 
-                      min="0" 
-                      v-model.number="form.tamanos.jumbo" 
-                      class="w-full px-3 py-2 text-lg font-semibold rounded-lg border-2 border-orange-200 focus:border-orange-500 focus:ring-2 focus:ring-orange-100 transition-all outline-none bg-white"
-                    />
-                    <div v-if="preciosServicio" class="text-xs text-orange-600 mt-2 font-semibold">$ {{ puTam.jumbo.toFixed(2) }}</div>
+                    <div class="text-sm text-blue-800">
+                      <p class="font-semibold mb-1">Servicio por tamaños</p>
+                      <p>Por ahora solo captura el <strong>total de piezas</strong>. El desglose por tamaños y el precio final se calcularán al <strong>terminar la OT</strong>.</p>
+                    </div>
                   </div>
                 </div>
-                <p v-if="form.errors.tamanos" class="text-red-600 text-sm mb-4 flex items-center gap-1">
-                  <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
-                  </svg>
-                  {{ form.errors.tamanos }}
-                </p>
-
-                <!-- Total de Piezas -->
-                <div class="bg-gradient-to-br from-upper-50 to-upper-100 rounded-xl p-4 border-2 border-upper-200 mb-4">
-                  <div class="flex items-center justify-between">
-                    <span class="text-sm font-semibold text-indigo-700">Total de Piezas</span>
-                    <span class="text-3xl font-bold text-indigo-900">{{ totalTamanos }}</span>
-                  </div>
+                <div class="mb-5">
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Total de piezas <span class="text-red-500">*</span></label>
+                  <input type="number" min="1" v-model.number="form.cantidad"
+                         class="w-full md:w-48 px-4 py-3 text-lg font-semibold rounded-xl border-2 border-gray-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all outline-none bg-gray-50 hover:bg-white" />
+                  <p v-if="form.errors.cantidad" class="text-red-600 text-sm mt-2 flex items-center gap-1">
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                    </svg>
+                    {{ form.errors.cantidad }}
+                  </p>
                 </div>
 
-                <!-- Subtotal -->
-                <div class="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl p-4 border-2 border-emerald-200">
-                  <div class="flex items-center justify-between">
-                    <span class="text-sm font-semibold text-emerald-700">Subtotal</span>
-                    <span class="text-3xl font-bold text-emerald-900">${{ subtotal.toFixed(2) }}</span>
+                <!-- Totales en cero (diferidos) -->
+                <div class="grid md:grid-cols-2 gap-4">
+                  <div class="bg-gradient-to-br from-upper-50 to-upper-100 rounded-xl p-4 border-2 border-upper-200">
+                    <div class="text-xs font-semibold text-blue-700 uppercase mb-1">Subtotal</div>
+                    <div class="text-2xl font-bold text-blue-900">$0.00</div>
+                  </div>
+                  <div class="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl p-4 border-2 border-emerald-100">
+                    <div class="text-xs font-semibold text-emerald-700 uppercase mb-1">Total (con IVA)</div>
+                    <div class="text-2xl font-bold text-emerald-900">$0.00</div>
                   </div>
                 </div>
               </div>
@@ -582,28 +542,10 @@ function handleFiles(e) {
                   <div class="text-2xl font-bold text-gray-900">{{ form.cantidad || 0 }}</div>
                 </div>
                 <div v-else class="pb-3 border-b border-gray-200">
-                  <div class="text-xs font-semibold text-gray-500 uppercase mb-2">Tamaños</div>
-                  <div class="grid grid-cols-2 gap-2 text-xs">
-                    <div class="flex items-center justify-between p-2 bg-upper-50 rounded-lg">
-                      <span class="text-[#1E1C8F] font-medium">Chico</span>
-                      <span class="font-bold text-[#1E1C8F]">{{ form.tamanos.chico || 0 }}</span>
-                    </div>
-                    <div class="flex items-center justify-between p-2 bg-blue-50 rounded-lg">
-                      <span class="text-blue-600 font-medium">Med.</span>
-                      <span class="font-bold text-blue-900">{{ form.tamanos.mediano || 0 }}</span>
-                    </div>
-                    <div class="flex items-center justify-between p-2 bg-emerald-50 rounded-lg">
-                      <span class="text-emerald-600 font-medium">Grande</span>
-                      <span class="font-bold text-emerald-900">{{ form.tamanos.grande || 0 }}</span>
-                    </div>
-                    <div class="flex items-center justify-between p-2 bg-orange-50 rounded-lg">
-                      <span class="text-orange-600 font-medium">Jumbo</span>
-                      <span class="font-bold text-orange-900">{{ form.tamanos.jumbo || 0 }}</span>
-                    </div>
-                  </div>
-                  <div class="mt-2 p-2 bg-indigo-50 rounded-lg flex items-center justify-between">
-                    <span class="text-xs font-semibold text-indigo-600">Total Piezas</span>
-                    <span class="text-lg font-bold text-indigo-900">{{ totalTamanos }}</span>
+                  <div class="text-xs font-semibold text-gray-500 uppercase mb-1">Total de piezas</div>
+                  <div class="text-2xl font-bold text-gray-900">{{ form.cantidad || 0 }}</div>
+                  <div class="mt-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg text-[11px] text-blue-800">
+                    El precio se calculará al finalizar la OT con la separación por tamaños.
                   </div>
                 </div>
 
@@ -611,17 +553,17 @@ function handleFiles(e) {
                 <div class="space-y-2 pt-2">
                   <div class="flex items-center justify-between text-sm">
                     <span class="text-gray-600">Subtotal</span>
-                    <span class="font-semibold text-gray-900">${{ subtotal.toFixed(2) }}</span>
+                    <span class="font-semibold text-gray-900">${{ (usaTamanos ? 0 : subtotal).toFixed(2) }}</span>
                   </div>
                   <div class="flex items-center justify-between text-sm">
                     <span class="text-gray-600">IVA ({{ (iva*100).toFixed(0) }}%)</span>
-                    <span class="font-semibold text-gray-900">${{ ivaMonto.toFixed(2) }}</span>
+                    <span class="font-semibold text-gray-900">${{ (usaTamanos ? 0 : ivaMonto).toFixed(2) }}</span>
                   </div>
                   <div class="pt-3 border-t-2 border-gray-300">
                     <div class="flex items-center justify-between">
                       <span class="text-base font-bold text-gray-700">Total</span>
                       <span class="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-                        ${{ total.toFixed(2) }}
+                        ${{ (usaTamanos ? 0 : total).toFixed(2) }}
                       </span>
                     </div>
                   </div>

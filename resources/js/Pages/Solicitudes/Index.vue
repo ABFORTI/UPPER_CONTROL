@@ -32,13 +32,15 @@ function toPage(link){ if(link.url){ router.get(link.url, {}, {preserveState:tru
 
 // Exportar/Copy (cliente) - similar a Facturas
 function toCsv(items){
-  const headers = ['Folio','Usuario','Producto','Servicio','Centro','Cantidad','Archivo','Estatus','Fecha']
+  const headers = ['Folio','Usuario','Producto','Servicio','Centro','Centro de costos','Marca','Cantidad','Archivo','Estatus','Fecha']
   const rows = items.map(s => [
     s.folio || s.id,
     s.cliente?.name || '-',
     s.producto || '-',
     s.servicio?.nombre || '-',
     s.centro?.nombre || '-',
+    s.centroCosto?.nombre || '-',
+    s.marca?.nombre || '-',
     s.cantidad ?? '',
     s.archivos?.length > 0 ? 'Sí' : 'No',
     s.estatus ?? '',
@@ -59,7 +61,7 @@ function downloadExcel(){
 }
 async function copyTable(){
   try{
-  const tsv = (props.data?.data||[]).map(s => [s.folio||s.id, s.cliente?.name||'-', s.producto||'-', s.servicio?.nombre||'-', s.centro?.nombre||'-', s.cantidad??'', s.archivos?.length > 0 ? 'Sí' : 'No', s.estatus??'', s.fecha||''].join('\t')).join('\n')
+  const tsv = (props.data?.data||[]).map(s => [s.folio||s.id, s.cliente?.name||'-', s.producto||'-', s.servicio?.nombre||'-', s.centro?.nombre||'-', s.centroCosto?.nombre||'-', s.marca?.nombre||'-', s.cantidad??'', s.archivos?.length > 0 ? 'Sí' : 'No', s.estatus??'', s.fecha||''].join('\t')).join('\n')
     await navigator.clipboard.writeText(tsv)
   }catch(e){ console.warn('No se pudo copiar:', e) }
 }
@@ -122,6 +124,8 @@ async function copyTable(){
                 <th class="p-2">Producto</th>
                 <th class="p-2">Servicio</th>
                 <th class="p-2">Centro</th>
+                <th class="p-2">Centro de costos</th>
+                <th class="p-2">Marca</th>
                 <th class="p-2">Cantidad</th>
                 <th class="p-2">Archivo</th>
                 <th class="p-2">Estatus</th>
@@ -136,6 +140,8 @@ async function copyTable(){
                 <td class="px-4 py-3">{{ s.producto || '-' }}</td>
                 <td class="px-4 py-3">{{ s.servicio?.nombre || '-' }}</td>
                 <td class="px-4 py-3">{{ s.centro?.nombre || '-' }}</td>
+                <td class="px-4 py-3">{{ s.centroCosto?.nombre || '-' }}</td>
+                <td class="px-4 py-3">{{ s.marca?.nombre || '-' }}</td>
                 <td class="px-4 py-3">{{ s.cantidad }}</td>
                 <td class="px-4 py-3 text-center">
                   <span v-if="s.archivos?.length > 0" class="inline-flex items-center gap-1 text-green-600">

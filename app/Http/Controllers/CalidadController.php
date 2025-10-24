@@ -39,6 +39,18 @@ class CalidadController extends Controller
     $this->authorize('calidad', $orden);
     $this->authCalidad($orden);
     if ($orden->estatus !== 'completada') abort(422);
+    // Regla: si el servicio usa tamaños y aún no hay desglose en la solicitud, no permitir validar
+    try {
+      $orden->loadMissing(['servicio','solicitud.tamanos']);
+      $usaTamanos = (bool)($orden->servicio?->usa_tamanos ?? false);
+      $faltaDesglose = $usaTamanos && ($orden->solicitud && $orden->solicitud->tamanos()->count() === 0);
+      if ($faltaDesglose) {
+        abort(422, 'Debe definir el desglose por tamaños antes de validar calidad.');
+      }
+    } catch (\Throwable $e) {
+      // En caso de error en relaciones, aplicar un fallback conservador
+      abort(422, 'Debe definir el desglose por tamaños antes de validar calidad.');
+    }
     Aprobacion::create([
       'aprobable_type'=> Orden::class,
       'aprobable_id'  => $orden->id,
