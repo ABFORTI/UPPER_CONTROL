@@ -104,6 +104,13 @@ class CentroCostoController extends Controller
     public function destroy(CentroCosto $centroCosto)
     {
         $this->authorizeFromCentro($centroCosto->id_centrotrabajo);
+        // Evitar borrar si existen solicitudes que lo referencian (evita error de FK)
+        $tieneSolicitudes = \App\Models\Solicitud::where('id_centrocosto', $centroCosto->id)->exists();
+        if ($tieneSolicitudes) {
+            return redirect()->route('centros_costos.index')
+                ->withErrors(['delete' => 'No se puede eliminar este centro de costos porque existen solicitudes asociadas. Reasigna o elimina primero las solicitudes relacionadas.']);
+        }
+
         $centroCosto->delete();
         return redirect()->route('centros_costos.index')->with('success','Centro de costo eliminado.');
     }
