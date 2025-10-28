@@ -310,6 +310,7 @@ class OrdenController extends Controller
 
         $justCompleted = false;
         DB::transaction(function () use ($orden, $data, $req, &$justCompleted) {
+            $pricing = app(\App\Domain\Servicios\PricingService::class);
             foreach ($data['items'] as $i) {
                 $item = \App\Models\OrdenItem::where('id', $i['id_item'])
                     ->where('id_orden', $orden->id)
@@ -321,18 +322,34 @@ class OrdenController extends Controller
                     $nuevo = (int)$item->cantidad_planeada;
                 }
 
-                $item->update([
-                    'cantidad_real' => $nuevo,
-                    'subtotal'      => (float)$item->precio_unitario * $nuevo,
-                ]);
+                // Determinar un PU efectivo robusto
+                $puEfectivo = (float)$item->precio_unitario;
+                if ($puEfectivo <= 0) {
+                    // Intentar resolver desde PricingService (según centro, servicio y tamaño)
+                    $puEfectivo = (float)$pricing->precioUnitario($orden->id_centrotrabajo, $orden->id_servicio, $item->tamano);
+                }
+                if ($puEfectivo <= 0) {
+                    // Último recurso: derivar del subtotal actual y mejor base de cantidad
+                    $baseQty = ((int)$item->cantidad_real > 0) ? (int)$item->cantidad_real : max(1, (int)$item->cantidad_planeada);
+                    $puEfectivo = (float)$item->subtotal / max(1, $baseQty);
+                }
+
+                $item->precio_unitario = $item->precio_unitario > 0 ? $item->precio_unitario : $puEfectivo;
+                $item->cantidad_real = $nuevo;
+                $item->subtotal = $puEfectivo * $nuevo;
+                $item->save();
             }
 
             // totales y estatus
             $sumReal = $orden->items()->sum('cantidad_real');
             $sumPlan = $orden->items()->sum('cantidad_planeada');
 
-            $orden->total_real = $orden->items()
-                ->selectRaw('COALESCE(SUM(cantidad_real * precio_unitario),0) as t')->value('t');
+            // Monetario real: usar la suma de subtotales (robusto incluso si algún PU era 0 y se corrigió)
+            $orden->total_real = (float)$orden->items()->selectRaw('COALESCE(SUM(subtotal),0) as t')->value('t');
+            // También reflejar estos importes en subtotal/iva/total para facturación basada en lo realizado
+            $orden->subtotal = $orden->total_real;
+            $orden->iva = $orden->subtotal * 0.16;
+            $orden->total = $orden->subtotal + $orden->iva;
 
 
             $justCompleted = ($orden->estatus !== 'completada') && ($sumReal >= $sumPlan && $sumPlan > 0);
@@ -398,6 +415,116 @@ class OrdenController extends Controller
         }
 
         return back()->with('ok','Avance registrado');
+    }
+
+    /** Registrar faltantes (disminuir cantidad planeada y dejar evidencia) */
+    public function registrarFaltantes(Request $req, Orden $orden)
+    {
+        $this->authorize('reportarAvance', $orden);
+        $this->authorizeFromCentro($orden->id_centrotrabajo, $orden);
+
+        $data = $req->validate([
+            'items'                   => ['required','array','min:1'],
+            'items.*.id_item'         => ['required','integer','exists:orden_items,id'],
+            'items.*.faltantes'       => ['required','integer','min:0'],
+            'nota'                    => ['nullable','string','max:2000'],
+        ]);
+
+        $resumen = [];
+
+    DB::transaction(function () use ($orden, $data, &$resumen) {
+            foreach ($data['items'] as $d) {
+                $item = \App\Models\OrdenItem::where('id', $d['id_item'])
+                    ->where('id_orden', $orden->id)
+                    ->lockForUpdate()
+                    ->firstOrFail();
+
+                $falt = max(0, (int)$d['faltantes']);
+                $pend = max(0, (int)$item->cantidad_planeada - (int)$item->cantidad_real);
+                if ($falt <= 0) continue; // nada que hacer
+                if ($falt > $pend) {
+                    // Limitar a lo pendiente para preservar coherencia
+                    $falt = $pend;
+                }
+
+                if ($falt > 0) {
+                    // Calcular PU confiable: usar precio_unitario si existe, de lo contrario derivarlo del subtotal actual
+                    $baseQty = ((int)$item->cantidad_real > 0) ? (int)$item->cantidad_real : max(1, (int)$item->cantidad_planeada);
+                    $puEfectivo = (float)$item->precio_unitario;
+                    if ($puEfectivo <= 0) {
+                        $puEfectivo = (float)$item->subtotal / max(1, $baseQty);
+                    }
+
+                    // Acumular registro de faltantes y ajustar plan
+                    $nuevoPlan = (int)$item->cantidad_planeada - $falt;
+                    // Nunca por debajo de lo ya realizado
+                    if ($nuevoPlan < (int)$item->cantidad_real) {
+                        $nuevoPlan = (int)$item->cantidad_real;
+                    }
+                    // Acumula faltantes (nuevo campo)
+                    $item->faltantes = (int)($item->faltantes ?? 0) + (int)$falt;
+                    $item->cantidad_planeada = $nuevoPlan;
+                    // Asegurar PU y subtotal coherentes con lo REAL producido
+                    if ($item->precio_unitario <= 0 && $puEfectivo > 0) {
+                        $item->precio_unitario = $puEfectivo;
+                    }
+                    $item->subtotal = $puEfectivo * (int)$item->cantidad_real;
+                    $item->save();
+
+                    $resumen[] = [
+                        'id_item' => $item->id,
+                        'descripcion' => $item->tamano ?: ($item->descripcion ?: 'Item'),
+                        'faltantes' => $d['faltantes'],
+                    ];
+                }
+            }
+
+            // Recalcular totales monetarios con base en los subtotales de cada item (robusto aunque PU sea 0)
+            $sumSubtotales = (float)$orden->items()->selectRaw('COALESCE(SUM(subtotal),0) as t')->value('t');
+            $orden->total_real = $sumSubtotales; // total_real debe representar el importe real
+            // Para facturar lo realmente realizado, el subtotal/iva/total deben reflejar lo real
+            $orden->subtotal = $sumSubtotales;
+            $orden->iva      = $sumSubtotales * 0.16;
+            $orden->total    = $orden->subtotal + $orden->iva;
+
+            // Si con el nuevo plan la suma real alcanza el plan, marcar completada
+            $sumReal = (int)$orden->items()->sum('cantidad_real');
+            $sumPlan = (int)$orden->items()->sum('cantidad_planeada');
+            if ($sumPlan > 0 && $sumReal >= $sumPlan) {
+                if ($orden->estatus !== 'completada') {
+                    $orden->estatus = 'completada';
+                    $orden->calidad_resultado = 'pendiente';
+                    $orden->fecha_completada = now();
+                }
+            }
+            $orden->save();
+
+            // Registrar un avance informativo con resumen
+            if (!empty($resumen)) {
+                $partes = array_map(function($r){
+                    return (string)($r['faltantes']).' en '.($r['descripcion']);
+                }, $resumen);
+                $coment = '[FALTANTES] '.implode('; ', $partes);
+                if (!empty($data['nota'])) { $coment .= ' | Nota: '.$data['nota']; }
+                \App\Models\Avance::create([
+                    'id_orden' => $orden->id,
+                    'id_item' => null,
+                    'id_usuario' => Auth::id(),
+                    'cantidad' => 0,
+                    'comentario' => $coment,
+                    'es_corregido' => 0,
+                ]);
+            }
+
+            // Activity log
+            $this->act('ordenes')
+                ->performedOn($orden)
+                ->event('faltantes')
+                ->withProperties(['items' => $resumen, 'nota' => $data['nota'] ?? null])
+                ->log("OT #{$orden->id}: faltantes aplicados");
+        });
+
+        return back()->with('ok','Faltantes aplicados');
     }
 
     /** Detalle de OT */
@@ -485,6 +612,12 @@ class OrdenController extends Controller
             ];
         }
 
+        // Resumen de unidades: planeado original, completado, faltante y total vigente
+        $planeadoOriginal = (int)$orden->items->sum(fn($i)=> (int)$i->cantidad_planeada + (int)($i->faltantes ?? 0));
+        $completadoSum    = (int)$orden->items->sum('cantidad_real');
+        $faltanteSum      = (int)$orden->items->sum(function($i){ return (int)($i->faltantes ?? 0); });
+        $totalVigente     = (int)$orden->items->sum('cantidad_planeada');
+
         return Inertia::render('Ordenes/Show', [
             'orden'       => $orden,
             'can'         => [
@@ -496,9 +629,16 @@ class OrdenController extends Controller
             ],
             'teamLeaders' => $teamLeaders,
             'cotizacion'  => $cot,
+            'unidades'    => [
+                'planeado'   => $planeadoOriginal,
+                'completado' => $completadoSum,
+                'faltante'   => $faltanteSum,
+                'total'      => $totalVigente,
+            ],
             'urls'        => [
                 'asignar_tl'        => route('ordenes.asignarTL', $orden),
                 'avances_store'     => route('ordenes.avances.store', $orden),
+                'faltantes_store'   => route('ordenes.faltantes.store', $orden),
                 'calidad_page'      => route('calidad.show', $orden),
                 'calidad_validar'   => route('calidad.validar', $orden),
                 'calidad_rechazar'  => route('calidad.rechazar', $orden),
@@ -543,9 +683,10 @@ class OrdenController extends Controller
             'jumbo'   => (int)($data['jumbo'] ?? 0),
         ];
         $suma = array_sum($cantidades);
-        $totalAprobado = (int)($orden->solicitud->cantidad ?? 0);
-        if ($suma !== $totalAprobado) {
-            return back()->withErrors(['tamanos' => "La suma ($suma) debe ser igual al total aprobado ($totalAprobado)."]);
+        // Objetivo dinámico: total vigente después de faltantes (suma de cantidad_planeada actual de los ítems)
+        $totalVigente = (int)$orden->items->sum('cantidad_planeada');
+        if ($suma !== $totalVigente) {
+            return back()->withErrors(['tamanos' => "La suma ($suma) debe ser igual al total vigente ($totalVigente)."]);
         }
 
         DB::transaction(function () use ($orden, $cantidades) {
@@ -554,6 +695,7 @@ class OrdenController extends Controller
 
             $pricing = app(\App\Domain\Servicios\PricingService::class);
             $sub = 0.0;
+            $wasCompleted = ($orden->estatus === 'completada');
 
             foreach ($cantidades as $tam => $qty) {
                 if ($qty <= 0) continue;
@@ -565,7 +707,7 @@ class OrdenController extends Controller
                     'descripcion'       => $orden->descripcion_general ?? 'Item',
                     'tamano'            => $tam,
                     'cantidad_planeada' => (int)$qty,
-                    'cantidad_real'     => (int)$qty, // marcar como completado si la OT ya estaba al 100%
+                    'cantidad_real'     => $wasCompleted ? (int)$qty : 0, // si la OT YA estaba completada, mantener; de lo contrario iniciar en 0
                     'precio_unitario'   => $pu,
                     'subtotal'          => $lineSub,
                 ]);
@@ -575,8 +717,8 @@ class OrdenController extends Controller
             // Actualizar totales en OT
             $ivaRate = 0.16; $iva = $sub * $ivaRate; $total = $sub + $iva;
             $orden->subtotal = $sub; $orden->iva = $iva; $orden->total = $total;
-            // total_real como suma monetaria de cantidad_real * precio_unitario (consistente con registrarAvance)
-            $orden->total_real = $orden->items()->selectRaw('COALESCE(SUM(cantidad_real * precio_unitario),0) as t')->value('t');
+            // total_real como suma de subtotales (robusto ante PU vacíos)
+            $orden->total_real = (float)$orden->items()->selectRaw('COALESCE(SUM(subtotal),0) as t')->value('t');
             $orden->save();
 
             // Persistir tamaños en la Solicitud y recalcular sus totales
