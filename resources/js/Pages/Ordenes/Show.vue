@@ -10,6 +10,7 @@ const props = defineProps({
   teamLeaders: { type: Array,  default: () => [] },
   cotizacion:  { type: Object, default: () => ({}) },
   precios_tamano: { type: Object, default: () => null },
+  unidades: { type: Object, default: () => ({ planeado:0, completado:0, faltante:0, total:0 }) },
 })
 
 // colecciones “a prueba de null”
@@ -62,6 +63,11 @@ function extractRechazoComentario(c) {
   return parts[0].trim()
 }
 
+// Devuelve true si el comentario es de tipo FALTANTES
+function isFaltantesComentario(c) {
+  return typeof c === 'string' && c.startsWith('[FALTANTES]')
+}
+
 // ----- Calidad / Cliente -----
 const obs = ref('')
 const acciones_correctivas = ref('')
@@ -91,8 +97,34 @@ const avForm = useForm({
   items: items.value.map(i => ({ id_item: i.id, cantidad: '' })), // iniciar vacío para evitar el '0'
   comentario: ''
 })
+// Faltantes
+const faltForm = useForm({
+  items: items.value.map(i => ({ id_item: i.id, faltantes: '' })),
+  nota: ''
+})
+const hasFaltantes = computed(() => {
+  try {
+    return (faltForm.items || []).some((x, idx) => {
+      const it = items.value[idx]
+      const max = restante(it)
+      const val = Number(x?.faltantes || 0)
+      return val > 0 && val <= max
+    })
+  } catch { return false }
+})
 const restante = (it) => Math.max(0, (it?.cantidad_planeada ?? 0) - (it?.cantidad_real ?? 0))
+const hasAvance = computed(() => {
+  try {
+    return (avForm.items || []).some((x, idx) => {
+      const it = items.value[idx]
+      const max = restante(it)
+      const val = Number(x?.cantidad || 0)
+      return val > 0 && val <= max
+    })
+  } catch { return false }
+})
 function registrarAvance () {
+  avForm.clearErrors('items')
   avForm.items = avForm.items
     .map((x, idx) => {
       const it = items.value[idx]
@@ -101,7 +133,10 @@ function registrarAvance () {
     })
     .filter(x => x.cantidad > 0)
 
-  if (!avForm.items.length) return
+  if (!avForm.items.length) {
+    avForm.setError('items', 'Ingresa al menos una cantidad mayor a 0 para registrar avance.')
+    return
+  }
   avForm.post(props.urls.avances_store, {
     preserveScroll: true,
     // Al completar, recargar la data desde el servidor para reflejar cantidades reales actualizadas
@@ -109,9 +144,39 @@ function registrarAvance () {
       // resetear inputs
       avForm.reset('comentario')
       avForm.items = (items.value || []).map(i => ({ id_item: i.id, cantidad: '' }))
+      avForm.clearErrors('items')
       // recargar únicamente props necesarias para performance
-      router.reload({ only: ['orden','cotizacion'], preserveScroll: true })
+  // También recargar 'unidades' para que el panel de desglose use el TOTAL vigente
+  router.reload({ only: ['orden','cotizacion','unidades'], preserveScroll: true })
     },
+  })
+}
+
+function aplicarFaltantes(){
+  faltForm.clearErrors('items')
+  // Limitar faltantes al restante
+  faltForm.items = faltForm.items
+    .map((x, idx) => {
+      const it = items.value[idx]
+      const max = restante(it)
+      const val = Math.max(0, Math.min(Number(x.faltantes || 0), max))
+      return { id_item: it.id, faltantes: val }
+    })
+    .filter(x => x.faltantes > 0)
+
+  if (!faltForm.items.length) {
+    faltForm.setError('items', 'Ingresa al menos un faltante mayor a 0 para aplicar cambios.')
+    return
+  }
+  faltForm.post(props.urls.faltantes_store, {
+    preserveScroll: true,
+    onSuccess: () => {
+      faltForm.reset('nota')
+      faltForm.items = (items.value || []).map(i => ({ id_item: i.id, faltantes: '' }))
+      faltForm.clearErrors('items')
+  // También recargar 'unidades' para que el panel de desglose use el TOTAL vigente
+  router.reload({ only: ['orden','cotizacion','unidades'], preserveScroll: true })
+    }
   })
 }
 
@@ -143,7 +208,9 @@ const closePreview = () => { archivoPreview.value = null }
 
 // ----- Definir tamaños (flujo diferido) -----
 const tamanosForm = ref({ chico: 0, mediano: 0, grande: 0, jumbo: 0 })
-const totalAprobado = computed(() => Number(props.orden?.solicitud?.cantidad || 0))
+// Objetivo dinámico para el desglose: usa el total vigente de la OT (suma de cantidades planeadas tras faltantes)
+// fallback al total aprobado de la solicitud si no está disponible
+const totalAprobado = computed(() => Number((props.unidades?.total ?? props.orden?.solicitud?.cantidad) || 0))
 const sumaTamanos = computed(() =>
   Number(tamanosForm.value.chico||0) + Number(tamanosForm.value.mediano||0) +
   Number(tamanosForm.value.grande||0) + Number(tamanosForm.value.jumbo||0)
@@ -338,6 +405,21 @@ function definirTamanos() {
             </div>
             
             <div v-if="items.length" class="overflow-x-auto">
+              <!-- Resumen de unidades -->
+              <div class="px-6 pt-5 pb-2 flex flex-wrap gap-3">
+                <div class="px-3 py-2 bg-blue-50 border-2 border-blue-200 rounded-full text-blue-800 text-sm font-bold">
+                  Planeado: <span class="ml-1">{{ unidades?.planeado ?? 0 }}</span>
+                </div>
+                <div class="px-3 py-2 bg-emerald-50 border-2 border-emerald-200 rounded-full text-emerald-800 text-sm font-bold">
+                  Completado: <span class="ml-1">{{ unidades?.completado ?? 0 }}</span>
+                </div>
+                <div class="px-3 py-2 bg-rose-50 border-2 border-rose-300 rounded-full text-rose-700 text-sm font-bold">
+                  Faltante: <span class="ml-1">{{ unidades?.faltante ?? 0 }}</span>
+                </div>
+                <div class="px-3 py-2 bg-indigo-50 border-2 border-indigo-200 rounded-full text-indigo-800 text-sm font-bold">
+                  Total: <span class="ml-1">{{ unidades?.total ?? 0 }}</span>
+                </div>
+              </div>
               <table class="min-w-full">
                 <thead class="bg-gradient-to-r from-emerald-50 to-teal-50">
                   <tr>
@@ -346,6 +428,7 @@ function definirTamanos() {
                     <th class="px-6 py-4 text-center text-sm font-bold text-emerald-700 uppercase tracking-wider">Completado</th>
                     <th class="px-6 py-4 text-center text-sm font-bold text-emerald-700 uppercase tracking-wider">Progreso</th>
                     <th v-if="can?.reportarAvance" class="px-6 py-4 text-center text-sm font-bold text-emerald-700 uppercase tracking-wider">Registrar</th>
+                    <th v-if="can?.reportarAvance" class="px-6 py-4 text-center text-sm font-bold text-emerald-700 uppercase tracking-wider">Faltantes</th>
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-100">
@@ -399,7 +482,21 @@ function definirTamanos() {
            v-model.number="avForm.items[idx].cantidad"
            placeholder="0"
            @focus="if(avForm.items[idx].cantidad===0 || avForm.items[idx].cantidad===''){ avForm.items[idx].cantidad=''; }"
+           @input="avForm.clearErrors('items')"
                                class="w-24 px-3 py-2 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400 text-center font-semibold" />
+                        <span class="text-xs text-gray-500">máx: {{ restante(it) }}</span>
+                      </div>
+                    </td>
+                    <!-- Captura de faltantes -->
+                    <td v-if="can?.reportarAvance" class="px-6 py-4">
+                      <div class="flex flex-col items-center gap-2">
+                        <input type="number" min="0" step="1" inputmode="numeric" pattern="[0-9]*"
+                               :max="restante(it)"
+                               v-model.number="faltForm.items[idx].faltantes"
+                               placeholder="0"
+                               @focus="if(faltForm.items[idx].faltantes===0 || faltForm.items[idx].faltantes===''){ faltForm.items[idx].faltantes=''; }"
+                               @input="faltForm.clearErrors('items')"
+                               class="w-24 px-3 py-2 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 text-center font-semibold" />
                         <span class="text-xs text-gray-500">máx: {{ restante(it) }}</span>
                       </div>
                     </td>
@@ -432,7 +529,7 @@ function definirTamanos() {
                           class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-400 transition-all duration-200 resize-none"
                           placeholder="Describe el progreso realizado..."></textarea>
               </div>
-              <button @click="registrarAvance" :disabled="avForm.processing"
+              <button @click="registrarAvance" :disabled="avForm.processing || !hasAvance"
                       class="w-full px-6 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold rounded-xl shadow-lg hover:shadow-xl hover:scale-105 transform transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:scale-100 flex items-center justify-center gap-2">
                 <svg v-if="!avForm.processing" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
@@ -448,6 +545,28 @@ function definirTamanos() {
                 </svg>
                 {{ avForm.errors.items }}
               </p>
+              <div class="pt-4 border-t">
+                <label class="block text-sm font-semibold text-gray-700 mb-2">Nota por faltantes (opcional)</label>
+                <textarea v-model="faltForm.nota" rows="2"
+                          class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-indigo-100 focus:border-indigo-400 transition-all duration-200 resize-none"
+                          placeholder="Ej: Faltaron piezas por daño o falta de material..."></textarea>
+    <button @click="aplicarFaltantes" :disabled="faltForm.processing || !hasFaltantes"
+                        class="mt-3 w-full px-6 py-3 bg-gradient-to-r from-indigo-600 to-blue-600 text-white font-bold rounded-xl shadow-lg hover:shadow-xl hover:scale-105 transform transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:scale-100 flex items-center justify-center gap-2">
+                  <svg v-if="!faltForm.processing" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                  </svg>
+                  <svg v-else class="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                  </svg>
+                  {{ faltForm.processing ? 'Aplicando...' : 'Aplicar faltantes' }}
+                </button>
+                <p v-if="faltForm.errors.items" class="text-sm text-red-600 flex items-center gap-1 mt-2">
+                  <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                  </svg>
+                  {{ faltForm.errors.items }}
+                </p>
+              </div>
             </div>
           </div>
 
@@ -651,10 +770,21 @@ function definirTamanos() {
               <div class="space-y-3">
        <div v-for="(a, idx) in avances" :key="a?.id || idx" 
          :class="['flex items-start gap-4 p-4 rounded-xl border transition-all duration-150', 
-            isRechazoComentario(a?.comentario) ? 'bg-red-50 border-2 border-red-300' : ((a?.isCorregido || a?.es_corregido) ? 'bg-emerald-50 border-2 border-emerald-300' : 'bg-gradient-to-r from-cyan-50 to-blue-50 border-cyan-100') ]">
+            isRechazoComentario(a?.comentario)
+              ? 'bg-red-50 border-2 border-red-300'
+              : (isFaltantesComentario(a?.comentario)
+                  ? 'bg-rose-50 border-2 border-rose-300'
+                  : ((a?.isCorregido || a?.es_corregido)
+                      ? 'bg-emerald-50 border-2 border-emerald-300'
+                      : 'bg-gradient-to-r from-cyan-50 to-blue-50 border-cyan-100')) ]">
                   
                   <!-- Icon -->
-                  <div :class="['p-2 rounded-full flex-shrink-0', isRechazoComentario(a?.comentario) ? 'bg-red-500' : ((a?.isCorregido || a?.es_corregido) ? 'bg-emerald-500' : 'bg-cyan-500') ]">
+                  <div :class="['p-2 rounded-full flex-shrink-0',
+                               isRechazoComentario(a?.comentario)
+                                 ? 'bg-red-500'
+                                 : (isFaltantesComentario(a?.comentario)
+                                     ? 'bg-red-500'
+                                     : ((a?.isCorregido || a?.es_corregido) ? 'bg-emerald-500' : 'bg-cyan-500')) ]">
                     <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
                     </svg>
@@ -669,6 +799,13 @@ function definirTamanos() {
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.36 6.64a9 9 0 11-12.73 0 9 9 0 0112.73 0z"/>
                       </svg>
                       RECHAZO
+                    </div>
+        <div v-else-if="isFaltantesComentario(a?.comentario)" 
+             class="inline-flex items-center gap-1 px-3 py-1 bg-red-500 text-white text-xs font-bold rounded-full mb-2">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3"/>
+                      </svg>
+                      FALTANTES
                     </div>
         <div v-else-if="(a?.isCorregido || a?.es_corregido)" 
           class="inline-flex items-center gap-1 px-3 py-1 bg-emerald-500 text-white text-xs font-bold rounded-full mb-2">
