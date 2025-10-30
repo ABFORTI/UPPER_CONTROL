@@ -1,5 +1,5 @@
 <script setup>
-import { router, usePage } from '@inertiajs/vue3'
+import { router } from '@inertiajs/vue3'
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue'
 import { computed } from 'vue'
 
@@ -17,8 +17,7 @@ const props = defineProps({
 
 const BRAND = { green: '#006657', gold: '#BC955C' }
 
-const page = usePage()
-const filters = page.props.filters || {}
+// Usar siempre los filtros reactivos provenientes de props
 
 function qs (obj) {
   const p = new URLSearchParams()
@@ -32,8 +31,8 @@ const basePath = computed(() => {
   return m ? m[1] : p.replace(/\/?[^\/]*$/, '')
 })
 
-const urlOtsXlsx = computed(() => `${basePath.value}/dashboard/export/ots?${qs({ ...filters, format: 'xlsx' })}`)
-const urlOtsCsv  = computed(() => `${basePath.value}/dashboard/export/ots?${qs({ ...filters, format: 'csv' })}`)
+const urlOtsXlsx = computed(() => `${basePath.value}/dashboard/export/ots?${qs({ ...props.filters, format: 'xlsx' })}`)
+const urlOtsCsv  = computed(() => `${basePath.value}/dashboard/export/ots?${qs({ ...props.filters, format: 'csv' })}`)
 
 function submit (e) {
   const form = new FormData(e.target)
@@ -43,6 +42,13 @@ function submit (e) {
 
 const maxTopServ = computed(() => Math.max(1, ...(props.series.top_servicios || []).map(r => Number(r.completadas) || 0)))
 function pct (value, max) { return (max === 0 ? 0 : (value / max) * 100).toFixed(2) }
+
+// Formato de moneda local
+function fmtCurrency (v) {
+  try {
+    return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(Number(v || 0))
+  } catch (e) { return String(v) }
+}
 
 const calidadProg = computed(() => ({
   pend:  props.distribuciones.calidad?.pendiente || 0,
@@ -88,11 +94,11 @@ function nav (path) {
       <!-- Año -->
       <select
         name="year"
-        :value="filters.year"
+        :value="props.filters.year"
         class="min-w-[5rem] px-3 py-2 text-sm border border-slate-300 rounded-2xl bg-white text-slate-900 shadow-sm
                focus:outline-none focus:ring-2 focus:ring-[#006657]/30 focus:border-[#006657]"
       >
-        <option v-for="y in [filters.year-2, filters.year-1, filters.year, filters.year+1]" :key="y" :value="y">
+        <option v-for="y in [props.filters.year-2, props.filters.year-1, props.filters.year, props.filters.year+1]" :key="y" :value="y">
           {{ y }}
         </option>
       </select>
@@ -100,7 +106,7 @@ function nav (path) {
       <!-- Semana -->
       <select
         name="week"
-        :value="filters.week"
+        :value="props.filters.week"
         class="min-w-[7rem] px-3 py-2 text-sm border border-slate-300 rounded-2xl bg-white text-slate-900 shadow-sm
                focus:outline-none focus:ring-2 focus:ring-[#006657]/30 focus:border-[#006657]"
       >
@@ -111,7 +117,7 @@ function nav (path) {
       <select
         v-if="centros.length"
         name="centro"
-        :value="filters.centro"
+        :value="props.filters.centro"
         class="min-w-[15rem] px-3 py-2 text-sm border border-slate-300 rounded-2xl bg-white text-slate-900 shadow-sm
                focus:outline-none focus:ring-2 focus:ring-[#006657]/30 focus:border-[#006657]"
       >
@@ -149,8 +155,8 @@ function nav (path) {
 </div>
 
 
-      <!-- KPIs con marco degradado -->
-      <div class="grid md:grid-cols-4 gap-4">
+  <!-- KPIs con marco degradado -->
+  <div class="grid md:grid-cols-5 gap-4">
         <!-- KPI base (reutilizamos estructura; cambiamos el degradado en cada una) -->
         <div role="button" @click="nav('solicitudes')" title="Ver solicitudes"
              class="cursor-pointer rounded-2xl p-[1px] shadow-md hover:shadow-lg active:scale-[0.995] transition bg-gradient-to-br"
@@ -194,6 +200,19 @@ function nav (path) {
           </div>
         </div>
 
+        <div role="button" @click="nav('gastos')" title="Ver Gastos"
+             class="cursor-pointer rounded-2xl p-[1px] shadow-md hover:shadow-lg active:scale-[0.995] transition"
+             style="background-image:linear-gradient(135deg,#10b981,#06b6d4)">
+          <div class="rounded-2xl bg-white p-5 h-full">
+            <div class="flex items-center justify-between">
+              <div class="text-[11px] uppercase tracking-wide text-slate-600">Gastos (Periodo)</div>
+              <span class="h-2 w-2 rounded-full" :style="{ background: BRAND.gold }"></span>
+            </div>
+            <div class="mt-2 text-2xl font-bold text-slate-900">{{ fmtCurrency(kpis.gastos || 0) }}</div>
+            <div class="text-[11px] text-slate-600 mt-1">Suma de totales de OTs</div>
+          </div>
+        </div>
+
         <div role="button" @click="nav('notificaciones')" title="Ver notificaciones"
              class="cursor-pointer rounded-2xl p-[1px] shadow-md hover:shadow-lg active:scale-[0.995] transition"
              :style="{ backgroundImage: `linear-gradient(135deg, ${BRAND.gold}, #0ea5e9)` }">
@@ -208,22 +227,28 @@ function nav (path) {
         </div>
       </div>
 
-      <!-- Distribuciones -->
-      <div class="grid lg:grid-cols-3 gap-6">
-        <div role="button" @click="nav('ordenes')" title="Ver órdenes"
-             class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-          <h2 class="font-semibold mb-3 text-sm tracking-wide uppercase text-slate-700">Distribución OTs</h2>
-          <div class="space-y-2 text-sm">
-            <div v-for="(val,label) in distribuciones.estatus_ots" :key="label" class="flex items-center gap-2">
-              <span class="w-32 capitalize text-slate-600">{{ label.replace('_',' ') }}</span>
-              <div class="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden">
-                <div class="h-2 rounded-full" :style="{ width: pct(val, (kpis.ots||1))+'%', background: BRAND.green }"></div>
+      <!-- Top servicios pedidos -->
+      <div class="grid lg:grid-cols-1 gap-6">
+        <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+          <h2 class="font-semibold mb-3 text-sm tracking-wide uppercase text-slate-700">Servicios más pedidos</h2>
+          <div v-if="(series.top_servicios_pedidos || []).length === 0" class="text-sm text-slate-500">No hay datos en el periodo.</div>
+          <ul v-else class="space-y-3">
+            <li v-for="(s,idx) in series.top_servicios_pedidos" :key="s.servicio" class="flex items-center gap-3">
+              <div class="flex-1">
+                <div class="text-sm font-medium text-slate-900">{{ s.servicio }}</div>
+                <div class="text-xs text-slate-500">Pedidos: {{ s.pedidos }}</div>
+                <div class="mt-2 h-2 bg-slate-100 rounded-full overflow-hidden">
+                  <div class="h-2 rounded-full bg-indigo-600" :style="{ width: ((s.pedidos / Math.max(1, series.top_servicios_pedidos[0].pedidos)) * 100) + '%' }"></div>
+                </div>
               </div>
-              <span class="w-10 text-right tabular-nums">{{ val }}</span>
-            </div>
-          </div>
+              <div class="w-16 text-right font-semibold text-slate-700">{{ s.pedidos }}</div>
+            </li>
+          </ul>
         </div>
+      </div>
 
+      <!-- Distribuciones (sin la tarjeta de Distribución OTs) -->
+      <div class="grid lg:grid-cols-3 gap-6">
         <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
           <div class="flex items-center justify-between mb-3">
             <h2 class="font-semibold text-sm tracking-wide uppercase text-slate-700">Calidad y Facturación</h2>
@@ -280,6 +305,22 @@ function nav (path) {
           </div>
         </div>
 
+        <!-- Actividad de la semana (mini barras) -->
+        <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+          <h2 class="font-semibold mb-3 text-sm tracking-wide uppercase text-slate-700">Actividad de la semana</h2>
+          <div v-if="(series.ots_por_dia || []).length === 0" class="text-sm text-slate-500">Sin datos en el periodo.</div>
+          <div v-else class="grid grid-cols-7 gap-3">
+            <div v-for="d in series.ots_por_dia" :key="d.fecha" class="flex flex-col items-center">
+              <div class="w-full h-24 bg-slate-100 rounded-md overflow-hidden flex items-end">
+                <div class="w-full bg-gradient-to-t from-indigo-600 to-sky-400" :style="{ height: pct(d.total, Math.max(1, ...series.ots_por_dia.map(x=>x.total))) + '%' }"></div>
+              </div>
+              <div class="mt-1 text-[10px] text-slate-500">{{ new Date(d.fecha).toLocaleDateString('es-MX',{weekday:'short'}) }}</div>
+              <div class="text-xs font-semibold text-slate-700">{{ d.total }}</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Usuarios del centro -->
         <div role="button" @click="nav('admin/users')" title="Administrar usuarios"
              class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
           <h2 class="font-semibold mb-3 text-sm tracking-wide uppercase text-slate-700">Usuarios del centro</h2>

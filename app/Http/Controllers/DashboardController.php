@@ -110,6 +110,19 @@ class DashboardController extends Controller
                 return ['servicio'=>$nombre, 'completadas'=>$r->c];
             });
 
+        // --- Top servicios pedidos (por solicitudes) en el mismo periodo
+        $topServiciosPedidos = Solicitud::when($centroId, fn($q)=>$q->where('id_centrotrabajo',$centroId))
+            ->whereBetween('created_at', [$desde, $hasta])
+            ->selectRaw('id_servicio, COUNT(*) as c')
+            ->groupBy('id_servicio')->orderByDesc('c')->limit(10)->get()
+            ->map(function($r){
+                $nombre = ServicioEmpresa::find($r->id_servicio)?->nombre ?? '—';
+                return ['servicio'=>$nombre, 'pedidos'=>$r->c];
+            });
+
+        // --- Gastos: suma de totales de las OTs en el periodo (importe real/total)
+        $gastos = (clone $otsQuery)->selectRaw('COALESCE(SUM(total),0) as s')->value('s');
+
         // --- Notificaciones no leídas del usuario actual
         $notificacionesNoLeidas = 0;
         try {
@@ -155,10 +168,12 @@ class DashboardController extends Controller
                 // quitar: 'fact_pendientes', 'monto_facturado'
                 'tasa_validacion' => $tasaValidacion,
                 'notificaciones'  => $notificacionesNoLeidas,
+                'gastos'          => (float)$gastos,
             ],
             'series' => [
                 'ots_por_dia'   => $porDia,
                 'top_servicios' => $topServicios,
+                'top_servicios_pedidos' => $topServiciosPedidos,
                 // quitar: 'fact_por_mes', 'ingresos_diarios'
             ],
             'distribuciones' => [

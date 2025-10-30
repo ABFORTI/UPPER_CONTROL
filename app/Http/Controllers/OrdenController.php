@@ -800,6 +800,7 @@ class OrdenController extends Controller
             'servicio'     => $req->integer('servicio') ?: null,
             'centro'       => $req->integer('centro') ?: null,
             'centro_costo' => $req->integer('centro_costo') ?: null,
+            'facturacion'  => $req->string('facturacion')->toString(),
             'desde'        => $req->date('desde'),
             'hasta'        => $req->date('hasta'),
             'id'           => $req->integer('id') ?: null,
@@ -838,6 +839,17 @@ class OrdenController extends Controller
             ->when($filters['servicio'], fn($qq,$v)=>$qq->where('id_servicio',$v))
             ->when($filters['centro_costo'], function($qq,$v){
                 $qq->whereHas('solicitud', function($q) use ($v) { $q->where('id_centrocosto', $v); });
+            })
+            // Filtro por estatus de facturación
+            ->when($filters['facturacion'] === 'sin_factura', function($qq){
+                $qq->whereDoesntHave('factura')
+                   ->whereDoesntHave('facturas');
+            })
+            ->when(in_array($filters['facturacion'], ['facturado','por_pagar','pagado'], true), function($qq) use ($filters){
+                $qq->where(function($q) use ($filters){
+                    $q->whereHas('facturas', function($w) use ($filters){ $w->where('estatus', $filters['facturacion']); })
+                      ->orWhereHas('factura', function($w) use ($filters){ $w->where('estatus', $filters['facturacion']); });
+                });
             })
             ->when($filters['desde'] && $filters['hasta'], fn($qq)=>$qq->whereBetween('created_at', [
                 request()->date('desde')->startOfDay(), request()->date('hasta')->endOfDay(),
@@ -907,7 +919,7 @@ class OrdenController extends Controller
 
         return Inertia::render('Ordenes/Index', [
             'data'      => $data,
-            'filters'   => $req->only(['id','estatus','calidad','servicio','centro','centro_costo','desde','hasta','year','week']),
+            'filters'   => $req->only(['id','estatus','calidad','servicio','centro','centro_costo','facturacion','desde','hasta','year','week']),
             'servicios' => \App\Models\ServicioEmpresa::select('id','nombre')->orderBy('nombre')->get(),
             'centros'   => $centrosLista,
             'centrosCostos' => $u->hasAnyRole(['admin','facturacion'])

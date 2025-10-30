@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref } from 'vue'
-import { router, Link } from '@inertiajs/vue3'
+import { router, Link, usePage } from '@inertiajs/vue3'
 
 const props = defineProps({
   data: Object,
@@ -12,6 +12,13 @@ const props = defineProps({
 })
 
 const rows = computed(()=> props.data?.data ?? [])
+
+// Permisos: solo admin o facturacion pueden marcar y facturar
+const page = usePage()
+const canFacturar = computed(() => {
+  const roles = page.props?.auth?.user?.roles || []
+  return roles.includes('admin') || roles.includes('facturacion')
+})
 
 // Selección múltiple para facturación
 const selected = ref(new Set())
@@ -36,6 +43,7 @@ function openBatch(){
 
 // Filtros unificados por estatus (píldoras) con conjunto fijo
 const sel = ref(props.filters?.estatus || '')
+const factSel = ref(props.filters?.facturacion || '')
 const centroSel = ref(props.filters?.centro || '')
 const centroCostoSel = ref(props.filters?.centro_costo || '')
 const yearSel = ref(props.filters?.year || new Date().getFullYear())
@@ -50,6 +58,7 @@ const estatuses = computed(() => [
 function applyFilter(){
   const params = {}
   if (sel.value) params.estatus = sel.value
+  if (factSel.value) params.facturacion = factSel.value
   if (centroSel.value) params.centro = centroSel.value
   if (centroCostoSel.value) params.centro_costo = centroCostoSel.value
   if (yearSel.value) params.year = yearSel.value
@@ -113,7 +122,7 @@ async function copyTable(){
         <div class="flex items-center gap-2">
           <button @click="downloadExcel" class="px-4 py-2 rounded text-white" style="background:#22c55e">Excel</button>
           <button @click="copyTable" class="px-4 py-2 rounded text-white" style="background:#64748b">Copiar</button>
-          <button v-if="anySelected" @click="openBatch" class="px-4 py-2 rounded text-white" style="background:#1A73E8">Generar factura</button>
+          <button v-if="canFacturar && anySelected" @click="openBatch" class="px-4 py-2 rounded text-white" style="background:#1A73E8">Generar factura</button>
         </div>
 
         <div class="flex flex-wrap items-center gap-2 w-full lg:w-auto justify-end">
@@ -144,6 +153,15 @@ async function copyTable(){
             <button @click="sel=''; applyFilter()" :class="['px-4 py-2 rounded-full text-base border', sel==='' ? 'text-white border-[#1A73E8]' : 'bg-white text-slate-700 border-slate-300']" :style="sel==='' ? 'background-color: #1A73E8' : ''">Todos</button>
             <button v-for="e in estatuses" :key="e" @click="sel=e; applyFilter()" :class="['px-4 py-2 rounded-full text-base border capitalize', sel===e ? 'text-white border-[#1A73E8]' : 'bg-white text-slate-700 border-slate-300']" :style="sel===e ? 'background-color: #1A73E8' : ''">{{ e }}</button>
           </div>
+
+          <!-- Filtro de facturación: Sin factura toggle -->
+          <div class="flex items-center gap-2">
+            <button @click="factSel = (factSel==='sin_factura'?'': 'sin_factura'); applyFilter()"
+              :class="['px-4 py-2 rounded-full text-base border uppercase', factSel==='sin_factura' ? 'text-white border-[#0ea5e9]' : 'bg-white text-slate-700 border-slate-300']"
+              :style="factSel==='sin_factura' ? 'background-color: #0ea5e9' : ''">
+              Sin factura
+            </button>
+          </div>
         </div>
       </div>
 
@@ -153,7 +171,7 @@ async function copyTable(){
           <table class="min-w-full text-base">
             <thead class="bg-slate-800 text-white uppercase text-sm">
               <tr>
-            <th class="p-2"></th>
+            <th v-if="canFacturar" class="p-2"></th>
             <th class="p-2">ID</th>
             <th class="p-2">Producto</th>
             <th class="p-2">Servicio</th>
@@ -170,7 +188,7 @@ async function copyTable(){
             </thead>
             <tbody>
               <tr v-for="o in rows" :key="o.id" class="border-t even:bg-slate-50 hover:bg-slate-100/60">
-                <td class="px-2 py-3">
+                <td v-if="canFacturar" class="px-2 py-3">
                   <input
                     type="checkbox"
                     :disabled="!isSelectable(o)"
@@ -220,7 +238,7 @@ async function copyTable(){
                       </svg>
                       Calidad
                     </a>
-                    <a v-if="o.estatus==='autorizada_cliente'" :href="o.urls.facturar" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-lg transition-colors">
+                    <a v-if="canFacturar && o.estatus==='autorizada_cliente'" :href="o.urls.facturar" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-lg transition-colors">
                       <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                       </svg>

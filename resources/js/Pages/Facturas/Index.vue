@@ -7,18 +7,21 @@ const props = defineProps({
   filtros: { type: Object, default: () => ({}) },
   urls: { type: Object, default: () => ({}) },
   estatuses: { type: Array, default: () => [] },
-  centros: { type: Array, default: () => [] }
+  centros: { type: Array, default: () => [] },
+  centrosCosto: { type: Array, default: () => [] }
 })
 
 // Filtros
 const sel = ref(props.filtros?.estatus || '')
 const centroSel = ref(props.filtros?.centro || '')
+const centroCostoSel = ref(props.filtros?.centro_costo || '')
 const yearSel = ref(props.filtros?.year || new Date().getFullYear())
 const weekSel = ref(props.filtros?.week || '')
 function applyFilter(){
   const params = {}
   if (sel.value) params.estatus = sel.value
   if (centroSel.value) params.centro = centroSel.value
+  if (centroCostoSel.value) params.centro_costo = centroCostoSel.value
   if (yearSel.value) params.year = yearSel.value
   if (weekSel.value) params.week = weekSel.value
   currentPage.value = 1
@@ -97,6 +100,7 @@ function goToPage(p){
   const params = {}
   if (sel.value) params.estatus = sel.value
   if (centroSel.value) params.centro = centroSel.value
+  if (centroCostoSel.value) params.centro_costo = centroCostoSel.value
   params.page = String(currentPage.value)
   router.get(props.urls.base, params, { preserveState: true, replace: true })
 }
@@ -121,6 +125,11 @@ function goToPage(p){
           <select v-model="centroSel" @change="applyFilter" class="border p-2 rounded min-w-[180px]">
             <option value="">Todos los centros</option>
             <option v-for="c in (props.centros||[])" :key="c.id" :value="c.id">{{ c.nombre }}</option>
+          </select>
+          <!-- Centro de costos -->
+          <select v-model="centroCostoSel" @change="applyFilter" class="border p-2 rounded min-w-[220px]">
+            <option value="">Todos los centros de costos</option>
+            <option v-for="cc in (props.centrosCosto||[])" :key="cc.id" :value="cc.id">{{ cc.nombre }}</option>
           </select>
           <!-- Año -->
           <select v-model="yearSel" @change="applyFilter" class="border p-2 rounded min-w-[100px]">
@@ -150,6 +159,10 @@ function goToPage(p){
             <th class="px-4 py-3 text-left">ID</th>
             <th class="px-4 py-3 text-left">OT</th>
             <th class="px-4 py-3 text-left">Servicio</th>
+            <th class="px-4 py-3 text-left">Producto</th>
+            <th class="px-4 py-3 text-left">Área</th>
+            <th class="px-4 py-3 text-left">Centro de costos</th>
+            <th class="px-4 py-3 text-left">Marca</th>
             <th class="px-4 py-3 text-left">Centro</th>
             <th class="px-4 py-3 text-right">Total</th>
             <th class="px-4 py-3 text-left">Estatus</th>
@@ -162,15 +175,19 @@ function goToPage(p){
           <tr v-for="f in pageItems" :key="f.id" class="border-t even:bg-slate-50 hover:bg-slate-100/60">
             <td class="px-4 py-3 font-mono">#{{ f.id }}</td>
             <td class="px-4 py-3">
-              <template v-if="f.ots_label">OTs: {{ f.ots_label }}</template>
+              <template v-if="f.multi">
+                <span :title="f.ots_label || ''">OTs: varias</span>
+              </template>
+              <template v-else-if="f.ots_label">OTs: {{ f.ots_label }}</template>
               <template v-else>OT #{{ f.orden_id }}</template>
             </td>
             <td class="px-4 py-3">
               <div>{{ f.servicio || '—' }}</div>
-              <div v-if="f.descripcion_general" class="text-sm text-purple-600 font-medium mt-0.5">
-                {{ f.descripcion_general }}
-              </div>
             </td>
+            <td class="px-4 py-3 truncate max-w-[16rem]" :title="f.producto || ''">{{ f.producto || '—' }}</td>
+            <td class="px-4 py-3">{{ f.area || '—' }}</td>
+            <td class="px-4 py-3">{{ f.centro_costo || '—' }}</td>
+            <td class="px-4 py-3">{{ f.marca || '—' }}</td>
             <td class="px-4 py-3">{{ f.centro || '—' }}</td>
             <td class="px-4 py-3 text-right">${{ f.total }}</td>
             <td class="px-4 py-3">

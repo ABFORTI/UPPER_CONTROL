@@ -178,7 +178,7 @@ class CalidadController extends Controller
     'week' => $req->integer('week') ?: null,
   ];
 
-  $q = \App\Models\Orden::with('servicio','centro')
+  $q = \App\Models\Orden::with('servicio','centro','area','solicitud.marca','teamLeader')
     ->when(!$u->hasRole('admin'), function($qq) use ($u) {
       $ids = $this->allowedCentroIds($u);
       if (!empty($ids)) { $qq->whereIn('id_centrotrabajo', $ids); }
@@ -226,6 +226,10 @@ class CalidadController extends Controller
       'id' => $o->id,
       'servicio' => ['nombre' => $o->servicio?->nombre],
       'centro'   => ['nombre' => $o->centro?->nombre],
+      'producto' => $o->descripcion_general ?: ($o->solicitud?->descripcion ?? null),
+      'area'     => ['nombre' => $o->area?->nombre],
+      'marca'    => ['nombre' => optional($o->solicitud?->marca)->nombre],
+      'team_leader' => ['name' => $o->teamLeader?->name],
       'estatus'  => $o->estatus,
       'calidad_resultado' => $o->calidad_resultado,
       'fecha' => $fecha,
