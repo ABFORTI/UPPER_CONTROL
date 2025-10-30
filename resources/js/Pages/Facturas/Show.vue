@@ -252,6 +252,9 @@ const ivaTotal = computed(() => {
                   <tr>
                     <th class="px-3 py-2 text-left border-b border-indigo-100">OT</th>
                     <th class="px-3 py-2 text-left border-b border-indigo-100">Centro</th>
+                    <th class="px-3 py-2 text-left border-b border-indigo-100">Área</th>
+                    <th class="px-3 py-2 text-left border-b border-indigo-100">Marca</th>
+                    <th class="px-3 py-2 text-left border-b border-indigo-100">Centro de costos</th>
                     <th class="px-3 py-2 text-left border-b border-indigo-100">Servicio</th>
                     <th class="px-3 py-2 text-left border-b border-indigo-100">Producto/Descripción</th>
                     <th class="px-3 py-2 text-right border-b border-indigo-100">Total</th>
@@ -261,6 +264,9 @@ const ivaTotal = computed(() => {
                   <tr v-for="o in ordenes" :key="o.id">
                     <td class="px-3 py-2 border-b border-indigo-100"><a :href="o.url" class="text-indigo-700 hover:underline">#{{ o.id }}</a></td>
                     <td class="px-3 py-2 border-b border-indigo-100">{{ o.centro || '—' }}</td>
+                    <td class="px-3 py-2 border-b border-indigo-100">{{ o.area || '—' }}</td>
+                    <td class="px-3 py-2 border-b border-indigo-100">{{ o.marca || '—' }}</td>
+                    <td class="px-3 py-2 border-b border-indigo-100">{{ o.centro_costo || '—' }}</td>
                     <td class="px-3 py-2 border-b border-indigo-100">{{ o.servicio || '—' }}</td>
                     <td class="px-3 py-2 border-b border-indigo-100">{{ o.descripcion_general || '—' }}</td>
                     <td class="px-3 py-2 border-b border-indigo-100 text-right">${{ Number(o.total||0).toFixed(2) }}</td>

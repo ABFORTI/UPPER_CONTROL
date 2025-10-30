@@ -29,11 +29,15 @@ function applyFilter(){
 
 // Exportar/Copy (cliente)
 function toCsv(items){
-  const headers = ['ID','Servicio','Centro','Calidad','Fecha']
+  const headers = ['ID','Producto','Servicio','Centro','Área','Marca','TL','Calidad','Fecha']
   const rows = items.map(o => [
     o.id,
+    o.producto || '-',
     o.servicio?.nombre || '-',
     o.centro?.nombre || '-',
+    o.area?.nombre || '-',
+    o.marca?.nombre || '-',
+    o.team_leader?.name || '-',
     o.calidad_resultado || '-',
     o.fecha || ''
   ])
@@ -101,8 +105,12 @@ async function copyTable(){
             <thead class="bg-slate-800 text-white uppercase text-sm">
               <tr>
                 <th class="px-4 py-3 text-left">ID</th>
+                <th class="px-4 py-3 text-left">Producto</th>
                 <th class="px-4 py-3 text-left">Servicio</th>
                 <th class="px-4 py-3 text-left">Centro</th>
+                <th class="px-4 py-3 text-left">Área</th>
+                <th class="px-4 py-3 text-left">Marca</th>
+                <th class="px-4 py-3 text-left">TL</th>
                 <th class="px-4 py-3 text-left">Calidad</th>
                 <th class="px-4 py-3 text-left">Fecha</th>
                 <th class="px-4 py-3 text-left">Acciones</th>
@@ -111,8 +119,12 @@ async function copyTable(){
             <tbody>
               <tr v-for="o in rows" :key="o.id" class="border-t even:bg-slate-50 hover:bg-slate-100/60">
                 <td class="px-4 py-3 font-mono">#{{ o.id }}</td>
+                <td class="px-4 py-3 truncate max-w-[16rem]" :title="o.producto || ''">{{ o.producto || '-' }}</td>
                 <td class="px-4 py-3">{{ o.servicio?.nombre }}</td>
                 <td class="px-4 py-3">{{ o.centro?.nombre }}</td>
+                <td class="px-4 py-3">{{ o.area?.nombre || '-' }}</td>
+                <td class="px-4 py-3">{{ o.marca?.nombre || '-' }}</td>
+                <td class="px-4 py-3">{{ o.team_leader?.name || '-' }}</td>
                 <td class="px-4 py-3">
                   <span class="px-3 py-1.5 rounded-full text-xs font-semibold uppercase tracking-wide"
                         :class="{

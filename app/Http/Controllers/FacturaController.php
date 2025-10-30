@@ -28,11 +28,15 @@ class FacturaController extends Controller
 
     $estatus = $request->get('estatus'); // opcional
     $centro  = $request->integer('centro') ?: null;
+    $centroCosto = $request->integer('centro_costo') ?: null;
     $year = $request->integer('year') ?: null;
     $week = $request->integer('week') ?: null;
 
   // 1) Facturas existentes
-  $qFact = Factura::query()->with(['orden.servicio','orden.centro','orden.solicitud','ordenes.centro']);
+  $qFact = Factura::query()->with([
+    'orden.servicio','orden.centro','orden.area','orden.solicitud','orden.solicitud.centroCosto','orden.solicitud.marca',
+    'ordenes.centro','ordenes.area','ordenes.solicitud.centroCosto','ordenes.solicitud.marca'
+  ]);
   
   // Si es cliente, solo mostrar SUS facturas
   if ($isCliente) {
@@ -61,6 +65,15 @@ class FacturaController extends Controller
       }
     }
   }
+  // Filtro por Centro de Costos
+  if ($centroCosto) {
+    $qFact->where(function($q) use ($centroCosto){
+      // Factura con orden directa
+      $q->whereHas('orden.solicitud', function($qq) use ($centroCosto){ $qq->where('id_centrocosto', $centroCosto); })
+        // o factura batch con alguna OT cuyo centro de costos coincida
+        ->orWhereHas('ordenes.solicitud', function($qq) use ($centroCosto){ $qq->where('id_centrocosto', $centroCosto); });
+    });
+  }
   // Si el filtro es un estatus de factura, aplicarlo
   if ($estatus && in_array($estatus, ['pendiente','facturado','por_pagar','pagado'], true)) {
     $qFact->where('estatus', $estatus);
@@ -83,10 +96,16 @@ class FacturaController extends Controller
     return [
       'id' => (string) $f->id,
       'orden_id' => $f->id_orden,
+      'ots' => $ots,
       'ots_label' => $otsLabel,
+      'multi' => $multi,
       'servicio' => $multi ? 'Varios' : ($f->orden?->servicio?->nombre),
       'centro'   => $centroName ?: '—',
       'descripcion_general' => $multi ? null : ($f->orden?->descripcion_general),
+      'producto' => $multi ? 'Varios' : ($f->orden?->descripcion_general),
+      'area' => $multi ? 'Varios' : ($f->orden?->area?->nombre),
+      'centro_costo' => $multi ? 'Varios' : ($f->orden?->solicitud?->centroCosto?->nombre),
+      'marca' => $multi ? 'Varios' : ($f->orden?->solicitud?->marca?->nombre),
       'total'    => $f->total,
       'estatus'  => $f->estatus,
       'folio'    => $f->folio_externo,
@@ -95,11 +114,11 @@ class FacturaController extends Controller
     ];
   });
 
-  // 2) OTs autorizadas por cliente (sin factura) - SOLO para facturacion/admin
+  // 2) OTs sin factura (incluye autorizada_cliente para generar) - SOLO para facturacion/admin
   $items = collect();
 
   // Cliente NO debe ver la lista de OTs pendientes de facturar (no puede crearlas)
-  if (!$isCliente && (!$estatus || $estatus === 'autorizada_cliente')) {
+  if (!$isCliente && (!$estatus || $estatus === 'autorizada_cliente' || $estatus === 'sin_factura')) {
     // Excluir OTs que ya tengan factura (directa o pivot)
     $ordenesConFacturaDirecta = Factura::query()
       ->when(!$u->hasRole('admin') && !$u->hasRole('facturacion'), function($q) use ($u) {
@@ -111,7 +130,8 @@ class FacturaController extends Controller
     $ordenesConFactura = $ordenesConFacturaDirecta->merge($ordenesConFacturaPivot)->unique()->values();
 
     $qOts = Orden::query()
-      ->where('estatus','autorizada_cliente')
+      // cuando el filtro es 'autorizada_cliente' restringimos; si es 'sin_factura' mostramos cualquier estatus permitido
+      ->when($estatus === 'autorizada_cliente', function($qq){ $qq->where('estatus','autorizada_cliente'); })
       ->when(!$u->hasRole('admin') && !$u->hasRole('facturacion'), function($qq) use ($u) {
         $ids = $this->allowedCentroIds($u);
         $qq->whereIn('id_centrotrabajo', $ids);
@@ -123,16 +143,21 @@ class FacturaController extends Controller
           if (in_array((int)$centro, array_map('intval',$ids), true)) { $qq->where('id_centrotrabajo', $centro); }
         }
       })
-  ->whereNotIn('id', $ordenesConFactura->all())
+      ->whereNotIn('id', $ordenesConFactura->all())
       ->when($year && $week, function($qq) use ($year, $week) {
         $qq->whereRaw('YEAR(created_at) = ? AND WEEK(created_at, 1) = ?', [$year, $week]);
       })
       ->when($year && !$week, function($qq) use ($year) {
         $qq->whereYear('created_at', $year);
       })
-      ->with(['servicio','centro'])
+      ->with(['servicio','centro','area','solicitud.centroCosto','solicitud.marca'])
       ->latest('id')
       ->limit(100);
+
+    // Filtro por centro de costos para OTs pendientes
+    if ($centroCosto) {
+      $qOts->whereHas('solicitud', function($qq) use ($centroCosto){ $qq->where('id_centrocosto', $centroCosto); });
+    }
 
     $ots = $qOts->get()->map(function($o){
       $total = $o->total ?? (($o->subtotal ?? 0) + ($o->iva ?? 0));
@@ -142,6 +167,10 @@ class FacturaController extends Controller
         'servicio' => $o->servicio?->nombre,
         'centro'   => $o->centro?->nombre,
         'descripcion_general' => $o->descripcion_general,
+        'producto' => $o->descripcion_general,
+        'area' => $o->area?->nombre,
+        'centro_costo' => $o->solicitud?->centroCosto?->nombre,
+        'marca' => $o->solicitud?->marca?->nombre,
         'total'    => $total,
         'estatus'  => 'autorizada_cliente',
         'folio'    => null,
@@ -154,7 +183,7 @@ class FacturaController extends Controller
       // Mezclar ambos conjuntos si no hay filtro aplicado
       $items = $facturas->concat($ots);
     } else {
-      // Solo OTs si filtro es 'autorizada_cliente'
+      // Solo OTs si filtro es 'autorizada_cliente' o 'sin_factura'
       $items = $ots;
     }
   } else {
@@ -167,12 +196,18 @@ class FacturaController extends Controller
     ? \App\Models\CentroTrabajo::select('id','nombre')->orderBy('nombre')->get()
     : \App\Models\CentroTrabajo::whereIn('id', $this->allowedCentroIds($u))->select('id','nombre')->orderBy('nombre')->get();
 
+  // Centros de costos para selector
+  $centrosCostoLista = $u->hasAnyRole(['admin','facturacion'])
+    ? \App\Models\CentroCosto::select('id','nombre','id_centrotrabajo')->orderBy('nombre')->get()
+    : \App\Models\CentroCosto::whereIn('id_centrotrabajo', $this->allowedCentroIds($u))->select('id','nombre','id_centrotrabajo')->orderBy('nombre')->get();
+
   return Inertia::render('Facturas/Index', [
     'items' => $items,
-    'filtros' => [ 'estatus' => $estatus, 'centro' => $centro, 'year' => $year, 'week' => $week ],
+    'filtros' => [ 'estatus' => $estatus, 'centro' => $centro, 'centro_costo' => $centroCosto, 'year' => $year, 'week' => $week ],
     'urls' => [ 'base' => route('facturas.index') ],
-    'estatuses' => ['autorizada_cliente','pendiente','facturado','por_pagar','pagado'],
+    'estatuses' => ['autorizada_cliente','sin_factura','facturado','por_pagar','pagado'],
     'centros' => $centrosLista,
+    'centrosCosto' => $centrosCostoLista,
   ]);
   }
 
@@ -916,7 +951,7 @@ private function xmlElementToArray(\SimpleXMLElement $element): array
   // Removido: $this->authFacturacion($factura->orden);
     $factura->load(
       'orden.servicio','orden.centro','orden.solicitud.cliente',
-      'ordenes.servicio','ordenes.centro'
+      'ordenes.servicio','ordenes.centro','ordenes.area','ordenes.solicitud.centroCosto','ordenes.solicitud.marca'
     );
 
   return \Inertia\Inertia::render('Facturas/Show', [
@@ -926,6 +961,9 @@ private function xmlElementToArray(\SimpleXMLElement $element): array
         'id' => $o->id,
         'servicio' => $o->servicio?->nombre,
         'centro' => $o->centro?->nombre,
+        'area' => $o->area?->nombre,
+        'marca' => $o->solicitud?->marca?->nombre,
+        'centro_costo' => $o->solicitud?->centroCosto?->nombre,
         'descripcion_general' => $o->descripcion_general,
         'total' => $o->total ?? (($o->subtotal ?? 0)+($o->iva ?? 0)),
         'url' => route('ordenes.show', $o),
