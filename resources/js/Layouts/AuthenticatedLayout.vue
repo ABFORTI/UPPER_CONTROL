@@ -71,7 +71,9 @@ function leave (e) {
   <aside class="group peer fixed top-0 left-0 h-screen bg-white dark:bg-slate-900 border-r border-gray-200 dark:border-slate-800 transition-all duration-200 w-16 hover:w-64 z-30 text-slate-700 dark:text-slate-200 flex flex-col">
         <!-- Header brand -->
         <div class="h-16 flex items-center px-3 gap-3 shrink-0">
-          <div class="w-8 h-8 bg-blue-500 rounded-md shrink-0"></div>
+          <div class="w-8 h-8 shrink-0">
+            <img src="img/upper_control.png" alt="Upper Control" class="w-full h-full object-contain rounded-md" loading="lazy" />
+          </div>
           <div class="overflow-hidden w-0 group-hover:w-auto group-hover:opacity-100 opacity-0 transition-all duration-200 whitespace-nowrap font-semibold">Upper Control</div>
         </div>
 

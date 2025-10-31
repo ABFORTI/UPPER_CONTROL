@@ -78,13 +78,9 @@ function nav (path) {
 <div class="border-b border-slate-200 pb-3">
   <div class="flex flex-wrap items-center justify-between gap-3">
     <!-- Marca + título -->
-    <div class="flex items-center gap-3">
-      <span
-        class="inline-flex h-9 w-9 rounded-2xl shadow-lg shadow-teal-500/20"
-        :style="{ background: 'linear-gradient(135deg,#0ea5e9,#006657)' }"
-      ></span>
-      <div>
-        <p class="text-[11px] uppercase tracking-[0.2em] text-slate-500">Upper Control</p>
+      <div class="flex items-center gap-3">
+      <div class="flex items-center gap-3">
+        <img src="img/upper_control.png" alt="Upper Control" loading="lazy" class="h-12 w-auto" />
         <h1 class="text-[22px] leading-6 font-semibold text-slate-900">Dashboard</h1>
       </div>
     </div>
