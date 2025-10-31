@@ -32,19 +32,19 @@ const submit = () => {
 <template>
   <div class="min-h-screen flex items-center justify-center bg-[#F5F7FA] font-roboto">
     <div class="bg-white rounded-2xl shadow-2xl flex w-full max-w-4xl overflow-hidden scale-105">
-      <!-- Branding / Info -->
-      <div class="w-1/2 bg-[#F5F7FA] flex flex-col items-center justify-center p-10">
-        <div class="bg-[#1A73E8] rounded-full w-20 h-20 flex items-center justify-center mb-6">
-          <span class="text-white text-4xl font-bold">•</span>
+  <!-- Branding / Info (hidden on small screens) -->
+  <div class="hidden md:flex md:w-1/2 bg-[#F5F7FA] flex-col items-center justify-center p-10">
+        <div class="w-25 h-25 mb-6 flex items-center justify-center">
+          <img src="img/upper_control.png" alt="Upper Control" loading="lazy" class="w-full h-full object-contain" />
         </div>
         <div class="text-center">
-          <div class="font-poppins font-bold text-2xl text-[#2E3A59] mb-1">Upper Control</div>
+          <div class="font-poppins font-bold text-2xl text-[#2E3A59] mb-1"></div>
           <div class="font-poppins text-sm text-[#1A73E8] mb-2">Plataforma de Gestión Logística</div>
           <div class="text-base text-[#2E3A59] opacity-80 font-roboto">Solicita, cotiza y realiza seguimiento de servicios logísticos de manera centralizada y transparente</div>
         </div>
       </div>
-      <!-- Login Form -->
-      <div class="w-1/2 flex flex-col justify-center p-10">
+  <!-- Login Form -->
+  <div class="w-full md:w-1/2 flex flex-col justify-center p-10">
         <h2 class="font-poppins text-3xl font-semibold mb-8 text-[#2E3A59]">Iniciar sesión</h2>
         <form @submit.prevent="submit">
           <div class="mb-5">
