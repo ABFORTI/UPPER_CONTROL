@@ -86,12 +86,12 @@ function nav (path) {
     </div>
 
     <!-- Controles a la derecha -->
-    <form @submit.prevent="submit" class="flex flex-wrap items-center gap-2">
+  <form @submit.prevent="submit" class="flex flex-wrap items-center gap-2 gap-y-2">
       <!-- Año -->
       <select
         name="year"
         :value="props.filters.year"
-        class="min-w-[5rem] px-3 py-2 text-sm border border-slate-300 rounded-2xl bg-white text-slate-900 shadow-sm
+        class="w-full sm:w-auto min-w-0 sm:min-w-[5rem] px-3 py-2 text-sm border border-slate-300 rounded-2xl bg-white text-slate-900 shadow-sm
                focus:outline-none focus:ring-2 focus:ring-[#006657]/30 focus:border-[#006657]"
       >
         <option v-for="y in [props.filters.year-2, props.filters.year-1, props.filters.year, props.filters.year+1]" :key="y" :value="y">
@@ -103,7 +103,7 @@ function nav (path) {
       <select
         name="week"
         :value="props.filters.week"
-        class="min-w-[7rem] px-3 py-2 text-sm border border-slate-300 rounded-2xl bg-white text-slate-900 shadow-sm
+        class="w-full sm:w-auto min-w-0 sm:min-w-[7rem] px-3 py-2 text-sm border border-slate-300 rounded-2xl bg-white text-slate-900 shadow-sm
                focus:outline-none focus:ring-2 focus:ring-[#006657]/30 focus:border-[#006657]"
       >
         <option v-for="w in 53" :key="w" :value="w">Semana {{ w }}</option>
@@ -114,7 +114,7 @@ function nav (path) {
         v-if="centros.length"
         name="centro"
         :value="props.filters.centro"
-        class="min-w-[15rem] px-3 py-2 text-sm border border-slate-300 rounded-2xl bg-white text-slate-900 shadow-sm
+        class="w-full sm:w-auto min-w-0 sm:min-w-[15rem] px-3 py-2 text-sm border border-slate-300 rounded-2xl bg-white text-slate-900 shadow-sm
                focus:outline-none focus:ring-2 focus:ring-[#006657]/30 focus:border-[#006657]"
       >
         <option value="">— Todos los Centros —</option>
@@ -124,7 +124,7 @@ function nav (path) {
       <!-- Botones -->
       <button
         type="submit"
-        class="px-4 py-2 rounded-2xl text-white font-medium shadow-sm transition
+        class="w-full sm:w-auto px-4 py-2 rounded-2xl text-white font-medium shadow-sm transition
                hover:brightness-105"
         :style="{ background: '#006657' }"
       >
@@ -133,7 +133,7 @@ function nav (path) {
 
       <a
         :href="urlOtsXlsx"
-        class="px-3 py-2 rounded-2xl text-sm font-medium border border-slate-300 bg-white text-slate-700
+        class="w-full sm:w-auto px-3 py-2 rounded-2xl text-sm font-medium border border-slate-300 bg-white text-slate-700
                hover:bg-slate-50 shadow-sm"
       >
         OTs XLSX
@@ -141,7 +141,7 @@ function nav (path) {
 
       <a
         :href="urlOtsCsv"
-        class="px-3 py-2 rounded-2xl text-sm font-medium border border-slate-300 bg-white text-slate-700
+        class="w-full sm:w-auto px-3 py-2 rounded-2xl text-sm font-medium border border-slate-300 bg-white text-slate-700
                hover:bg-slate-50 shadow-sm"
       >
         OTs CSV

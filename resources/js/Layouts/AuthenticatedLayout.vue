@@ -4,6 +4,7 @@ import { usePage, router, Link } from '@inertiajs/vue3'
 import Icon from '@/Components/Icon.vue'
 
 const page  = usePage()
+const mobileOpen = ref(false)
 
 // Fallbacks seguros
 const url   = computed(() => page.url || '')
@@ -37,6 +38,10 @@ function leave (e) {
   router.post(leaveUrl.value, {}, { preserveScroll: true, replace: true })
 }
 
+function closeMobile () {
+  mobileOpen.value = false
+}
+
 </script>
 
 <template>
@@ -68,7 +73,11 @@ function leave (e) {
 
     <div class="flex">
       <!-- Sidebar -->
-  <aside class="group peer fixed top-0 left-0 h-screen bg-white dark:bg-slate-900 border-r border-gray-200 dark:border-slate-800 transition-all duration-200 w-16 hover:w-64 z-30 text-slate-700 dark:text-slate-200 flex flex-col">
+  <aside :class="[
+          'group peer fixed top-0 left-0 h-screen bg-white dark:bg-slate-900 border-r border-gray-200 dark:border-slate-800 transition-all duration-200 z-30 text-slate-700 dark:text-slate-200 flex flex-col',
+          'sm:w-16 sm:hover:w-64 sm:translate-x-0',
+          mobileOpen ? 'translate-x-0 w-64' : '-translate-x-full w-64'
+        ]">
         <!-- Header brand -->
         <div class="h-16 flex items-center px-3 gap-3 shrink-0">
           <div class="w-8 h-8 shrink-0">
@@ -191,11 +200,24 @@ function leave (e) {
         </div>
       </aside>
 
-      <!-- Overlay sobre el contenido cuando el sidebar está desplegado -->
-      <div class="fixed inset-0 left-16 bg-black/20 opacity-0 transition-opacity duration-200 pointer-events-none peer-hover:opacity-100 z-10"></div>
+      <!-- Overlay móvil -->
+      <div v-if="mobileOpen" @click="closeMobile" class="fixed inset-0 bg-black/40 z-20 sm:hidden"></div>
 
       <!-- Contenido principal -->
-      <div class="flex-1 min-h-screen ml-16 transition-all duration-200 text-slate-800 dark:text-slate-100 relative z-0">
+      <div class="flex-1 min-h-screen sm:ml-16 ml-0 transition-all duration-200 text-slate-800 dark:text-slate-100 relative z-0">
+        <!-- Barra superior móvil -->
+        <div class="sm:hidden sticky top-0 z-20 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-gray-200 dark:border-slate-800">
+          <div class="px-4 py-3 flex items-center justify-between">
+            <button @click="mobileOpen = true" class="p-2 rounded-md border border-gray-200 dark:border-slate-700 text-slate-700 dark:text-slate-200">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
+            <div class="flex items-center gap-2">
+              <img src="img/upper_control.png" alt="Upper Control" class="h-8 w-auto object-contain" loading="lazy" />
+            </div>
+          </div>
+        </div>
         <header v-if="$slots.header" class="sticky top-0 z-10 bg-white/70 dark:bg-slate-900/70 backdrop-blur border-b border-gray-200 dark:border-slate-800 text-slate-800 dark:text-slate-100">
           <div class="px-4 py-4">
             <slot name="header" />

@@ -132,37 +132,37 @@ function goToPage(p){
 </script>
 
 <template>
-  <div class="p-6 max-w-none mx-auto">
+  <div class="p-4 sm:p-6 max-w-none mx-auto">
     <!-- Header -->
     <h1 class="text-3xl font-extrabold tracking-tight mb-2 uppercase">Facturación</h1>
 
     <!-- Contenedor principal en tarjeta blanca -->
-    <div class="rounded-xl border bg-white">
+  <div class="rounded-xl border bg-white">
       <!-- Acciones y filtros dentro de la tarjeta -->
-  <div class="px-8 py-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+  <div class="px-4 sm:px-8 py-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
         <div class="flex items-center gap-2">
           <button @click="downloadExcel" class="px-4 py-2 rounded text-white" style="background:#22c55e">Excel</button>
           <button @click="copyTable" class="px-4 py-2 rounded text-white" style="background:#64748b">Copiar</button>
         </div>
 
-        <div class="flex flex-wrap items-center gap-2 w-full lg:w-auto">
+  <div class="flex flex-wrap items-center gap-2 w-full lg:w-auto">
           <!-- Centro -->
-          <select v-model="centroSel" @change="applyFilter" class="border p-2 rounded min-w-[180px]">
+          <select v-model="centroSel" @change="applyFilter" class="w-full sm:w-auto min-w-0 sm:min-w-[180px] border p-2 rounded">
             <option value="">Todos los centros</option>
             <option v-for="c in (props.centros||[])" :key="c.id" :value="c.id">{{ c.nombre }}</option>
           </select>
           <!-- Centro de costos -->
-          <select v-model="centroCostoSel" @change="applyFilter" class="border p-2 rounded min-w-[220px]">
+          <select v-model="centroCostoSel" @change="applyFilter" class="w-full sm:w-auto min-w-0 sm:min-w-[220px] border p-2 rounded">
             <option value="">Todos los centros de costos</option>
             <option v-for="cc in (props.centrosCosto||[])" :key="cc.id" :value="cc.id">{{ cc.nombre }}</option>
           </select>
           <!-- Año -->
-          <select v-model="yearSel" @change="applyFilter" class="border p-2 rounded min-w-[100px]">
+          <select v-model="yearSel" @change="applyFilter" class="w-full sm:w-auto min-w-0 sm:min-w-[100px] border p-2 rounded">
             <option v-for="y in [yearSel-2, yearSel-1, yearSel, yearSel+1]" :key="y" :value="y">{{ y }}</option>
           </select>
           
           <!-- Semana -->
-          <select v-model="weekSel" @change="applyFilter" class="border p-2 rounded min-w-[120px]">
+          <select v-model="weekSel" @change="applyFilter" class="w-full sm:w-auto min-w-0 sm:min-w-[120px] border p-2 rounded">
             <option value="">Periodos</option>
             <option v-for="w in 53" :key="w" :value="w">Periodo {{ w }}</option>
           </select>
@@ -176,23 +176,24 @@ function goToPage(p){
       </div>
 
       <!-- Tabla -->
-      <div class="px-8 pb-4">
+      <div class="px-4 sm:px-8 pb-4">
         <div class="rounded-lg overflow-hidden shadow-sm">
+        <div class="overflow-x-auto">
         <table class="min-w-full text-base">
         <thead class="bg-slate-800 text-white uppercase text-sm">
           <tr>
             <th class="px-4 py-3 text-left">ID</th>
             <th class="px-4 py-3 text-left">OT</th>
             <th class="px-4 py-3 text-left">Servicio</th>
-            <th class="px-4 py-3 text-left">Producto</th>
-            <th class="px-4 py-3 text-left">Área</th>
-            <th class="px-4 py-3 text-left">Centro de costos</th>
-            <th class="px-4 py-3 text-left">Marca</th>
+            <th class="px-4 py-3 text-left hidden sm:table-cell">Producto</th>
+            <th class="px-4 py-3 text-left hidden sm:table-cell">Área</th>
+            <th class="px-4 py-3 text-left hidden sm:table-cell">Centro de costos</th>
+            <th class="px-4 py-3 text-left hidden sm:table-cell">Marca</th>
             <th class="px-4 py-3 text-left">Centro</th>
-            <th class="px-4 py-3 text-left">Periodo</th>
+            <th class="px-4 py-3 text-left hidden sm:table-cell">Periodo</th>
             <th class="px-4 py-3 text-right">Total</th>
             <th class="px-4 py-3 text-left">Estatus</th>
-            <th class="px-4 py-3 text-left">Folio</th>
+            <th class="px-4 py-3 text-left hidden sm:table-cell">Folio</th>
             <th class="px-4 py-3 text-left">Fecha</th>
             <th class="px-4 py-3 text-right">Acción</th>
           </tr>
@@ -210,17 +211,17 @@ function goToPage(p){
             <td class="px-4 py-3">
               <div>{{ f.servicio || '—' }}</div>
             </td>
-            <td class="px-4 py-3 truncate max-w-[16rem]" :title="f.producto || ''">{{ f.producto || '—' }}</td>
-            <td class="px-4 py-3">{{ f.area || '—' }}</td>
-            <td class="px-4 py-3">{{ f.centro_costo || '—' }}</td>
-            <td class="px-4 py-3">{{ f.marca || '—' }}</td>
+            <td class="px-4 py-3 truncate max-w-[16rem] hidden sm:table-cell" :title="f.producto || ''">{{ f.producto || '—' }}</td>
+            <td class="px-4 py-3 hidden sm:table-cell">{{ f.area || '—' }}</td>
+            <td class="px-4 py-3 hidden sm:table-cell">{{ f.centro_costo || '—' }}</td>
+            <td class="px-4 py-3 hidden sm:table-cell">{{ f.marca || '—' }}</td>
             <td class="px-4 py-3">{{ f.centro || '—' }}</td>
-            <td class="px-4 py-3">{{ isoWeekNumber(f.created_at) || '—' }}</td>
+            <td class="px-4 py-3 hidden sm:table-cell">{{ isoWeekNumber(f.created_at) || '—' }}</td>
             <td class="px-4 py-3 text-right">${{ f.total }}</td>
             <td class="px-4 py-3">
               <span class="px-2 py-1 rounded text-xs font-medium" :class="badgeClass(f.estatus)">{{ f.estatus }}</span>
             </td>
-            <td class="px-4 py-3">{{ f.folio || '—' }}</td>
+            <td class="px-4 py-3 hidden sm:table-cell">{{ f.folio || '—' }}</td>
             <td class="px-4 py-3 whitespace-nowrap">{{ f.created_at?.slice(0,16) }}</td>
             <td class="px-4 py-3 text-right">
               <Link :href="f.url" :class="['inline-flex items-center gap-2 px-3 py-1.5 rounded text-white', f.estatus === 'autorizada_cliente' ? 'bg-blue-500 hover:bg-blue-600' : 'bg-slate-700 hover:bg-slate-800']">
@@ -235,10 +236,11 @@ function goToPage(p){
         </tbody>
         </table>
         </div>
+        </div>
       </div>
 
       <!-- Paginación dentro de la tarjeta -->
-      <div class="px-8 py-3 flex items-center justify-end gap-2">
+      <div class="px-4 sm:px-8 py-3 flex items-center justify-end gap-2">
         <button class="px-3 py-1.5 rounded border text-sm disabled:opacity-50" :disabled="currentPage<=1" @click="goToPage(currentPage-1)">Anterior</button>
         <span class="text-sm">Página {{ currentPage }} de {{ totalPages }}</span>
         <button class="px-3 py-1.5 rounded border text-sm disabled:opacity-50" :disabled="currentPage>=totalPages" @click="goToPage(currentPage+1)">Siguiente</button>
