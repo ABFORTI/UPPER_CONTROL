@@ -862,9 +862,10 @@ class OrdenController extends Controller
             })
             ->orderByDesc('id');
 
-        $data = $q->paginate(10)->withQueryString();
+        $isPeriod = !empty($filters['week']);
 
-        $data->getCollection()->transform(function ($o) {
+        // Reutilizamos el mismo mapeo para paginado o listado completo
+        $transform = function ($o) {
             // Estatus de facturación real priorizando la factura en pivot (única por integridad)
             // Orden de prioridad: pivot -> directa -> fallback por estatus de OT
             $factStatus = 'sin_factura';
@@ -909,8 +910,18 @@ class OrdenController extends Controller
                 'created_at_raw' => $raw,
                 'fecha_iso' => $fechaIso,
             
-                ]    ;
-        });
+                ];
+        };
+
+        if ($isPeriod) {
+            // Mostrar todas las OTs del periodo (sin paginar)
+            $all = $q->get()->map($transform)->values();
+            // Enviamos en el mismo shape { data: [...] } para que el front lo consuma igual
+            $data = [ 'data' => $all ];
+        } else {
+            $data = $q->paginate(10)->withQueryString();
+            $data->getCollection()->transform($transform);
+        }
 
         // Lista de centros para selector
         $centrosLista = $u->hasAnyRole(['admin','facturacion'])

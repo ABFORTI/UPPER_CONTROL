@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, watch, watchEffect } from 'vue'
 import { router, Link, usePage } from '@inertiajs/vue3'
 
 const props = defineProps({
@@ -12,6 +12,7 @@ const props = defineProps({
 })
 
 const rows = computed(()=> props.data?.data ?? [])
+const isPeriod = computed(()=> !!(props.filters?.week))
 
 // Permisos: solo admin o facturacion pueden marcar y facturar
 const page = usePage()
@@ -20,13 +21,10 @@ const canFacturar = computed(() => {
   return roles.includes('admin') || roles.includes('facturacion')
 })
 
-// Selección múltiple para facturación
-const selected = ref(new Set())
-const anySelected = computed(()=> selected.value.size > 0)
-function toggleSelection(id, checked){
-  if(checked) selected.value.add(id); else selected.value.delete(id)
-}
-function clearSelection(){ selected.value.clear() }
+// Selección múltiple para facturación (usar array para v-model de checkboxes)
+const selectedIds = ref([])
+const anySelected = computed(()=> (selectedIds.value?.length || 0) > 0)
+function clearSelection(){ selectedIds.value = [] }
 
 // Helper para saber si una OT es seleccionable para facturar
 function isSelectable(o){
@@ -36,7 +34,7 @@ function isSelectable(o){
 
 // Ir a pantalla CreateBatch con las OTs seleccionadas
 function openBatch(){
-  const ids = Array.from(selected.value)
+  const ids = (selectedIds.value || []).slice()
   if (ids.length === 0) return
   router.get(props.urls?.facturas_batch_create, { ids: ids.join(',') })
 }
@@ -78,7 +76,7 @@ function factBadgeClass(v){
 
 // Exportar/Copy (cliente)
 function toCsv(items){
-  const headers = ['ID','Producto','Servicio','Centro','Área','Estatus','Calidad','Facturación','TL','Fecha']
+  const headers = ['ID','Producto','Servicio','Centro','Área','Estatus','Calidad','Facturación','TL','Periodo','Fecha']
   const rows = items.map(o => [
     o.id,
     o.producto || '-',
@@ -89,6 +87,7 @@ function toCsv(items){
     o.calidad_resultado || '-',
     o.facturacion || '-',
     o.team_leader?.name || '—',
+    isoWeekNumber(o.created_at_raw || o.fecha_iso || o.fecha) || '',
     o.fecha || ''
   ])
   const csv = [headers, ...rows].map(r => r.map(v => `"${String(v??'').replaceAll('"','""')}"`).join(',')).join('\n')
@@ -106,9 +105,49 @@ function downloadExcel(){
 }
 async function copyTable(){
   try{
-  const tsv = (rows.value||[]).map(o => [o.id, o.servicio?.nombre||'-', o.centro?.nombre||'-', o.area?.nombre||'-', o.estatus||'-', o.calidad_resultado||'-', o.facturacion||'-', o.team_leader?.name||'—', o.fecha||''].join('\t')).join('\n')
+  const tsv = (rows.value||[]).map(o => [
+    o.id,
+    o.servicio?.nombre||'-',
+    o.centro?.nombre||'-',
+    o.area?.nombre||'-',
+    o.estatus||'-',
+    o.calidad_resultado||'-',
+    o.facturacion||'-',
+    o.team_leader?.name||'—',
+    isoWeekNumber(o.created_at_raw || o.fecha_iso || o.fecha) || '',
+    o.fecha||''
+  ].join('\t')).join('\n')
     await navigator.clipboard.writeText(tsv)
   }catch(e){ console.warn('No se pudo copiar:', e) }
+}
+// Auto-seleccionar todas las filas cuando hay periodo
+watch(rows, (val) => {
+  if (isPeriod.value && Array.isArray(val)) {
+    // Seleccionar solo OTs facturables
+    selectedIds.value = (val.filter(v => isSelectable(v)).map(r => Number(r.id)))
+  }
+}, { immediate: true })
+
+watchEffect(() => {
+  if (isPeriod.value) {
+    const val = rows.value || []
+    selectedIds.value = (Array.isArray(val) ? val : []).filter(v => isSelectable(v)).map(r => Number(r.id))
+  } else {
+    // Al quitar el periodo, limpiar selección
+    selectedIds.value = []
+  }
+})
+
+// Periodo (semana ISO) desde fecha/created_at
+function isoWeekNumber (dateStr) {
+  if (!dateStr) return ''
+  const d = new Date(dateStr)
+  if (isNaN(d)) return ''
+  const target = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()))
+  const dayNr = target.getUTCDay() || 7
+  target.setUTCDate(target.getUTCDate() + 4 - dayNr)
+  const yearStart = new Date(Date.UTC(target.getUTCFullYear(), 0, 1))
+  return Math.ceil((((target - yearStart) / 86400000) + 1) / 7)
 }
 </script>
 
@@ -167,8 +206,94 @@ async function copyTable(){
 
       <!-- Tabla -->
       <div class="px-8 pb-4">
-        <div class="rounded-lg overflow-hidden shadow-sm">
-          <table class="min-w-full text-base">
+        <div class="rounded-lg shadow-sm">
+          <div :class="['overflow-x-auto', isPeriod ? 'relative' : '']">
+            <div v-if="isPeriod" class="max-h-[60vh] overflow-y-auto overscroll-contain">
+              <table class="min-w-full text-base">
+                <thead class="bg-slate-800 text-white uppercase text-sm">
+                  <tr>
+                <th v-if="canFacturar" class="p-2"></th>
+                <th class="p-2">ID</th>
+                <th class="p-2">Producto</th>
+                <th class="p-2">Servicio</th>
+                <th class="p-2">Centro</th>
+                <th class="p-2">Área</th>
+                <th class="p-2">Estatus</th>
+                <th class="p-2">Centro de costo</th>
+                <th class="p-2">Marca</th>
+                <th class="p-2">Facturación</th>
+                <th class="p-2">TL</th>
+                <th class="p-2">Periodo</th>
+                <th class="p-2">Fecha</th>
+                <th class="p-2">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="o in rows" :key="o.id" class="border-t even:bg-slate-50 hover:bg-slate-100/60">
+                    <td v-if="canFacturar" class="px-2 py-3">
+                      <input
+                        type="checkbox"
+                        :disabled="!isSelectable(o)"
+                        :class="!isSelectable(o)
+                          ? 'opacity-40 cursor-not-allowed accent-gray-300'
+                          : 'cursor-pointer accent-[#1A73E8] hover:accent-[#1557b0]'
+                        "
+                        :title="!isSelectable(o) ? 'No seleccionable: ya facturada o sin autorización del cliente' : 'Seleccionar para facturar'"
+                        v-model="selectedIds"
+                        :value="o.id"
+                      />
+                    </td>
+                    <td class="px-4 py-3 font-mono">#{{ o.id }}</td>
+                    <td class="px-4 py-3">{{ o.producto || '-' }}</td>
+                    <td class="px-4 py-3">{{ o.servicio?.nombre }}</td>
+                    <td class="px-4 py-3">{{ o.centro?.nombre }}</td>
+                    <td class="px-4 py-3">{{ o.area?.nombre || '-' }}</td>
+                    <td class="px-4 py-3">
+                      <span class="px-3 py-1.5 rounded-full text-xs font-semibold uppercase tracking-wide"
+                            :class="{
+                              'bg-blue-100 text-blue-700': o.estatus==='generada',
+                              'bg-indigo-100 text-indigo-700': o.estatus==='asignada',
+                              'bg-yellow-100 text-yellow-700': o.estatus==='en_proceso',
+                              'bg-green-100 text-green-700': o.estatus==='completada',
+                              'bg-emerald-100 text-emerald-700': o.estatus==='autorizada_cliente'
+                            }">{{ o.estatus }}</span>
+                    </td>
+                    <td class="px-4 py-3">{{ o.centro_costo?.nombre || '-' }}</td>
+                    <td class="px-4 py-3">{{ o.marca?.nombre || '-' }}</td>
+                    <td class="px-4 py-3">
+                      <span class="px-3 py-1.5 rounded-full text-xs font-semibold uppercase tracking-wide" :class="factBadgeClass(o.facturacion)">{{ o.facturacion }}</span>
+                    </td>
+                    <td class="px-4 py-3">{{ o.team_leader?.name || '—' }}</td>
+                    <td class="px-4 py-3">{{ isoWeekNumber(o.created_at_raw || o.fecha_iso || o.fecha) || '—' }}</td>
+                    <td class="px-4 py-3">{{ o.fecha }}</td>
+                    <td class="px-4 py-3">
+                      <div class="flex items-center gap-2">
+                        <a :href="o.urls.show" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg transition-colors">
+                          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                          </svg>
+                          Ver
+                        </a>
+                        <a v-if="o.estatus==='completada' && o.calidad_resultado==='pendiente'" :href="o.urls.calidad" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium rounded-lg transition-colors">
+                          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                          </svg>
+                          Calidad
+                        </a>
+                        <a v-if="canFacturar && o.estatus==='autorizada_cliente'" :href="o.urls.facturar" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-lg transition-colors">
+                          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                          </svg>
+                          Facturar
+                        </a>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <table v-else class="min-w-full text-base">
             <thead class="bg-slate-800 text-white uppercase text-sm">
               <tr>
             <th v-if="canFacturar" class="p-2"></th>
@@ -182,6 +307,7 @@ async function copyTable(){
             <th class="p-2">Marca</th>
             <th class="p-2">Facturación</th>
             <th class="p-2">TL</th>
+            <th class="p-2">Periodo</th>
             <th class="p-2">Fecha</th>
             <th class="p-2">Acciones</th>
               </tr>
@@ -197,8 +323,8 @@ async function copyTable(){
                       : 'cursor-pointer accent-[#1A73E8] hover:accent-[#1557b0]'
                     "
                     :title="!isSelectable(o) ? 'No seleccionable: ya facturada o sin autorización del cliente' : 'Seleccionar para facturar'"
-                    :checked="selected.has(o.id)"
-                    @change="toggleSelection(o.id, $event.target.checked)"
+                    v-model="selectedIds"
+                    :value="Number(o.id)"
                   />
                 </td>
                 <td class="px-4 py-3 font-mono">#{{ o.id }}</td>
@@ -222,6 +348,7 @@ async function copyTable(){
                   <span class="px-3 py-1.5 rounded-full text-xs font-semibold uppercase tracking-wide" :class="factBadgeClass(o.facturacion)">{{ o.facturacion }}</span>
                 </td>
                 <td class="px-4 py-3">{{ o.team_leader?.name || '—' }}</td>
+                <td class="px-4 py-3">{{ isoWeekNumber(o.created_at_raw || o.fecha_iso || o.fecha) || '—' }}</td>
                 <td class="px-4 py-3">{{ o.fecha }}</td>
                 <td class="px-4 py-3">
                   <div class="flex items-center gap-2">
@@ -249,11 +376,12 @@ async function copyTable(){
               </tr>
             </tbody>
           </table>
+          </div>
         </div>
       </div>
 
       <!-- Paginación -->
-      <div class="px-8 py-3 flex gap-2 justify-end">
+  <div v-if="!isPeriod" class="px-8 py-3 flex gap-2 justify-end">
         <Link v-for="link in data.links" :key="link.label" :href="link.url || '#'"
               class="px-3 py-1.5 rounded border text-sm"
               :class="{'bg-slate-900 text-white border-slate-900': link.active}"
