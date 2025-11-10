@@ -42,13 +42,14 @@ function badgeClass(estatus){
 
 // Exportar/Copy (cliente)
 function toCsv(items){
-  const headers = ['ID','OT','Servicio','Producto','Centro','Total','Estatus','Folio','Fecha']
+  const headers = ['ID','OT','Servicio','Producto','Centro','Periodo','Total','Estatus','Folio','Fecha']
   const rows = items.map(f => [
     f.id,
     `OT ${f.orden_id ?? ''}`,
     f.servicio ?? '',
     f.descripcion_general ?? '',
     f.centro ?? '',
+    isoWeekNumber(f.created_at) || '',
     f.total ?? '',
     f.estatus ?? '',
     f.folio ?? '',
@@ -69,11 +70,35 @@ function downloadExcel(){
 }
 async function copyTable(){
   try{
-    const tsv = (props.items||[]).map(f => [f.id, `OT ${f.orden_id??''}`, f.servicio??'', f.descripcion_general??'', f.centro??'', f.total??'', f.estatus??'', f.folio??'', (f.created_at||'').slice(0,16)].join('\t')).join('\n')
+    const tsv = (props.items||[]).map(f => [
+      f.id,
+      `OT ${f.orden_id??''}`,
+      f.servicio??'',
+      f.descripcion_general??'',
+      f.centro??'',
+      isoWeekNumber(f.created_at) || '',
+      f.total??'',
+      f.estatus??'',
+      f.folio??'',
+      (f.created_at||'').slice(0,16)
+    ].join('\t')).join('\n')
     await navigator.clipboard.writeText(tsv)
     // opcional: feedback simple
     // alert('Copiado al portapapeles')
   }catch(e){ console.warn('No se pudo copiar:', e) }
+}
+
+// Periodo (semana ISO) desde created_at
+function isoWeekNumber (dateStr) {
+  if (!dateStr) return ''
+  const d = new Date(dateStr)
+  if (isNaN(d)) return ''
+  // Convertir a UTC y calcular semana ISO (Mon=1..Sun=7)
+  const target = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()))
+  const dayNr = target.getUTCDay() || 7
+  target.setUTCDate(target.getUTCDate() + 4 - dayNr)
+  const yearStart = new Date(Date.UTC(target.getUTCFullYear(), 0, 1))
+  return Math.ceil((((target - yearStart) / 86400000) + 1) / 7)
 }
 
 // Paginación (cliente)
@@ -164,6 +189,7 @@ function goToPage(p){
             <th class="px-4 py-3 text-left">Centro de costos</th>
             <th class="px-4 py-3 text-left">Marca</th>
             <th class="px-4 py-3 text-left">Centro</th>
+            <th class="px-4 py-3 text-left">Periodo</th>
             <th class="px-4 py-3 text-right">Total</th>
             <th class="px-4 py-3 text-left">Estatus</th>
             <th class="px-4 py-3 text-left">Folio</th>
@@ -189,6 +215,7 @@ function goToPage(p){
             <td class="px-4 py-3">{{ f.centro_costo || '—' }}</td>
             <td class="px-4 py-3">{{ f.marca || '—' }}</td>
             <td class="px-4 py-3">{{ f.centro || '—' }}</td>
+            <td class="px-4 py-3">{{ isoWeekNumber(f.created_at) || '—' }}</td>
             <td class="px-4 py-3 text-right">${{ f.total }}</td>
             <td class="px-4 py-3">
               <span class="px-2 py-1 rounded text-xs font-medium" :class="badgeClass(f.estatus)">{{ f.estatus }}</span>
@@ -203,7 +230,7 @@ function goToPage(p){
             </td>
           </tr>
           <tr v-if="!(pageItems?.length) && !(props.items?.length)">
-            <td colspan="9" class="p-6 text-center text-slate-500">Sin registros</td>
+            <td colspan="14" class="p-6 text-center text-slate-500">Sin registros</td>
           </tr>
         </tbody>
         </table>
