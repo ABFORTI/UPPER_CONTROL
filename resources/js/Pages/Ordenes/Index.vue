@@ -152,12 +152,12 @@ function isoWeekNumber (dateStr) {
 </script>
 
 <template>
-  <div class="p-6 max-w-none">
+  <div class="p-4 sm:p-6 max-w-none">
     <h1 class="text-3xl font-extrabold tracking-tight mb-4 uppercase">Órdenes de Trabajo</h1>
 
-    <div class="rounded-xl border bg-white">
+  <div class="rounded-xl border bg-white">
       <!-- Acciones y filtros (alineados a la derecha) -->
-      <div class="px-8 py-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+  <div class="px-4 sm:px-8 py-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
         <div class="flex items-center gap-2">
           <button @click="downloadExcel" class="px-4 py-2 rounded text-white" style="background:#22c55e">Excel</button>
           <button @click="copyTable" class="px-4 py-2 rounded text-white" style="background:#64748b">Copiar</button>
@@ -166,24 +166,24 @@ function isoWeekNumber (dateStr) {
 
         <div class="flex flex-wrap items-center gap-2 w-full lg:w-auto justify-end">
           <!-- Centro -->
-          <select v-model="centroSel" @change="applyFilter" class="border p-2 rounded min-w-[180px]">
+          <select v-model="centroSel" @change="applyFilter" class="w-full sm:w-auto min-w-0 sm:min-w-[180px] border p-2 rounded">
             <option value="">Todos los centros</option>
             <option v-for="c in (props.centros||[])" :key="c.id" :value="c.id">{{ c.nombre }}</option>
           </select>
 
           <!-- Centro de costo -->
-          <select v-model="centroCostoSel" @change="applyFilter" class="border p-2 rounded min-w-[200px]">
+          <select v-model="centroCostoSel" @change="applyFilter" class="w-full sm:w-auto min-w-0 sm:min-w-[200px] border p-2 rounded">
             <option value="">Todos los centros de costo</option>
             <option v-for="cc in (props.centrosCostos||[])" :key="cc.id" :value="cc.id">{{ cc.nombre }}</option>
           </select>
 
           <!-- Año -->
-          <select v-model="yearSel" @change="applyFilter" class="border p-2 rounded min-w-[100px]">
+          <select v-model="yearSel" @change="applyFilter" class="w-full sm:w-auto min-w-0 sm:min-w-[100px] border p-2 rounded">
             <option v-for="y in [yearSel-2, yearSel-1, yearSel, yearSel+1]" :key="y" :value="y">{{ y }}</option>
           </select>
           
           <!-- Semana -->
-          <select v-model="weekSel" @change="applyFilter" class="border p-2 rounded min-w-[120px]">
+          <select v-model="weekSel" @change="applyFilter" class="w-full sm:w-auto min-w-0 sm:min-w-[120px] border p-2 rounded">
             <option value="">Periodos</option>
             <option v-for="w in 53" :key="w" :value="w">Periodo {{ w }}</option>
           </select>
@@ -205,7 +205,7 @@ function isoWeekNumber (dateStr) {
       </div>
 
       <!-- Tabla -->
-      <div class="px-8 pb-4">
+      <div class="px-4 sm:px-8 pb-4">
         <div class="rounded-lg shadow-sm">
           <div :class="['overflow-x-auto', isPeriod ? 'relative' : '']">
             <div v-if="isPeriod" class="max-h-[60vh] overflow-y-auto overscroll-contain">
@@ -214,16 +214,16 @@ function isoWeekNumber (dateStr) {
                   <tr>
                 <th v-if="canFacturar" class="p-2"></th>
                 <th class="p-2">ID</th>
-                <th class="p-2">Producto</th>
+                <th class="p-2 hidden sm:table-cell">Producto</th>
                 <th class="p-2">Servicio</th>
-                <th class="p-2">Centro</th>
-                <th class="p-2">Área</th>
+                <th class="p-2 hidden sm:table-cell">Centro</th>
+                <th class="p-2 hidden sm:table-cell">Área</th>
                 <th class="p-2">Estatus</th>
-                <th class="p-2">Centro de costo</th>
-                <th class="p-2">Marca</th>
+                <th class="p-2 hidden sm:table-cell">Centro de costo</th>
+                <th class="p-2 hidden sm:table-cell">Marca</th>
                 <th class="p-2">Facturación</th>
-                <th class="p-2">TL</th>
-                <th class="p-2">Periodo</th>
+                <th class="p-2 hidden sm:table-cell">TL</th>
+                <th class="p-2 hidden sm:table-cell">Periodo</th>
                 <th class="p-2">Fecha</th>
                 <th class="p-2">Acciones</th>
                   </tr>
@@ -244,10 +244,10 @@ function isoWeekNumber (dateStr) {
                       />
                     </td>
                     <td class="px-4 py-3 font-mono">#{{ o.id }}</td>
-                    <td class="px-4 py-3">{{ o.producto || '-' }}</td>
+                    <td class="px-4 py-3 hidden sm:table-cell">{{ o.producto || '-' }}</td>
                     <td class="px-4 py-3">{{ o.servicio?.nombre }}</td>
-                    <td class="px-4 py-3">{{ o.centro?.nombre }}</td>
-                    <td class="px-4 py-3">{{ o.area?.nombre || '-' }}</td>
+                    <td class="px-4 py-3 hidden sm:table-cell">{{ o.centro?.nombre }}</td>
+                    <td class="px-4 py-3 hidden sm:table-cell">{{ o.area?.nombre || '-' }}</td>
                     <td class="px-4 py-3">
                       <span class="px-3 py-1.5 rounded-full text-xs font-semibold uppercase tracking-wide"
                             :class="{
@@ -258,14 +258,14 @@ function isoWeekNumber (dateStr) {
                               'bg-emerald-100 text-emerald-700': o.estatus==='autorizada_cliente'
                             }">{{ o.estatus }}</span>
                     </td>
-                    <td class="px-4 py-3">{{ o.centro_costo?.nombre || '-' }}</td>
-                    <td class="px-4 py-3">{{ o.marca?.nombre || '-' }}</td>
+                    <td class="px-4 py-3 hidden sm:table-cell">{{ o.centro_costo?.nombre || '-' }}</td>
+                    <td class="px-4 py-3 hidden sm:table-cell">{{ o.marca?.nombre || '-' }}</td>
                     <td class="px-4 py-3">
                       <span class="px-3 py-1.5 rounded-full text-xs font-semibold uppercase tracking-wide" :class="factBadgeClass(o.facturacion)">{{ o.facturacion }}</span>
                     </td>
-                    <td class="px-4 py-3">{{ o.team_leader?.name || '—' }}</td>
-                    <td class="px-4 py-3">{{ isoWeekNumber(o.created_at_raw || o.fecha_iso || o.fecha) || '—' }}</td>
-                    <td class="px-4 py-3">{{ o.fecha }}</td>
+                    <td class="px-4 py-3 hidden sm:table-cell">{{ o.team_leader?.name || '—' }}</td>
+                    <td class="px-4 py-3 hidden sm:table-cell">{{ isoWeekNumber(o.created_at_raw || o.fecha_iso || o.fecha) || '—' }}</td>
+                    <td class="px-4 py-3 whitespace-nowrap">{{ o.fecha }}</td>
                     <td class="px-4 py-3">
                       <div class="flex items-center gap-2">
                         <a :href="o.urls.show" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg transition-colors">
@@ -298,16 +298,16 @@ function isoWeekNumber (dateStr) {
               <tr>
             <th v-if="canFacturar" class="p-2"></th>
             <th class="p-2">ID</th>
-            <th class="p-2">Producto</th>
+            <th class="p-2 hidden sm:table-cell">Producto</th>
             <th class="p-2">Servicio</th>
-            <th class="p-2">Centro</th>
-            <th class="p-2">Área</th>
+            <th class="p-2 hidden sm:table-cell">Centro</th>
+            <th class="p-2 hidden sm:table-cell">Área</th>
             <th class="p-2">Estatus</th>
-            <th class="p-2">Centro de costo</th>
-            <th class="p-2">Marca</th>
+            <th class="p-2 hidden sm:table-cell">Centro de costo</th>
+            <th class="p-2 hidden sm:table-cell">Marca</th>
             <th class="p-2">Facturación</th>
-            <th class="p-2">TL</th>
-            <th class="p-2">Periodo</th>
+            <th class="p-2 hidden sm:table-cell">TL</th>
+            <th class="p-2 hidden sm:table-cell">Periodo</th>
             <th class="p-2">Fecha</th>
             <th class="p-2">Acciones</th>
               </tr>
@@ -328,10 +328,10 @@ function isoWeekNumber (dateStr) {
                   />
                 </td>
                 <td class="px-4 py-3 font-mono">#{{ o.id }}</td>
-                <td class="px-4 py-3">{{ o.producto || '-' }}</td>
+                <td class="px-4 py-3 hidden sm:table-cell">{{ o.producto || '-' }}</td>
                 <td class="px-4 py-3">{{ o.servicio?.nombre }}</td>
-                <td class="px-4 py-3">{{ o.centro?.nombre }}</td>
-                <td class="px-4 py-3">{{ o.area?.nombre || '-' }}</td>
+                <td class="px-4 py-3 hidden sm:table-cell">{{ o.centro?.nombre }}</td>
+                <td class="px-4 py-3 hidden sm:table-cell">{{ o.area?.nombre || '-' }}</td>
                 <td class="px-4 py-3">
                   <span class="px-3 py-1.5 rounded-full text-xs font-semibold uppercase tracking-wide"
                         :class="{
@@ -342,14 +342,14 @@ function isoWeekNumber (dateStr) {
                           'bg-emerald-100 text-emerald-700': o.estatus==='autorizada_cliente'
                         }">{{ o.estatus }}</span>
                 </td>
-                <td class="px-4 py-3">{{ o.centro_costo?.nombre || '-' }}</td>
-                <td class="px-4 py-3">{{ o.marca?.nombre || '-' }}</td>
+                <td class="px-4 py-3 hidden sm:table-cell">{{ o.centro_costo?.nombre || '-' }}</td>
+                <td class="px-4 py-3 hidden sm:table-cell">{{ o.marca?.nombre || '-' }}</td>
                 <td class="px-4 py-3">
                   <span class="px-3 py-1.5 rounded-full text-xs font-semibold uppercase tracking-wide" :class="factBadgeClass(o.facturacion)">{{ o.facturacion }}</span>
                 </td>
-                <td class="px-4 py-3">{{ o.team_leader?.name || '—' }}</td>
-                <td class="px-4 py-3">{{ isoWeekNumber(o.created_at_raw || o.fecha_iso || o.fecha) || '—' }}</td>
-                <td class="px-4 py-3">{{ o.fecha }}</td>
+                <td class="px-4 py-3 hidden sm:table-cell">{{ o.team_leader?.name || '—' }}</td>
+                <td class="px-4 py-3 hidden sm:table-cell">{{ isoWeekNumber(o.created_at_raw || o.fecha_iso || o.fecha) || '—' }}</td>
+                <td class="px-4 py-3 whitespace-nowrap">{{ o.fecha }}</td>
                 <td class="px-4 py-3">
                   <div class="flex items-center gap-2">
                     <a :href="o.urls.show" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg transition-colors">
@@ -381,7 +381,7 @@ function isoWeekNumber (dateStr) {
       </div>
 
       <!-- Paginación -->
-  <div v-if="!isPeriod" class="px-8 py-3 flex gap-2 justify-end">
+  <div v-if="!isPeriod" class="px-4 sm:px-8 py-3 flex gap-2 justify-end">
         <Link v-for="link in data.links" :key="link.label" :href="link.url || '#'"
               class="px-3 py-1.5 rounded border text-sm"
               :class="{'bg-slate-900 text-white border-slate-900': link.active}"

@@ -115,7 +115,8 @@ async function copyTable(){
 
       <!-- Tabla -->
       <div class="px-8 pb-4">
-        <div class="rounded-lg overflow-hidden shadow-sm">
+        <div class="rounded-lg shadow-sm">
+          <div class="overflow-x-auto">
           <table class="min-w-full text-base">
             <thead class="bg-slate-800 text-white uppercase text-sm">
               <tr>
@@ -173,6 +174,7 @@ async function copyTable(){
               </tr>
             </tbody>
           </table>
+          </div>
         </div>
       </div>
 
