@@ -33,8 +33,8 @@ class DashboardController extends Controller
         $desde = $base->startOfWeek();
         $hasta = $base->endOfWeek();
 
-        // Centro: admins/facturación pueden elegir, el resto se fija al suyo
-        $centroId = $u->hasAnyRole(['admin','facturacion'])
+        // Centro: admins/facturación/gerente pueden elegir, el resto se fija al suyo
+        $centroId = $u->hasAnyRole(['admin','facturacion','gerente'])
             ? ($req->integer('centro') ?: null)
             : (int) $u->centro_trabajo_id;
 
@@ -133,8 +133,8 @@ class DashboardController extends Controller
             $notificacionesNoLeidas = 0; // fallback silencioso
         }
 
-        // Centros para filtro (solo admins/facturación)
-        $centros = $u->hasAnyRole(['admin','facturacion'])
+        // Centros para filtro (admin, facturación y gerente)
+        $centros = $u->hasAnyRole(['admin','facturacion','gerente'])
             ? DB::table('centros_trabajo')->select('id','nombre')->orderBy('nombre')->get()
             : collect([]);
 
