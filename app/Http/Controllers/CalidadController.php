@@ -184,14 +184,14 @@ class CalidadController extends Controller
   ];
 
   $q = \App\Models\Orden::with('servicio','centro','area','solicitud.marca','teamLeader')
-    // Gerente ve todos los centros como admin (solo lectura)
-    ->when(!$u->hasAnyRole(['admin','gerente']), function($qq) use ($u) {
+    // Admin ve todos los centros. Gerente restringido a centros asignados (solo lectura).
+    ->when(!$u->hasRole('admin'), function($qq) use ($u) {
       $ids = $this->allowedCentroIds($u);
       if (!empty($ids)) { $qq->whereIn('id_centrotrabajo', $ids); }
       else { $qq->whereRaw('1=0'); }
     })
     ->when($filters['centro'] !== null, function($qq) use ($u, $filters) {
-      if ($u->hasAnyRole(['admin','gerente'])) { $qq->where('id_centrotrabajo', $filters['centro']); }
+      if ($u->hasRole('admin')) { $qq->where('id_centrotrabajo', $filters['centro']); }
       else {
         $ids = $this->allowedCentroIds($u);
         if (in_array((int)$filters['centro'], array_map('intval',$ids), true)) { $qq->where('id_centrotrabajo', $filters['centro']); }
@@ -249,7 +249,7 @@ class CalidadController extends Controller
   });
 
   // Centros para selector
-  $centrosLista = $u->hasAnyRole(['admin','gerente'])
+  $centrosLista = $u->hasRole('admin')
     ? \App\Models\CentroTrabajo::select('id','nombre')->orderBy('nombre')->get()
     : \App\Models\CentroTrabajo::whereIn('id', $this->allowedCentroIds($u))->select('id','nombre')->orderBy('nombre')->get();
 
@@ -263,7 +263,7 @@ class CalidadController extends Controller
 
   private function allowedCentroIds(\App\Models\User $u): array
   {
-    if ($u->hasAnyRole(['admin','gerente'])) return [];
+  if ($u->hasRole('admin')) return [];
     $ids = $u->centros()->pluck('centros_trabajo.id')->map(fn($v)=>(int)$v)->all();
     $primary = (int)($u->centro_trabajo_id ?? 0);
     if ($primary) $ids[] = $primary;

@@ -12,8 +12,14 @@ class OrdenPolicy
     }
 
     public function view(User $u, Orden $o): bool {
-        // Gerente: vista total sin restricciones por centro
-        if ($u->hasRole('gerente')) return true;
+        // Gerente: puede ver si la OT pertenece a alguno de sus centros asignados (principal + pivots)
+        if ($u->hasRole('gerente')) {
+            $ids = $u->centros()->pluck('centros_trabajo.id')->map(fn($v)=>(int)$v)->all();
+            $primary = (int)($u->centro_trabajo_id ?? 0);
+            if ($primary) $ids[] = $primary;
+            $ids = array_values(array_unique($ids));
+            return in_array((int)$o->id_centrotrabajo, $ids, true);
+        }
         if ($u->hasAnyRole(['admin','facturacion'])) return true;
         // Cliente con alcance a todo el centro (rol opcional 'cliente_centro')
         if ($u->hasRole('cliente_centro')) {
