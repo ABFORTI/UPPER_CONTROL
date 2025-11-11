@@ -17,15 +17,19 @@ Schedule::command('test:schedule')->everyMinute();
 
 // Comando utilitario: enviar un correo RAW de prueba sin depender de BD ni notificaciones
 // Uso: php artisan mail:raw destinatario@dominio.com --subject="Asunto" --text="Cuerpo del mensaje"
-Artisan::command('mail:raw {to} {--subject=Test desde Laravel} {--text=Correo de prueba}', function () {
+Artisan::command('mail:raw {to} {--subject=Test desde Laravel} {--text=Correo de prueba} {--from=}', function () {
     $to = $this->argument('to');
     $subject = (string) $this->option('subject');
     $text = (string) $this->option('text');
+    $from = (string) ($this->option('from') ?? '');
 
     $this->info("Enviando correo de prueba a: {$to}");
 
     try {
-        Mail::raw($text, function ($m) use ($to, $subject) {
+        Mail::raw($text, function ($m) use ($to, $subject, $from) {
+            if (!empty($from)) {
+                $m->from($from, config('mail.from.name'));
+            }
             $m->to($to)->subject($subject);
         });
         $this->info('✅ Envío solicitado al transport configurado (verifica tu bandeja).');
