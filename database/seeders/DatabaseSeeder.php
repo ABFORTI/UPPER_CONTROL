@@ -10,11 +10,12 @@ class DatabaseSeeder extends Seeder {
     $this->call([
       CentrosSeeder::class,
       AreaSeeder::class,
+      MarcasSeeder::class,
       RolesSeeder::class,
       ServiciosSeeder::class,
   AsignarServiciosACentrosSeeder::class,
-      UsersSeeder::class,
       ServicioTamanosJumboSeeder::class, // asegura precio 'jumbo' por centro/servicio
+      UsuariosPorRolSeeder::class,       // crea usuario demo por cada rol existente
     ]);
   }
 }

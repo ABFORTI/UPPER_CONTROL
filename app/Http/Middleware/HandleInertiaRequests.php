@@ -68,6 +68,8 @@ class HandleInertiaRequests extends Middleware
             'globals' => [
                 // Construida con el baseURL por si la app vive en subcarpeta
                 'impersonate_leave' => $base.'/admin/impersonate/leave',
+                // Base URL para assets y rutas absolutas desde el front ('' si está en raíz)
+                'base' => $base,
             ],
 
             'urls' => [

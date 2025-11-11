@@ -6,6 +6,7 @@ import InputLabel from '@/Components/InputLabel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
+import { useAssetUrl } from '@/Support/useAssetUrl';
 
 defineProps({
     canResetPassword: {
@@ -22,6 +23,8 @@ const form = useForm({
     remember: false,
 });
 
+const asset = useAssetUrl();
+
 const submit = () => {
     form.post(route('login'), {
         onFinish: () => form.reset('password'),
@@ -35,7 +38,7 @@ const submit = () => {
   <!-- Branding / Info (hidden on small screens) -->
   <div class="hidden md:flex md:w-1/2 bg-[#F5F7FA] flex-col items-center justify-center p-10">
         <div class="w-25 h-25 mb-6 flex items-center justify-center">
-          <img src="img/upper_control.png" alt="Upper Control" loading="lazy" class="w-full h-full object-contain" />
+          <img :src="asset('img/upper_control.png')" alt="Upper Control" loading="lazy" class="w-full h-full object-contain" />
         </div>
         <div class="text-center">
           <div class="font-poppins font-bold text-2xl text-[#2E3A59] mb-1"></div>

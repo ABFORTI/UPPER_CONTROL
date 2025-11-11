@@ -2,9 +2,11 @@
 import { ref, computed } from 'vue'
 import { usePage, router, Link } from '@inertiajs/vue3'
 import Icon from '@/Components/Icon.vue'
+import { useAssetUrl } from '@/Support/useAssetUrl'
 
 const page  = usePage()
 const mobileOpen = ref(false)
+const asset = useAssetUrl()
 
 // Fallbacks seguros
 const url   = computed(() => page.url || '')
@@ -81,8 +83,8 @@ function closeMobile () {
         ]">
         <!-- Header brand -->
         <div class="h-16 flex items-center px-3 gap-3 shrink-0">
-          <div class="w-8 h-8 shrink-0">
-            <img src="img/upper_control.png" alt="Upper Control" class="w-full h-full object-contain rounded-md" loading="lazy" />
+            <div class="w-8 h-8 shrink-0">
+            <img :src="asset('img/upper_control.png')" alt="Upper Control" class="w-full h-full object-contain rounded-md" loading="lazy" />
           </div>
           <div class="overflow-hidden w-0 group-hover:w-auto group-hover:opacity-100 opacity-0 transition-all duration-200 whitespace-nowrap font-semibold">Upper Control</div>
         </div>
@@ -215,7 +217,7 @@ function closeMobile () {
               </svg>
             </button>
             <div class="flex items-center gap-2">
-              <img src="img/upper_control.png" alt="Upper Control" class="h-8 w-auto object-contain" loading="lazy" />
+              <img :src="asset('img/upper_control.png')" alt="Upper Control" class="h-8 w-auto object-contain" loading="lazy" />
             </div>
           </div>
         </div>

@@ -10,9 +10,9 @@ class UsersSeeder extends Seeder
 {
     public function run(): void
     {
-        // Asegurar centro por defecto 'UMX'
-        $centro = CentroTrabajo::firstOrCreate(['prefijo' => 'UMX'], ['nombre' => 'Upper CDMX']);
-        $centroGdl = CentroTrabajo::firstOrCreate(['prefijo' => 'UGDL'], ['nombre' => 'Upper GDL']);
+    // Seleccionar centros por defecto de la nueva lista
+    $centro       = CentroTrabajo::where('prefijo','INGCEDIM')->first() ?? CentroTrabajo::first();
+    $centroAlt    = CentroTrabajo::where('prefijo','CVAGDL')->first() ?? CentroTrabajo::skip(1)->first() ?? $centro;
 
         // Definir usuarios por rol
         $usersByRole = [
@@ -30,7 +30,7 @@ class UsersSeeder extends Seeder
                 [
                     'name' => $data['name'],
                     'password' => bcrypt('password'), // contraseña por defecto
-                    'centro_trabajo_id' => $centro->id,
+                    'centro_trabajo_id' => optional($centro)->id,
                     'activo' => true,
                 ]
             );
@@ -41,14 +41,17 @@ class UsersSeeder extends Seeder
             }
 
             // Asegurar centro principal (legacy)
-            if ($user->centro_trabajo_id !== $centro->id) {
+            if ($centro && $user->centro_trabajo_id !== $centro->id) {
                 $user->update(['centro_trabajo_id' => $centro->id]);
             }
 
             // Si es admin, facturacion, calidad, control o comercial: asignar múltiples centros en la pivote
-            if (in_array($role, ['admin','facturacion','calidad','control','comercial'], true)) {
-                $ids = [$centro->id, $centroGdl->id];
-                $user->centros()->syncWithoutDetaching($ids);
+            if ($centro && $centroAlt && in_array($role, ['admin','facturacion','calidad','control','comercial'], true)) {
+                $ids = array_values(array_unique([optional($centro)->id, optional($centroAlt)->id]));
+                $ids = array_filter($ids);
+                if (!empty($ids)) {
+                    $user->centros()->syncWithoutDetaching($ids);
+                }
             }
         }
     }
