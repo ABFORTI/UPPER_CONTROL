@@ -4,7 +4,12 @@
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
 
-        <title inertia>{{ config('app.name', 'Laravel') }}</title>
+    <title inertia>{{ config('app.name', 'Laravel') }}</title>
+
+    <!-- Favicon / Window icon -->
+    <link rel="icon" type="image/png" href="{{ asset('img/upper_control.png') }}">
+    <link rel="shortcut icon" href="{{ asset('img/upper_control.png') }}">
+    <meta name="theme-color" content="#0b2330">
 
         <!-- Fonts -->
         <link rel="preconnect" href="https://fonts.bunny.net">
