@@ -1,5 +1,5 @@
 <script setup>
-import { router } from '@inertiajs/vue3'
+import { usePage, router } from '@inertiajs/vue3'
 import { ref, computed } from 'vue'
 
 const props = defineProps({
@@ -61,10 +61,15 @@ function downloadExcel(){
 }
 async function copyTable(){
   try{
-  const tsv = (props.data?.data||[]).map(s => [s.folio||s.id, s.cliente?.name||'-', s.producto||'-', s.servicio?.nombre||'-', s.centro?.nombre||'-', s.centroCosto?.nombre||'-', s.marca?.nombre||'-', s.cantidad??'', s.archivos?.length > 0 ? 'Sí' : 'No', s.estatus??'', s.fecha||''].join('\t')).join('\n')
+    const tsv = (props.data?.data||[]).map(s => [s.folio||s.id, s.cliente?.name||'-', s.producto||'-', s.servicio?.nombre||'-', s.centro?.nombre||'-', s.centroCosto?.nombre||'-', s.marca?.nombre||'-', s.cantidad??'', s.archivos?.length > 0 ? 'Sí' : 'No', s.estatus??'', s.fecha||''].join('\t')).join('\n')
     await navigator.clipboard.writeText(tsv)
   }catch(e){ console.warn('No se pudo copiar:', e) }
 }
+
+// Roles para ocultar botón crear a gerente (solo lectura)
+const page = usePage()
+const roles = computed(() => page.props.auth?.user?.roles ?? [])
+const isGerente = computed(() => roles.value.includes('gerente'))
 
 </script>
 
@@ -74,7 +79,7 @@ async function copyTable(){
     <!-- Header -->
     <div class="flex items-center justify-between mb-4">
       <h1 class="font-display text-3xl font-semibold tracking-wide uppercase">Solicitudes</h1>
-      <a href="./solicitudes/create" class="btn btn-primary">AGREGAR +</a>
+      <a v-if="!isGerente" href="./solicitudes/create" class="btn btn-primary">AGREGAR +</a>
     </div>
 
     <!-- Tarjeta principal -->

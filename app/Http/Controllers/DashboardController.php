@@ -214,6 +214,21 @@ class DashboardController extends Controller
         ]);
     }
 
+    /**
+     * IDs de Centros de Trabajo permitidos para el usuario.
+     * Regla:
+     * - admin y facturacion: sin restricción (array vacío para indicar "todos").
+     * - demás (p.ej. gerente): centros asignados por pivote + su centro principal.
+     */
+    private function allowedCentroIds(\App\Models\User $u): array
+    {
+        if ($u->hasAnyRole(['admin','facturacion'])) return [];
+        $ids = $u->centros()->pluck('centros_trabajo.id')->map(fn($v)=>(int)$v)->all();
+        $primary = (int)($u->centro_trabajo_id ?? 0);
+        if ($primary) $ids[] = $primary;
+        return array_values(array_unique(array_filter($ids)));
+    }
+
     // ----- Exports CSV -----
     public function exportOts(Request $req)
     {
