@@ -33,10 +33,16 @@ class DashboardController extends Controller
         $desde = $base->startOfWeek();
         $hasta = $base->endOfWeek();
 
-        // Centro: admins/facturación/gerente pueden elegir, el resto se fija al suyo
-        $centroId = $u->hasAnyRole(['admin','facturacion','gerente'])
-            ? ($req->integer('centro') ?: null)
-            : (int) $u->centro_trabajo_id;
+        // Centro: admin/facturación pueden elegir cualquiera. Gerente sólo entre sus centros asignados (principal + pivots).
+        if ($u->hasAnyRole(['admin','facturacion'])) {
+            $centroId = $req->integer('centro') ?: null;
+        } elseif ($u->hasRole('gerente')) {
+            $selected = $req->integer('centro') ?: null;
+            $ids = $this->allowedCentroIds($u); // incluye principal
+            $centroId = ($selected && in_array((int)$selected, $ids, true)) ? (int)$selected : null;
+        } else {
+            $centroId = (int)$u->centro_trabajo_id;
+        }
 
         // --- KPIs básicos
         $solicitudesTotal = Solicitud::when($centroId, fn($q)=>$q->where('id_centrotrabajo',$centroId))
@@ -133,10 +139,19 @@ class DashboardController extends Controller
             $notificacionesNoLeidas = 0; // fallback silencioso
         }
 
-        // Centros para filtro (admin, facturación y gerente)
-        $centros = $u->hasAnyRole(['admin','facturacion','gerente'])
-            ? DB::table('centros_trabajo')->select('id','nombre')->orderBy('nombre')->get()
-            : collect([]);
+        // Centros para filtro:
+        // - admin/facturación: todos
+        // - gerente: sólo asignados
+        if ($u->hasAnyRole(['admin','facturacion'])) {
+            $centros = DB::table('centros_trabajo')->select('id','nombre')->orderBy('nombre')->get();
+        } elseif ($u->hasRole('gerente')) {
+            $ids = $this->allowedCentroIds($u);
+            $centros = empty($ids)
+                ? collect([])
+                : DB::table('centros_trabajo')->whereIn('id',$ids)->select('id','nombre')->orderBy('nombre')->get();
+        } else {
+            $centros = collect([]);
+        }
 
         // Usuarios del centro con roles (si hay centro seleccionado o asignado)
         $usuariosCentro = collect();

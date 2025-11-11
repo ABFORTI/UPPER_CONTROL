@@ -15,7 +15,7 @@ class CentroCostoController extends Controller
     /** @var \App\Models\User $user */
     /** @var \App\Models\User $user */
     $user = Auth::user();
-    if ($user->hasAnyRole(['admin','gerente'])) return; // gerente solo lectura
+    if ($user->hasRole('admin')) return; // gerente no puede escribir
 
         if ($user->hasAnyRole(['coordinador', 'control', 'comercial'])) {
             if ($user->hasRole('coordinador') && (int)$user->centro_trabajo_id !== (int)$idCentro) {
@@ -40,7 +40,7 @@ class CentroCostoController extends Controller
     $user = Auth::user();
         $centro = request('centro', null);
 
-    if ($user->hasAnyRole(['admin','gerente'])) {
+    if ($user->hasRole('admin')) {
             if ($centro) {
                 $items = CentroCosto::where('id_centrotrabajo', $centro)
                     ->with('centro')->orderBy('nombre')->get();
@@ -48,6 +48,18 @@ class CentroCostoController extends Controller
                 $items = CentroCosto::with('centro')->orderBy('id_centrotrabajo')->orderBy('nombre')->get();
             }
             $centros = CentroTrabajo::orderBy('nombre')->get();
+        } elseif ($user->hasRole('gerente')) {
+            $centrosIds = $user->centros()->pluck('centros_trabajo.id')->toArray();
+            $centrosIds = array_map('intval',$centrosIds);
+            if (empty($centrosIds)) abort(403, 'No tienes centros de trabajo asignados.');
+            if ($centro && in_array((int)$centro, $centrosIds, true)) {
+                $items = CentroCosto::where('id_centrotrabajo', (int)$centro)
+                    ->with('centro')->orderBy('nombre')->get();
+            } else {
+                $items = CentroCosto::whereIn('id_centrotrabajo', $centrosIds)
+                    ->with('centro')->orderBy('id_centrotrabajo')->orderBy('nombre')->get();
+            }
+            $centros = CentroTrabajo::whereIn('id', $centrosIds)->orderBy('nombre')->get();
         } elseif ($user->hasRole('coordinador')) {
             $items = CentroCosto::where('id_centrotrabajo', $user->centro_trabajo_id)
                 ->with('centro')->orderBy('nombre')->get();

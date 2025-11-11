@@ -14,7 +14,7 @@ class AreaController extends Controller
     {
     /** @var \App\Models\User $user */
     $user = Auth::user();
-    if ($user->hasAnyRole(['admin','gerente'])) return; // gerente solo lectura (middleware de escritura ya bloquea)
+    if ($user->hasRole('admin')) return; // gerente no puede escribir
         
         if ($user->hasAnyRole(['coordinador', 'control', 'comercial'])) {
             // Verificar si el usuario tiene acceso a este centro
@@ -44,7 +44,7 @@ class AreaController extends Controller
         $centro = request('centro', null);
         
         // Admin ve todas las áreas, coordinador solo las de su centro
-    if ($user->hasAnyRole(['admin','gerente'])) {
+        if ($user->hasRole('admin')) {
             // Si se especifica un centro via query, filtrar por él
             if ($centro) {
                 $areas = Area::where('id_centrotrabajo', $centro)
@@ -55,6 +55,17 @@ class AreaController extends Controller
                 $areas = Area::with('centro')->orderBy('id_centrotrabajo')->orderBy('nombre')->get();
             }
             $centros = CentroTrabajo::orderBy('nombre')->get();
+        } else if ($user->hasRole('gerente')) {
+            // Gerente: ver sólo sus centros asignados
+            $ids = $user->centros()->pluck('centros_trabajo.id')->toArray();
+            $ids = array_map('intval', $ids);
+            if (empty($ids)) { abort(403, 'No tienes centros de trabajo asignados.'); }
+            if ($centro && in_array((int)$centro, $ids, true)) {
+                $areas = Area::where('id_centrotrabajo', (int)$centro)->with('centro')->orderBy('nombre')->get();
+            } else {
+                $areas = Area::whereIn('id_centrotrabajo', $ids)->with('centro')->orderBy('id_centrotrabajo')->orderBy('nombre')->get();
+            }
+            $centros = CentroTrabajo::whereIn('id', $ids)->orderBy('nombre')->get();
         } else if ($user->hasRole('coordinador')) {
             // El coordinador solo ve su propio centro; ignorar el query param
             $areas = Area::where('id_centrotrabajo', $user->centro_trabajo_id)
