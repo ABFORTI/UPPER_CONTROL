@@ -17,8 +17,13 @@ class CalidadController extends Controller
 {
   // pantalla simple para validar/rechazar
   public function show(Orden $orden) {
-    $this->authorize('calidad', $orden);
-    $this->authCalidad($orden);
+  $u = Auth::user();
+  /** @var \App\Models\User $u */
+    // Gerente: solo lectura, sin necesidad de cumplir policy de 'calidad'
+    if (!$u->hasRole('gerente')) {
+      $this->authorize('calidad', $orden);
+      $this->authCalidad($orden);
+    }
     if ($orden->estatus !== 'completada') abort(422,'La OT aún no está completada.');
     return \Inertia\Inertia::render('Calidad/Review', [
       'orden' => $orden->load('solicitud.cliente','centro','servicio','items'),
@@ -179,13 +184,14 @@ class CalidadController extends Controller
   ];
 
   $q = \App\Models\Orden::with('servicio','centro','area','solicitud.marca','teamLeader')
-    ->when(!$u->hasRole('admin'), function($qq) use ($u) {
+    // Gerente ve todos los centros como admin (solo lectura)
+    ->when(!$u->hasAnyRole(['admin','gerente']), function($qq) use ($u) {
       $ids = $this->allowedCentroIds($u);
       if (!empty($ids)) { $qq->whereIn('id_centrotrabajo', $ids); }
       else { $qq->whereRaw('1=0'); }
     })
     ->when($filters['centro'] !== null, function($qq) use ($u, $filters) {
-      if ($u->hasRole('admin')) { $qq->where('id_centrotrabajo', $filters['centro']); }
+      if ($u->hasAnyRole(['admin','gerente'])) { $qq->where('id_centrotrabajo', $filters['centro']); }
       else {
         $ids = $this->allowedCentroIds($u);
         if (in_array((int)$filters['centro'], array_map('intval',$ids), true)) { $qq->where('id_centrotrabajo', $filters['centro']); }
@@ -243,7 +249,7 @@ class CalidadController extends Controller
   });
 
   // Centros para selector
-  $centrosLista = $u->hasRole('admin')
+  $centrosLista = $u->hasAnyRole(['admin','gerente'])
     ? \App\Models\CentroTrabajo::select('id','nombre')->orderBy('nombre')->get()
     : \App\Models\CentroTrabajo::whereIn('id', $this->allowedCentroIds($u))->select('id','nombre')->orderBy('nombre')->get();
 
@@ -257,7 +263,7 @@ class CalidadController extends Controller
 
   private function allowedCentroIds(\App\Models\User $u): array
   {
-    if ($u->hasRole('admin')) return [];
+    if ($u->hasAnyRole(['admin','gerente'])) return [];
     $ids = $u->centros()->pluck('centros_trabajo.id')->map(fn($v)=>(int)$v)->all();
     $primary = (int)($u->centro_trabajo_id ?? 0);
     if ($primary) $ids[] = $primary;

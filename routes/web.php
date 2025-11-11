@@ -161,10 +161,11 @@ Route::middleware('auth')->group(function () {
  * ========================== */
 Route::middleware('auth')->group(function () {
     // Calidad
+    // Gerente puede ver (solo lectura) las pantallas de calidad
     Route::get('/calidad', [CalidadController::class,'index'])
-        ->middleware('role:calidad|admin')->name('calidad.index');
+        ->middleware('role:calidad|admin|gerente')->name('calidad.index');
     Route::get('/ordenes/{orden}/calidad', [CalidadController::class,'show'])
-        ->middleware('role:calidad|admin')->name('calidad.show');
+        ->middleware('role:calidad|admin|gerente')->name('calidad.show');
     Route::post('/ordenes/{orden}/calidad/validar', [CalidadController::class,'validar'])
         ->middleware('role:calidad|admin')->name('calidad.validar');
     Route::post('/ordenes/{orden}/calidad/rechazar', [CalidadController::class,'rechazar'])
@@ -175,8 +176,9 @@ Route::middleware('auth')->group(function () {
         ->name('cliente.autorizar');
 
     // Facturas - Cliente puede ver el listado de sus facturas
+    // Gerente puede ver listados/detalles de facturas (solo lectura)
     Route::get('/facturas', [FacturaController::class,'index'])
-        ->middleware('role:facturacion|admin|cliente')->name('facturas.index');
+        ->middleware('role:facturacion|admin|cliente|gerente')->name('facturas.index');
     Route::get('/ordenes/{orden}/facturar', [FacturaController::class,'createFromOrden'])
         ->middleware('role:facturacion|admin')->name('facturas.createFromOrden');
     Route::post('/ordenes/{orden}/facturar', [FacturaController::class,'storeFromOrden'])
@@ -184,9 +186,9 @@ Route::middleware('auth')->group(function () {
 
     // Cliente puede ver factura y generar PDF
     Route::get('/facturas/{factura}', [FacturaController::class,'show'])
-        ->middleware('role:facturacion|admin|cliente')->name('facturas.show');
+        ->middleware('role:facturacion|admin|cliente|gerente')->name('facturas.show');
     Route::get('/facturas/{factura}/pdf',[FacturaController::class,'pdf'])
-        ->middleware('role:facturacion|admin|cliente')->name('facturas.pdf');
+        ->middleware('role:facturacion|admin|cliente|gerente')->name('facturas.pdf');
 
     // Solo facturacion y admin pueden ejecutar estas acciones
     Route::post('/facturas/{factura}/facturado', [FacturaController::class,'marcarFacturado'])

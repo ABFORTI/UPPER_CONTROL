@@ -53,6 +53,8 @@ class OrdenPolicy
     // calidad (solo calidad/admin del mismo centro)
     public function calidad(User $u, Orden $o): bool {
         if ($u->hasRole('admin')) return true;
+        // Gerente: solo lectura (no debe ejecutar acciones de validar/rechazar) -> devolver false aquí
+        if ($u->hasRole('gerente')) return false;
         if (!$u->hasRole('calidad')) return false;
         // Permitimos centros asignados por pivot más el centro principal
         $ids = $u->centros()->pluck('centros_trabajo.id')->map(fn($v)=>(int)$v)->all();

@@ -12,8 +12,9 @@ class AreaController extends Controller
 {
     private function authorizeFromCentro($idCentro)
     {
-        $user = Auth::user();
-        if ($user->hasRole('admin')) return;
+    /** @var \App\Models\User $user */
+    $user = Auth::user();
+    if ($user->hasAnyRole(['admin','gerente'])) return; // gerente solo lectura (middleware de escritura ya bloquea)
         
         if ($user->hasAnyRole(['coordinador', 'control', 'comercial'])) {
             // Verificar si el usuario tiene acceso a este centro
@@ -38,11 +39,12 @@ class AreaController extends Controller
      */
     public function index()
     {
-        $user = Auth::user();
+    /** @var \App\Models\User $user */
+    $user = Auth::user();
         $centro = request('centro', null);
         
         // Admin ve todas las áreas, coordinador solo las de su centro
-        if ($user->hasRole('admin')) {
+    if ($user->hasAnyRole(['admin','gerente'])) {
             // Si se especifica un centro via query, filtrar por él
             if ($centro) {
                 $areas = Area::where('id_centrotrabajo', $centro)
@@ -94,6 +96,7 @@ class AreaController extends Controller
             'areas' => $areas,
             'centros' => $centros,
             'can' => [
+                // Gerente no crea ni edita
                 'create' => $user->hasAnyRole(['admin', 'coordinador', 'control', 'comercial']),
                 'edit' => $user->hasAnyRole(['admin', 'coordinador', 'control', 'comercial']),
             ],

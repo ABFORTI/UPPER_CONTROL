@@ -22,7 +22,8 @@ class FacturaController extends Controller
     // Cliente solo puede ver sus propias facturas
     $isCliente = $u->hasRole('cliente');
     
-    if (!$u->hasRole('admin') && !$u->hasRole('facturacion') && !$isCliente) {
+    // Gerente: acceso solo lectura (igual que admin/facturacion para consulta)
+    if (!$u->hasAnyRole(['admin','facturacion','gerente']) && !$isCliente) {
       abort(403);
     }
 
@@ -46,7 +47,7 @@ class FacturaController extends Controller
   
   // Restricción por centro si no es admin NI facturacion
   // Facturación puede ver todas las facturas (como admin)
-  elseif (!$u->hasRole('admin') && !$u->hasRole('facturacion')) {
+  elseif (!$u->hasAnyRole(['admin','facturacion','gerente'])) {
     $ids = $this->allowedCentroIds($u);
     if (!empty($ids)) {
       $qFact->whereHas('orden', fn($qq) => $qq->whereIn('id_centrotrabajo', $ids));
@@ -56,7 +57,7 @@ class FacturaController extends Controller
   }
   // Filtro por centro explícito (si se pasa y está permitido)
   if ($centro) {
-    if ($u->hasAnyRole(['admin','facturacion'])) {
+    if ($u->hasAnyRole(['admin','facturacion','gerente'])) {
       $qFact->whereHas('orden', fn($qq) => $qq->where('id_centrotrabajo', $centro));
     } else {
       $ids = $this->allowedCentroIds($u);
@@ -137,7 +138,7 @@ class FacturaController extends Controller
         $qq->whereIn('id_centrotrabajo', $ids);
       })
       ->when($centro !== null, function($qq) use ($u, $centro) {
-        if ($u->hasAnyRole(['admin','facturacion'])) { $qq->where('id_centrotrabajo', $centro); }
+        if ($u->hasAnyRole(['admin','facturacion','gerente'])) { $qq->where('id_centrotrabajo', $centro); }
         else {
           $ids = $this->allowedCentroIds($u);
           if (in_array((int)$centro, array_map('intval',$ids), true)) { $qq->where('id_centrotrabajo', $centro); }
@@ -192,12 +193,12 @@ class FacturaController extends Controller
   }
 
   // Centros para selector
-  $centrosLista = $u->hasAnyRole(['admin','facturacion'])
+  $centrosLista = $u->hasAnyRole(['admin','facturacion','gerente'])
     ? \App\Models\CentroTrabajo::select('id','nombre')->orderBy('nombre')->get()
     : \App\Models\CentroTrabajo::whereIn('id', $this->allowedCentroIds($u))->select('id','nombre')->orderBy('nombre')->get();
 
   // Centros de costos para selector
-  $centrosCostoLista = $u->hasAnyRole(['admin','facturacion'])
+  $centrosCostoLista = $u->hasAnyRole(['admin','facturacion','gerente'])
     ? \App\Models\CentroCosto::select('id','nombre','id_centrotrabajo')->orderBy('nombre')->get()
     : \App\Models\CentroCosto::whereIn('id_centrotrabajo', $this->allowedCentroIds($u))->select('id','nombre','id_centrotrabajo')->orderBy('nombre')->get();
 

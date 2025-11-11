@@ -12,9 +12,9 @@ class MarcaController extends Controller
 {
     private function authorizeFromCentro($idCentro)
     {
-        /** @var \App\Models\User $user */
-        $user = Auth::user();
-        if ($user->hasRole('admin')) return;
+    /** @var \App\Models\User $user */
+    $user = Auth::user();
+    if ($user->hasAnyRole(['admin','gerente'])) return; // gerente solo lectura
 
         if ($user->hasAnyRole(['coordinador', 'control', 'comercial'])) {
             if ($user->hasRole('coordinador') && (int)$user->centro_trabajo_id !== (int)$idCentro) {
@@ -38,7 +38,7 @@ class MarcaController extends Controller
         $user = Auth::user();
         $centro = request('centro', null);
 
-        if ($user->hasRole('admin')) {
+    if ($user->hasAnyRole(['admin','gerente'])) {
             if ($centro) {
                 $items = Marca::where('id_centrotrabajo', $centro)
                     ->with('centro')->orderBy('nombre')->get();
