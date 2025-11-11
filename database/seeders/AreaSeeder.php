@@ -13,38 +13,85 @@ class AreaSeeder extends Seeder
      */
     public function run(): void
     {
-        // Obtener todos los centros de trabajo
-        $centros = CentroTrabajo::all();
+        // Obtener todos los centros definitivos (tras limpiar seeder de centros)
+        $centros = CentroTrabajo::where('activo', true)->get();
 
         if ($centros->isEmpty()) {
             $this->command->warn('No hay centros de trabajo. Crea centros antes de ejecutar este seeder.');
             return;
         }
 
-        // Áreas comunes para todos los centros
-        $areasComunes = [
-            ['nombre' => 'Almacén', 'descripcion' => 'Área de almacenamiento y bodega'],
-            ['nombre' => 'Producción', 'descripcion' => 'Área de manufactura y producción'],
-            ['nombre' => 'Calidad', 'descripcion' => 'Control y aseguramiento de calidad'],
-            ['nombre' => 'Mantenimiento', 'descripcion' => 'Mantenimiento de equipos e instalaciones'],
-            ['nombre' => 'Oficinas', 'descripcion' => 'Área administrativa'],
-            ['nombre' => 'Empaque', 'descripcion' => 'Área de empaque y embalaje'],
-            ['nombre' => 'Recepción', 'descripcion' => 'Recepción de materiales'],
-            ['nombre' => 'Embarques', 'descripcion' => 'Embarques y logística'],
+        // NUEVAS LISTAS POR CENTRO (reemplazo total)
+        // Clave por prefijo definido en CentrosSeeder
+        $areasPorCentro = [
+            'INGCEDIC' => [
+                'EMPAQUES GENERALES',
+                'MOVILIDAD',
+                'RETAIL',
+                'RECIBO',
+                'RECIBO NACIONAL',
+                'PROYECTOS',
+                'INSUMOS',
+            ],
+            'INGCEDIM' => [
+                'EMPAQUES GENERALES',
+                'MOVILIDAD',
+                'RETAIL',
+                'RECIBO',
+                'RECIBO NACIONAL',
+                'PROYECTOS',
+                'INSUMOS',
+            ],
+            'CVA' => [
+                'RECIBO',
+                'SURTIDO',
+                'DESPACHO',
+                'CONFIGURACIONES',
+                'CLIENTES FMM',
+            ],
+            'CVAGDL' => [
+                'RECIBO',
+                'SURTIDO',
+                'DESPACHO',
+                'CONFIGURACIONES',
+                'CLIENTES FMM',
+            ],
+            'CEVA' => [
+                'PROYECTOS',
+                'DAIKIN',
+            ],
         ];
 
         foreach ($centros as $centro) {
-            foreach ($areasComunes as $areaData) {
-                Area::create([
-                    'id_centrotrabajo' => $centro->id,
-                    'nombre' => $areaData['nombre'],
-                    'descripcion' => $areaData['descripcion'],
-                    'activo' => true,
-                ]);
+            // Lista deseada EXACTA para este centro (si no definida, lista vacía)
+            $deseadas = collect($areasPorCentro[$centro->prefijo] ?? [])
+                ->filter(fn ($n) => filled($n))
+                ->unique()
+                ->values();
+
+            // Crear o actualizar cada área deseada de manera idempotente
+            foreach ($deseadas as $nombreArea) {
+                Area::updateOrCreate(
+                    [
+                        'id_centrotrabajo' => $centro->id,
+                        'nombre' => $nombreArea,
+                    ],
+                    [
+                        'descripcion' => null,
+                        'activo' => true,
+                    ]
+                );
             }
-            $this->command->info("Áreas creadas para: {$centro->nombre}");
+
+            // Desactivar áreas que ya no estén en la lista deseada
+            $nombresDeseados = $deseadas->all();
+            Area::where('id_centrotrabajo', $centro->id)
+                ->whereNotIn('nombre', $nombresDeseados)
+                ->update(['activo' => false]);
+
+            $this->command->info("Áreas sincronizadas para: {$centro->nombre} ({$centro->prefijo})");
         }
 
-        $this->command->info('✅ Seeder de áreas completado.');
+        $this->command->info('✅ Seeder de áreas completado (idempotente y por centro).');
     }
 }

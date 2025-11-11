@@ -1,9 +1,11 @@
 <script setup>
-import { router } from '@inertiajs/vue3'
+import { router, usePage } from '@inertiajs/vue3'
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue'
 import { computed } from 'vue'
+import { useAssetUrl } from '@/Support/useAssetUrl'
 
 defineOptions({ layout: AuthenticatedLayout })
+const asset = useAssetUrl()
 
 const props = defineProps({
   kpis: { type: Object, default: () => ({}) },
@@ -80,7 +82,7 @@ function nav (path) {
     <!-- Marca + título -->
       <div class="flex items-center gap-3">
       <div class="flex items-center gap-3">
-        <img src="img/upper_control.png" alt="Upper Control" loading="lazy" class="h-12 w-auto" />
+  <img :src="asset('img/upper_control.png')" alt="Upper Control" loading="lazy" class="h-12 w-auto" />
         <h1 class="text-[22px] leading-6 font-semibold text-slate-900">Dashboard</h1>
       </div>
     </div>
