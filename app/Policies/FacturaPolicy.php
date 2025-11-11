@@ -9,6 +9,8 @@ class FacturaPolicy
 {
     public function view(User $u, Factura $f): bool {
         if ($u->hasRole('admin')) return true;
+        // Gerente: puede ver todas las facturas
+        if ($u->hasRole('gerente')) return true;
         // Facturación puede ver todas las facturas
         if ($u->hasRole('facturacion')) return true;
         // cliente puede ver su factura

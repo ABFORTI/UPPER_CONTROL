@@ -29,6 +29,16 @@ class CheckServiciosAccess
             'can_servicios_list' => $user->can('servicios.list'),
         ]);
         
+        // Rol GERENTE: sólo lectura (permitir únicamente métodos seguros)
+        if ($user->hasRole('gerente')) {
+            if (in_array(strtoupper($request->method()), ['GET','HEAD','OPTIONS'], true)) {
+                Log::info('CheckServiciosAccess: Acceso gerente (solo lectura)');
+                return $next($request);
+            }
+            Log::warning('CheckServiciosAccess: Gerente bloqueado en método no seguro', ['method' => $request->method(), 'path' => $request->path()]);
+            abort(403, 'Solo lectura: no puedes modificar esta sección.');
+        }
+
         // Permitir acceso si tiene alguno de estos roles O el permiso específico
         if ($user->hasAnyRole(['admin', 'coordinador', 'control', 'comercial']) || 
             $user->can('servicios.list')) {

@@ -18,6 +18,7 @@ const isCoord  = computed(() => roles.value.includes('coordinador'))
 const isCalidad = computed(() => roles.value.includes('calidad'))
 const isControl = computed(() => roles.value.includes('control'))
 const isComercial = computed(() => roles.value.includes('comercial'))
+const isGerente = computed(() => roles.value.includes('gerente'))
 const isOnlyCalidad = computed(() => isCalidad.value && roles.value.length === 1)
 const isOnlyControlOrComercial = computed(() => (isControl.value || isComercial.value) && !isAdmin.value && !isCoord.value && !isCalidad.value)
 
@@ -122,59 +123,59 @@ function closeMobile () {
               </Link>
             </li>
             <!-- Calidad -->
-            <li v-if="isAdmin || isCalidad">
+            <li v-if="isAdmin || isCalidad || isGerente">
               <Link :href="route('calidad.index')" class="flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-3 p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all" :class="{ 'bg-blue-50 text-blue-700 dark:bg-slate-800': url.includes('/calidad') }">
                 <Icon name="checkBadge" :size="24" />
                 <span class="w-0 opacity-0 group-hover:w-auto group-hover:opacity-100 overflow-hidden transition-all duration-200">Calidad</span>
               </Link>
             </li>
             <!-- Facturación - Visible para facturacion, admin Y cliente -->
-            <li v-if="!isOnlyCalidad && !isOnlyControlOrComercial && (roles.includes('facturacion') || roles.includes('cliente') || isAdmin)">
+            <li v-if="!isOnlyCalidad && !isOnlyControlOrComercial && (roles.includes('facturacion') || roles.includes('cliente') || isAdmin || isGerente)">
               <Link :href="route('facturas.index')" class="flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-3 p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all" :class="{ 'bg-blue-50 text-blue-700 dark:bg-slate-800': url.includes('/facturas') }">
                 <Icon name="currency" :size="24" />
                 <span class="w-0 opacity-0 group-hover:w-auto group-hover:opacity-100 overflow-hidden transition-all duration-200">Facturación</span>
               </Link>
             </li>
 
-            <li v-if="isAdmin || isCoord || isControl || isComercial">
+            <li v-if="isAdmin || isCoord || isControl || isComercial || isGerente">
               <Link :href="route('servicios.index')" class="flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-3 p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all" :class="{ 'bg-blue-50 text-blue-700 dark:bg-slate-800': url.includes('/servicios') }">
                 <Icon name="dollar" :size="24" />
                 <span class="w-0 opacity-0 group-hover:w-auto group-hover:opacity-100 overflow-hidden transition-all duration-200">Servicios</span>
               </Link>
             </li>
-            <li v-if="isAdmin || isCoord || isControl || isComercial">
+            <li v-if="isAdmin || isCoord || isControl || isComercial || isGerente">
               <Link :href="route('areas.index')" class="flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-3 p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all" :class="{ 'bg-blue-50 text-blue-700 dark:bg-slate-800': url.includes('/areas') }">
                 <Icon name="folder" :size="24" />
                 <span class="w-0 opacity-0 group-hover:w-auto group-hover:opacity-100 overflow-hidden transition-all duration-200">Áreas</span>
               </Link>
             </li>
             <!-- Centros de costos -->
-            <li v-if="isAdmin || isCoord || isControl || isComercial">
+            <li v-if="isAdmin || isCoord || isControl || isComercial || isGerente">
               <Link :href="route('centros_costos.index')" class="flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-3 p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all" :class="{ 'bg-blue-50 text-blue-700 dark:bg-slate-800': url.includes('/centros-costos') }">
                 <Icon name="chart" :size="24" />
                 <span class="w-0 opacity-0 group-hover:w-auto group-hover:opacity-100 overflow-hidden transition-all duration-200">Centros de costos</span>
               </Link>
             </li>
             <!-- Marcas -->
-            <li v-if="isAdmin || isCoord || isControl || isComercial">
+            <li v-if="isAdmin || isCoord || isControl || isComercial || isGerente">
               <Link :href="route('marcas.index')" class="flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-3 p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all" :class="{ 'bg-blue-50 text-blue-700 dark:bg-slate-800': url.includes('/marcas') }">
                 <Icon name="tag" :size="24" />
                 <span class="w-0 opacity-0 group-hover:w-auto group-hover:opacity-100 overflow-hidden transition-all duration-200">Marcas</span>
               </Link>
             </li>
-            <li v-if="isAdmin">
+            <li v-if="isAdmin || isGerente">
               <Link :href="route('admin.users.index')" class="flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-3 p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all" :class="{ 'bg-blue-50 text-blue-700 dark:bg-slate-800': url.includes('/admin/users') }">
                 <Icon name="document" :size="24" />
                 <span class="w-0 opacity-0 group-hover:w-auto group-hover:opacity-100 overflow-hidden transition-all duration-200">Usuarios</span>
               </Link>
             </li>
-            <li v-if="isAdmin">
+            <li v-if="isAdmin || isGerente">
               <Link :href="route('admin.centros.index')" class="flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-3 p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all">
                 <Icon name="building" :size="24" />
                 <span class="w-0 opacity-0 group-hover:w-auto group-hover:opacity-100 overflow-hidden transition-all duration-200">Centros</span>
               </Link>
             </li>
-            <li v-if="isAdmin">
+            <li v-if="isAdmin || isGerente">
               <Link :href="route('admin.backups.index')" class="flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-3 p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all">
                 <Icon name="document" :size="24" />
                 <span class="w-0 opacity-0 group-hover:w-auto group-hover:opacity-100 overflow-hidden transition-all duration-200">Backups</span>
