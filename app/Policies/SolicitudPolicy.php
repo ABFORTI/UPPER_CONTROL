@@ -8,10 +8,12 @@ use App\Models\Solicitud;
 class SolicitudPolicy
 {
     public function viewAny(User $u): bool {
-        return $u->hasAnyRole(['admin','cliente','coordinador','calidad','facturacion','team_leader']);
+        return $u->hasAnyRole(['admin','cliente','coordinador','calidad','facturacion','team_leader','gerente']);
     }
 
     public function view(User $u, Solicitud $s): bool {
+        // Gerente: vista total
+        if ($u->hasRole('gerente')) return true;
         if ($u->hasAnyRole(['admin','facturacion'])) return true;
         // Cliente con alcance a todo el centro (opcional)
         if ($u->hasRole('cliente_centro')) {

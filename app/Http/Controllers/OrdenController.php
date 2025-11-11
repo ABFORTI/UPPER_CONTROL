@@ -789,12 +789,13 @@ class OrdenController extends Controller
     public function index(Request $req)
     {
     $u = $req->user();
-    $isAdminOrFact = $u && method_exists($u, 'hasAnyRole') ? $u->hasAnyRole(['admin','facturacion']) : false;
+    // Privilegio de vista amplia: admin, facturación y gerente (solo lectura)
+    $isPrivilegedViewer = $u && method_exists($u, 'hasAnyRole') ? $u->hasAnyRole(['admin','facturacion','gerente']) : false;
     $isTL = $u && method_exists($u, 'hasRole') ? $u->hasRole('team_leader') : false;
     $isCliente = $u && method_exists($u, 'hasRole') ? $u->hasRole('cliente') : false;
     $isClienteCentro = $u && method_exists($u, 'hasRole') ? $u->hasRole('cliente_centro') : false;
 
-        $filters = [
+    $filters = [
             'estatus'      => $req->string('estatus')->toString(),
             'calidad'      => $req->string('calidad')->toString(),
             'servicio'     => $req->integer('servicio') ?: null,
@@ -813,19 +814,19 @@ class OrdenController extends Controller
 
     // Si se solicitó filtrar por centro de costo y el usuario no es admin/facturacion,
     // validar que el centro de costo pertenezca a un centro permitido; si no, ignorar el filtro
-    if (!$isAdminOrFact && !empty($filters['centro_costo'])) {
+    if (!$isPrivilegedViewer && !empty($filters['centro_costo'])) {
         $cc = \App\Models\CentroCosto::find($filters['centro_costo']);
         if (!$cc || !in_array((int)$cc->id_centrotrabajo, array_map('intval', $centrosPermitidos), true)) {
             $filters['centro_costo'] = null;
         }
     }
     $q = Orden::with(['servicio','centro','teamLeader','solicitud.centroCosto','solicitud.marca','factura','facturas','area'])
-        ->when(!$isAdminOrFact, function($qq) use ($centrosPermitidos){
+        ->when(!$isPrivilegedViewer, function($qq) use ($centrosPermitidos){
             if (!empty($centrosPermitidos)) { $qq->whereIn('id_centrotrabajo', $centrosPermitidos); }
             else { $qq->whereRaw('1=0'); }
         })
-        ->when($isAdminOrFact && $filters['centro'], fn($qq)=>$qq->where('id_centrotrabajo', $filters['centro']))
-        ->when(!$isAdminOrFact && $filters['centro'], function($qq) use ($filters, $centrosPermitidos){
+        ->when($isPrivilegedViewer && $filters['centro'], fn($qq)=>$qq->where('id_centrotrabajo', $filters['centro']))
+        ->when(!$isPrivilegedViewer && $filters['centro'], function($qq) use ($filters, $centrosPermitidos){
             // Aplicar filtro solo si el centro está permitido
             if (in_array((int)$filters['centro'], array_map('intval',$centrosPermitidos), true)) {
                 $qq->where('id_centrotrabajo', $filters['centro']);
@@ -862,7 +863,7 @@ class OrdenController extends Controller
             })
             ->orderByDesc('id');
 
-        $isPeriod = !empty($filters['week']);
+    $isPeriod = !empty($filters['week']);
 
         // Reutilizamos el mismo mapeo para paginado o listado completo
         $transform = function ($o) {
@@ -924,7 +925,7 @@ class OrdenController extends Controller
         }
 
         // Lista de centros para selector
-        $centrosLista = $u->hasAnyRole(['admin','facturacion'])
+        $centrosLista = $u->hasAnyRole(['admin','facturacion','gerente'])
             ? \App\Models\CentroTrabajo::select('id','nombre')->orderBy('nombre')->get()
             : \App\Models\CentroTrabajo::whereIn('id', $centrosPermitidos)->select('id','nombre')->orderBy('nombre')->get();
 
@@ -933,7 +934,7 @@ class OrdenController extends Controller
             'filters'   => $req->only(['id','estatus','calidad','servicio','centro','centro_costo','facturacion','desde','hasta','year','week']),
             'servicios' => \App\Models\ServicioEmpresa::select('id','nombre')->orderBy('nombre')->get(),
             'centros'   => $centrosLista,
-            'centrosCostos' => $u->hasAnyRole(['admin','facturacion'])
+            'centrosCostos' => $u->hasAnyRole(['admin','facturacion','gerente'])
                 ? \App\Models\CentroCosto::select('id','nombre','id_centrotrabajo')->orderBy('nombre')->get()
                 : \App\Models\CentroCosto::whereIn('id_centrotrabajo', $centrosPermitidos)->select('id','nombre','id_centrotrabajo')->orderBy('nombre')->get(),
             'urls'      => [

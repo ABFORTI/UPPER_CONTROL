@@ -29,6 +29,16 @@ class CheckAreasAccess
             'can_areas_list' => $user->can('areas.list'),
         ]);
         
+        // Rol GERENTE: sólo lectura (permitir únicamente métodos seguros)
+        if ($user->hasRole('gerente')) {
+            if (in_array(strtoupper($request->method()), ['GET','HEAD','OPTIONS'], true)) {
+                Log::info('CheckAreasAccess: Acceso gerente (solo lectura)');
+                return $next($request);
+            }
+            Log::warning('CheckAreasAccess: Gerente bloqueado en método no seguro', ['method' => $request->method(), 'path' => $request->path()]);
+            abort(403, 'Solo lectura: no puedes modificar esta sección.');
+        }
+
         // Permitir acceso si tiene alguno de estos roles O el permiso específico
         if ($user->hasAnyRole(['admin', 'coordinador', 'control', 'comercial']) || 
             $user->can('areas.list')) {

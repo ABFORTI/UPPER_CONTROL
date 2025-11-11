@@ -8,10 +8,12 @@ use App\Models\Orden;
 class OrdenPolicy
 {
     public function viewAny(User $u): bool {
-        return $u->hasAnyRole(['admin','coordinador','team_leader','calidad','facturacion','cliente']);
+        return $u->hasAnyRole(['admin','coordinador','team_leader','calidad','facturacion','cliente','gerente']);
     }
 
     public function view(User $u, Orden $o): bool {
+        // Gerente: vista total sin restricciones por centro
+        if ($u->hasRole('gerente')) return true;
         if ($u->hasAnyRole(['admin','facturacion'])) return true;
         // Cliente con alcance a todo el centro (rol opcional 'cliente_centro')
         if ($u->hasRole('cliente_centro')) {
