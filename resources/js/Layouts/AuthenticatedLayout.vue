@@ -163,19 +163,19 @@ function closeMobile () {
                 <span class="w-0 opacity-0 group-hover:w-auto group-hover:opacity-100 overflow-hidden transition-all duration-200">Marcas</span>
               </Link>
             </li>
-            <li v-if="isAdmin || isGerente">
+            <li v-if="isAdmin">
               <Link :href="route('admin.users.index')" class="flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-3 p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all" :class="{ 'bg-blue-50 text-blue-700 dark:bg-slate-800': url.includes('/admin/users') }">
                 <Icon name="document" :size="24" />
                 <span class="w-0 opacity-0 group-hover:w-auto group-hover:opacity-100 overflow-hidden transition-all duration-200">Usuarios</span>
               </Link>
             </li>
-            <li v-if="isAdmin || isGerente">
+            <li v-if="isAdmin">
               <Link :href="route('admin.centros.index')" class="flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-3 p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all">
                 <Icon name="building" :size="24" />
                 <span class="w-0 opacity-0 group-hover:w-auto group-hover:opacity-100 overflow-hidden transition-all duration-200">Centros</span>
               </Link>
             </li>
-            <li v-if="isAdmin || isGerente">
+            <li v-if="isAdmin">
               <Link :href="route('admin.backups.index')" class="flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-3 p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all">
                 <Icon name="document" :size="24" />
                 <span class="w-0 opacity-0 group-hover:w-auto group-hover:opacity-100 overflow-hidden transition-all duration-200">Backups</span>
