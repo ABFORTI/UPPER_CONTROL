@@ -280,7 +280,13 @@ class SolicitudController extends Controller
         $attempts = 0; $maxAttempts = 3; $lastException = null;
         while ($attempts < $maxAttempts) {
             try {
-                if ($serv->usa_tamanos) {
+                // Determinar si el servicio usa tamaños EN ESTE centro (per-centro)
+                $usaTamanosCentro = \App\Models\ServicioCentro::where('id_centrotrabajo', $centroId)
+                    ->where('id_servicio', $serv->id)
+                    ->whereHas('tamanos')
+                    ->exists();
+
+                if ($usaTamanosCentro) {
                     // NUEVO: flujo diferido. Solo capturamos TOTAL de piezas, sin desglose ni precios.
                     $req->validate([
                         'cantidad' => ['required','integer','min:1'],
@@ -521,8 +527,14 @@ class SolicitudController extends Controller
         $lines = [];
         $subtotal = 0.0;
 
+        // Determinar modo per-centro (ignora flag global en servicios_empresa)
+        $usaTamanosCentro = \App\Models\ServicioCentro::where('id_centrotrabajo', $solicitud->id_centrotrabajo)
+            ->where('id_servicio', $solicitud->id_servicio)
+            ->whereHas('tamanos')
+            ->exists();
+
         // Si hay desglose por tamaños, calcular por línea
-        if ($solicitud->relationLoaded('tamanos') && $solicitud->tamanos && $solicitud->tamanos->count() > 0) {
+        if ($usaTamanosCentro && $solicitud->relationLoaded('tamanos') && $solicitud->tamanos && $solicitud->tamanos->count() > 0) {
             foreach ($solicitud->tamanos as $t) {
                 $tam = (string)($t->tamano ?? '');
                 $cant = (int)($t->cantidad ?? 0);
@@ -539,7 +551,7 @@ class SolicitudController extends Controller
                 ];
             }
             $mode = 'tamanos';
-        } else if (!$solicitud->servicio?->usa_tamanos) {
+    } else if (!$usaTamanosCentro) {
             // Servicio por pieza
             $pu = (float)$pricing->precioUnitario($solicitud->id_centrotrabajo, $solicitud->id_servicio, null);
             $subtotal = $pu * (int)($solicitud->cantidad ?? 0);

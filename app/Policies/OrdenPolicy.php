@@ -4,6 +4,7 @@ namespace App\Policies;
 
 use App\Models\User;
 use App\Models\Orden;
+use Illuminate\Support\Facades\Log;
 
 class OrdenPolicy
 {
@@ -12,32 +13,61 @@ class OrdenPolicy
     }
 
     public function view(User $u, Orden $o): bool {
-        // Gerente: puede ver si la OT pertenece a alguno de sus centros asignados (principal + pivots)
+        // Contexto para diagnóstico
+        $ctx = [
+            'orden_id' => $o->id,
+            'orden_centro' => (int)$o->id_centrotrabajo,
+            'solicitud_id' => (int)($o->id_solicitud ?? 0),
+            'solicitud_cliente' => (int)($o->solicitud?->id_cliente ?? 0),
+            'user_id' => $u->id,
+            'user_roles' => method_exists($u, 'roles') ? $u->roles->pluck('name')->all() : [],
+            'user_centro' => (int)($u->centro_trabajo_id ?? 0),
+        ];
+
+        // Prioridades de autorización:
+        // 1) Admin/Facturación: acceso total
+        if ($u->hasAnyRole(['admin','facturacion'])) {
+            return true;
+        }
+
+        // 2) Dueño de la solicitud (cliente propietario) SIEMPRE puede ver, incluso si también tiene rol cliente_centro
+        $isOwner = (int)($o->solicitud?->id_cliente ?? 0) === (int)$u->id;
+        if ($isOwner) {
+            return true;
+        }
+
+        $allowed = false;
+        // 3) Gerente: puede ver si la OT pertenece a alguno de sus centros asignados (principal + pivots)
         if ($u->hasRole('gerente')) {
             $ids = $u->centros()->pluck('centros_trabajo.id')->map(fn($v)=>(int)$v)->all();
             $primary = (int)($u->centro_trabajo_id ?? 0);
             if ($primary) $ids[] = $primary;
             $ids = array_values(array_unique($ids));
-            return in_array((int)$o->id_centrotrabajo, $ids, true);
-        }
-        if ($u->hasAnyRole(['admin','facturacion'])) return true;
-        // Cliente con alcance a todo el centro (rol opcional 'cliente_centro')
-        if ($u->hasRole('cliente_centro')) {
-            return (int)$o->id_centrotrabajo === (int)$u->centro_trabajo_id;
-        }
-        // Cliente estándar: sólo sus propias OTs (las de sus solicitudes)
-        if ($u->hasRole('cliente')) return $o->solicitud?->id_cliente === $u->id;
-        if ($u->hasRole('team_leader')) return $o->team_leader_id === $u->id;
-        // calidad o coordinador: permitir centros asignados (pivot) + principal
-        if ($u->hasAnyRole(['calidad','coordinador'])) {
+            $allowed = in_array((int)$o->id_centrotrabajo, $ids, true);
+        } elseif ($u->hasRole('cliente_centro')) {
+            // Cliente con alcance a todo el centro (rol opcional 'cliente_centro')
+            $allowed = (int)$o->id_centrotrabajo === (int)$u->centro_trabajo_id;
+        } elseif ($u->hasRole('cliente')) {
+            // Cliente estándar: sólo sus propias OTs (las de sus solicitudes)
+            $allowed = $isOwner;
+        } elseif ($u->hasRole('team_leader')) {
+            $allowed = (int)$o->team_leader_id === (int)$u->id;
+        } elseif ($u->hasAnyRole(['calidad','coordinador'])) {
+            // calidad o coordinador: permitir centros asignados (pivot) + principal
             $ids = $u->centros()->pluck('centros_trabajo.id')->map(fn($v)=>(int)$v)->all();
             $primary = (int)($u->centro_trabajo_id ?? 0);
             if ($primary) $ids[] = $primary;
             $ids = array_values(array_unique($ids));
-            return in_array((int)$o->id_centrotrabajo, $ids, true);
+            $allowed = in_array((int)$o->id_centrotrabajo, $ids, true);
+        } else {
+            // resto por centro (solo principal)
+            $allowed = (int)$u->centro_trabajo_id === (int)$o->id_centrotrabajo;
         }
-        // resto por centro (solo principal)
-        return (int)$u->centro_trabajo_id === (int)$o->id_centrotrabajo;
+
+        if (!$allowed) {
+            Log::warning('OrdenPolicy.view DENY', $ctx);
+        }
+        return $allowed;
     }
 
     // generar OT desde solicitud (coordinador/admin del centro)
@@ -46,7 +76,8 @@ class OrdenPolicy
     // app/Policies/OrdenPolicy.php
     public function reportarAvance(User $u, Orden $o): bool
     {
-        return $u->hasRole('admin') || $o->team_leader_id === $u->id;
+        // Comparación estricta por id pero casteando para evitar mismatch de tipos en prod
+        return $u->hasRole('admin') || (int)$o->team_leader_id === (int)$u->id;
     }
     // ya tenías:
     public function createFromSolicitud(User $u, int $centroId): bool
@@ -72,6 +103,12 @@ class OrdenPolicy
 
     // cliente autoriza
     public function autorizarCliente(User $u, Orden $o): bool {
-        return $u->hasRole('admin') || $o->solicitud?->id_cliente === $u->id;
+        // Admin siempre
+        if ($u->hasRole('admin')) return true;
+        // Dueño de la solicitud
+        if ((int)($o->solicitud?->id_cliente ?? 0) === (int)$u->id) return true;
+        // Cliente con alcance a centro completo puede autorizar del mismo centro
+        if ($u->hasRole('cliente_centro') && (int)$u->centro_trabajo_id === (int)$o->id_centrotrabajo) return true;
+        return false;
     }
 }

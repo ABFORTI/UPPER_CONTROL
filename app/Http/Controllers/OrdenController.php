@@ -18,6 +18,8 @@ use Barryvdh\DomPDF\Facade\Pdf as PDF;
 use App\Notifications\OtAsignada;
 use App\Notifications\OtListaParaCalidad;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use App\Services\Notifier;
 use App\Jobs\GenerateOrdenPdf;
 
@@ -45,40 +47,45 @@ class OrdenController extends Controller
     /** Form: Generar OT desde solicitud aprobada */
     public function createFromSolicitud(Solicitud $solicitud)
     {
+        Log::info('CreateFromSolicitud: visit', [
+            'solicitud_id' => $solicitud->id,
+            'centro_id'    => $solicitud->id_centrotrabajo,
+            'servicio_id'  => $solicitud->id_servicio,
+            'estatus'      => $solicitud->estatus,
+        ]);
+        // (SIN CAMBIOS) Lógica original reinsertada para evitar problemas del intento de refactor
         $this->authorize('createFromSolicitud', [Orden::class, $solicitud->id_centrotrabajo]);
         $this->authorizeFromCentro($solicitud->id_centrotrabajo);
         if ($solicitud->estatus !== 'aprobada') abort(422, 'La solicitud no está aprobada.');
-        // Evitar generar más de una OT por solicitud
         if ($solicitud->ordenes()->exists()) {
             return redirect()->route('solicitudes.show', $solicitud->id)
                 ->withErrors(['ot' => 'Ya existe una Orden de Trabajo para esta solicitud.']);
         }
 
-    // Cargar relaciones necesarias
-    $solicitud->load(['servicio','centro','tamanos','centroCosto','marca']);
+        // Cargar relaciones necesarias
+        $solicitud->load(['servicio','centro','tamanos','centroCosto','marca']);
 
-        // Determinar si el servicio usa tamaños
-        $usaTamanos = (bool)($solicitud->servicio->usa_tamanos ?? false);
+        // Modo per-centro: detectar tamaños configurados en el centro de la solicitud
+        $usaTamanos = \App\Models\ServicioCentro::where('id_centrotrabajo',$solicitud->id_centrotrabajo)
+            ->where('id_servicio',$solicitud->id_servicio)
+            ->whereHas('tamanos')
+            ->exists();
         $prefill = [];
-
         if ($usaTamanos && $solicitud->tamanos->count() > 0) {
-            // Servicios CON tamaños: items fijos basados en tamaños de solicitud
             foreach ($solicitud->tamanos as $t) {
                 $prefill[] = [
                     'tamano'      => (string)($t->tamano ?? ''),
                     'cantidad'    => (int)($t->cantidad ?? 0),
                     'descripcion' => null,
-                    'editable'    => false, // NO permitir editar
+                    'editable'    => false,
                 ];
             }
         } else {
-            // Caso 1: Servicios CON tamaños PERO sin desglose aún (flujo diferido)
-            // Caso 2: Servicios SIN tamaños
             $prefill[] = [
                 'descripcion' => $solicitud->descripcion ?? 'Item',
                 'cantidad'    => (int)($solicitud->cantidad ?? 1),
                 'tamano'      => null,
-                'editable'    => true, // Permitir separar
+                'editable'    => true,
             ];
         }
 
@@ -86,26 +93,19 @@ class OrdenController extends Controller
             ->where('centro_trabajo_id', $solicitud->id_centrotrabajo)
             ->select('id','name')->orderBy('name')->get();
 
-        // Calcular cotización (mismos criterios que en Show de Solicitudes)
         $pricing = app(\App\Domain\Servicios\PricingService::class);
-        $ivaRate = 0.16;
-        $cotLines = [];
-        $sub = 0.0;
-        
+        $ivaRate = 0.16; $cotLines = []; $sub = 0.0;
         if ($usaTamanos && $solicitud->tamanos && $solicitud->tamanos->count() > 0) {
             foreach ($solicitud->tamanos as $t) {
                 $tam = (string)($t->tamano ?? '');
                 $cant = (int)($t->cantidad ?? 0);
                 if ($cant <= 0) continue;
                 $pu = (float)$pricing->precioUnitario($solicitud->id_centrotrabajo, $solicitud->id_servicio, $tam);
-                $lineSub = $pu * $cant;
-                $sub += $lineSub;
+                $lineSub = $pu * $cant; $sub += $lineSub;
                 $cotLines[] = ['label'=>ucfirst($tam), 'cantidad'=>$cant, 'pu'=>$pu, 'subtotal'=>$lineSub];
             }
         } elseif ($usaTamanos) {
-            // Flujo diferido: sin desglose aún, mostrar totales en cero explícitamente
             $cotLines[] = ['label'=>'Item', 'cantidad'=>(int)($solicitud->cantidad ?? 0), 'pu'=>0.0, 'subtotal'=>0.0];
-            $sub = 0.0;
         } else {
             $pu = (float)$pricing->precioUnitario($solicitud->id_centrotrabajo, $solicitud->id_servicio, null);
             $sub = $pu * (int)($solicitud->cantidad ?? 0);
@@ -130,11 +130,9 @@ class OrdenController extends Controller
             'prefill'             => $prefill,
             'usaTamanos'          => $usaTamanos,
             'cantidadTotal'       => (int)($solicitud->cantidad ?? 1),
-            'descripcionGeneral'  => $solicitud->descripcion ?? '', // Nombre del producto general
+            'descripcionGeneral'  => $solicitud->descripcion ?? '',
             'cotizacion'          => $cot,
-            'urls'                => [
-                'store' => route('ordenes.storeFromSolicitud', $solicitud),
-            ],
+            'urls'                => [ 'store' => route('ordenes.storeFromSolicitud', $solicitud) ],
             'areas'               => \App\Models\Area::where('id_centrotrabajo', $solicitud->id_centrotrabajo)->activas()->orderBy('nombre')->get(),
         ]);
     }
@@ -151,7 +149,10 @@ class OrdenController extends Controller
         }
 
         $solicitud->load('servicio', 'tamanos');
-        $usaTamanos = (bool)($solicitud->servicio->usa_tamanos ?? false);
+        $usaTamanos = \App\Models\ServicioCentro::where('id_centrotrabajo',$solicitud->id_centrotrabajo)
+            ->where('id_servicio',$solicitud->id_servicio)
+            ->whereHas('tamanos')
+            ->exists();
 
         // Validación base
         $data = $req->validate([
@@ -278,7 +279,14 @@ class OrdenController extends Controller
         if ($orden->team_leader_id) {
             $teamLeader = User::find($orden->team_leader_id);
             if ($teamLeader) {
-                $teamLeader->notify(new OtAsignada($orden));
+                try { $teamLeader->notify(new OtAsignada($orden)); }
+                catch (\Throwable $e) {
+                    Log::warning('storeFromSolicitud: fallo al notificar TL (ignorado)', [
+                        'orden_id' => $orden->id,
+                        'tl_id'    => $teamLeader->id,
+                        'error'    => $e->getMessage(),
+                    ]);
+                }
             }
         }
         // Notificar a calidad del centro
@@ -301,6 +309,13 @@ class OrdenController extends Controller
         $this->authorize('reportarAvance', $orden);
         $this->authorizeFromCentro($orden->id_centrotrabajo, $orden);
 
+        // Log de entrada para diagnóstico en prod (no contiene archivos)
+    Log::info('RegistrarAvance: payload recibido', [
+            'orden_id' => $orden->id,
+            'user_id'  => optional($req->user())->id,
+            'items'    => $req->input('items'),
+        ]);
+
         $data = $req->validate([
             'items'                 => ['required','array','min:1'],
             'items.*.id_item'       => ['required','integer','exists:orden_items,id'],
@@ -308,7 +323,20 @@ class OrdenController extends Controller
             'comentario'            => ['nullable','string','max:500'],
         ]);
 
+        // Validación adicional: todos los items deben pertenecer a la misma OT
+        $ids = collect($data['items'])->pluck('id_item')->map(fn($v)=>(int)$v)->all();
+        $count = \App\Models\OrdenItem::whereIn('id', $ids)->where('id_orden', $orden->id)->count();
+        if ($count !== count($ids)) {
+            Log::warning('RegistrarAvance: id_item ajeno a la OT', [
+                'orden_id' => $orden->id,
+                'ids' => $ids,
+                'count_validos' => $count,
+            ]);
+            return back()->withErrors(['items' => 'Hay ítems que no pertenecen a esta OT. Actualiza la página e inténtalo de nuevo.']);
+        }
+
         $justCompleted = false;
+        try {
         DB::transaction(function () use ($orden, $data, $req, &$justCompleted) {
             $pricing = app(\App\Domain\Servicios\PricingService::class);
             foreach ($data['items'] as $i) {
@@ -358,7 +386,9 @@ class OrdenController extends Controller
                 // Cuando la OT se completa de nuevo, reiniciar el marcador de calidad a 'pendiente'
                 $orden->calidad_resultado = 'pendiente';
                 // Persistir fecha de completado para estabilidad en reportes y PDFs
-                $orden->fecha_completada = now();
+                if (Schema::hasColumn('ordenes_trabajo', 'fecha_completada')) {
+                    $orden->fecha_completada = now();
+                }
                 $orden->save();
 
                 // Notificar a calidad del centro con notificación específica
@@ -374,7 +404,14 @@ class OrdenController extends Controller
                     ->get();
                 
                 if ($usuariosCalidad->isNotEmpty()) {
-                    Notification::send($usuariosCalidad, new OtListaParaCalidad($orden));
+                    try {
+                        Notification::send($usuariosCalidad, new OtListaParaCalidad($orden));
+                    } catch (\Throwable $e) {
+                        Log::warning('RegistrarAvance: fallo al notificar calidad (ignorado)', [
+                            'orden_id' => $orden->id,
+                            'error' => $e->getMessage(),
+                        ]);
+                    }
                 }
             } else {
                 $orden->save();
@@ -408,6 +445,17 @@ class OrdenController extends Controller
                 ->withProperties(['items' => $data['items'], 'comentario' => $req->comentario])
                 ->log("OT #{$orden->id}: avance registrado");
         });
+        } catch (\Throwable $e) {
+            Log::error('RegistrarAvance: excepción', [
+                'orden_id' => $orden->id,
+                'user_id'  => optional($req->user())->id,
+                'message'  => $e->getMessage(),
+                'file'     => $e->getFile(),
+                'line'     => $e->getLine(),
+                'trace'    => collect(explode("\n", $e->getTraceAsString()))->take(15)->all(),
+            ]);
+            return back()->withErrors(['items' => 'No se pudo registrar el avance. Inténtalo de nuevo y si persiste, contacta soporte.']);
+        }
 
         // Encolar PDF si se completó
         if ($justCompleted) {
@@ -494,7 +542,9 @@ class OrdenController extends Controller
                 if ($orden->estatus !== 'completada') {
                     $orden->estatus = 'completada';
                     $orden->calidad_resultado = 'pendiente';
-                    $orden->fecha_completada = now();
+                    if (Schema::hasColumn('ordenes_trabajo', 'fecha_completada')) {
+                        $orden->fecha_completada = now();
+                    }
                 }
             }
             $orden->save();
@@ -540,11 +590,25 @@ class OrdenController extends Controller
             'evidencias' => fn($q)=>$q->with('usuario')->orderByDesc('id'),
         ]);
 
-        // Flag para flujo diferido: usa tamaños y aún no hay desglose en solicitud
-        $pendienteTamanos = (bool)($orden->servicio?->usa_tamanos) && ($orden->solicitud && $orden->solicitud->tamanos->count() === 0);
+        // Flag per-centro: servicio con tamaños SI existe configuración de tamaños en el centro y aún no hay desglose capturado
+        $usaTamanosCentro = \App\Models\ServicioCentro::where('id_centrotrabajo',$orden->id_centrotrabajo)
+            ->where('id_servicio',$orden->id_servicio)
+            ->whereHas('tamanos')
+            ->exists();
+        $pendienteTamanos = $usaTamanosCentro && ($orden->solicitud && $orden->solicitud->tamanos->count() === 0);
 
-        $canReportar = Gate::allows('reportarAvance', $orden);
+        // Obtener usuario autenticado ANTES de usarlo en cualquier condición/log
         $authUser = Auth::user();
+        $canReportar = Gate::allows('reportarAvance', $orden);
+        // Diagnóstico adicional: si es Team Leader y no puede reportar, registrar contexto
+        if (!$canReportar && $authUser && $authUser->hasRole('team_leader')) {
+            \Log::info('TL sin permiso reportarAvance', [
+                'orden_id' => $orden->id,
+                'orden_team_leader_id' => (int)$orden->team_leader_id,
+                'user_id' => (int)$authUser->id,
+                'user_roles' => $authUser->roles->pluck('name')->all(),
+            ]);
+        }
         $isAdminOrCoord = false;
         if ($authUser instanceof \App\Models\User) {
             $isAdminOrCoord = $authUser->hasAnyRole(['admin','coordinador']);
@@ -567,9 +631,15 @@ class OrdenController extends Controller
             }
 
             // Cliente autoriza: dueño de la solicitud (o admin) y calidad validada
-            $canClienteAutorizar = ($authUser->hasRole('admin') || ($orden->solicitud && (int)$orden->solicitud->id_cliente === (int)$authUser->id))
+            $esDueno = ($orden->solicitud && (int)$orden->solicitud->id_cliente === (int)$authUser->id);
+            $canClienteAutorizar = ($authUser->hasRole('admin') || $esDueno)
                 && $orden->calidad_resultado === 'validado'
                 && $orden->estatus === 'completada';
+            // Motivos de bloqueo para diagnóstico front-end
+            $bloqueosCliente = [];
+            if (!$esDueno && !$authUser->hasRole('admin')) { $bloqueosCliente[] = 'No eres el dueño de la solicitud'; }
+            if ($orden->calidad_resultado !== 'validado') { $bloqueosCliente[] = 'Calidad aún no valida la OT'; }
+            if ($orden->estatus !== 'completada') { $bloqueosCliente[] = 'La OT no está completada'; }
 
             // Facturar: rol facturacion o admin; mantener restricción de estatus
             // Nota: el acceso al centro ya se valida en authorizeFromCentro (facturacion tiene bypass)
@@ -602,7 +672,7 @@ class OrdenController extends Controller
 
         // Precios unitarios por tamaño para vista de desglose (flujo diferido)
         $preciosTamaño = null;
-        if ($orden->servicio && (bool)$orden->servicio->usa_tamanos) {
+    if ($usaTamanosCentro) {
             $pricing = app(\App\Domain\Servicios\PricingService::class);
             $preciosTamaño = [
                 'chico'   => (float)$pricing->precioUnitario($orden->id_centrotrabajo, $orden->id_servicio, 'chico'),
@@ -627,6 +697,12 @@ class OrdenController extends Controller
                 'cliente_autorizar'  => $canClienteAutorizar,
                 'facturar'           => $canFacturar,
             ],
+            'debug' => [
+                'orden_team_leader_id' => (int)$orden->team_leader_id,
+                'auth_user_id' => (int)($authUser?->id ?? 0),
+                'auth_roles' => $authUser?->roles?->pluck('name')?->all() ?? [],
+            ],
+            'bloqueos_cliente_autorizar' => $bloqueosCliente ?? [],
             'teamLeaders' => $teamLeaders,
             'cotizacion'  => $cot,
             'unidades'    => [
@@ -963,16 +1039,43 @@ class OrdenController extends Controller
             if (in_array((int)$centroId, array_map('intval', $ids), true)) {
                 // Si es TL además, validar que la OT sea suya
                 if ($orden && $u->hasRole('team_leader') && (int)$orden->team_leader_id !== (int)$u->id) {
+                    \Log::warning('authorizeFromCentro DENY (TL no coincide)', [
+                        'user_id' => $u->id,
+                        'roles' => $u->roles->pluck('name')->all(),
+                        'orden_id' => optional($orden)->id,
+                        'orden_tl' => optional($orden)->team_leader_id,
+                    ]);
                     abort(403);
                 }
                 return;
             }
+            \Log::warning('authorizeFromCentro DENY (centro no permitido para calidad/coordinador)', [
+                'user_id' => $u->id,
+                'roles' => $u->roles->pluck('name')->all(),
+                'centro_solicitado' => (int)$centroId,
+                'centros_usuario' => $ids,
+            ]);
             abort(403);
         }
 
         // Team Leader u otros: requerir mismo centro principal
-        if ((int)$u->centro_trabajo_id !== (int)$centroId) abort(403);
-        if ($orden && $u->hasRole('team_leader') && (int)$orden->team_leader_id !== (int)$u->id) abort(403);
+        if ((int)$u->centro_trabajo_id !== (int)$centroId) {
+            \Log::warning('authorizeFromCentro DENY (centro principal no coincide)', [
+                'user_id' => $u->id,
+                'roles' => $u->roles->pluck('name')->all(),
+                'user_centro' => (int)($u->centro_trabajo_id ?? 0),
+                'centro_solicitado' => (int)$centroId,
+            ]);
+            abort(403);
+        }
+        if ($orden && $u->hasRole('team_leader') && (int)$orden->team_leader_id !== (int)$u->id) {
+            \Log::warning('authorizeFromCentro DENY (TL distinto a la OT)', [
+                'user_id' => $u->id,
+                'orden_id' => $orden->id,
+                'orden_tl' => (int)$orden->team_leader_id,
+            ]);
+            abort(403);
+        }
     }
 
     private function allowedCentroIds(\App\Models\User $u): array

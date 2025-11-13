@@ -98,6 +98,11 @@ class PrecioController extends Controller
         $servicioId = (int)$item['id_servicio'];
         $usaTamanos = (bool)$item['usa_tamanos'];
 
+    // Alinear el modo del servicio a nivel global con lo elegido en la pantalla de precios
+    // para que el resto del sistema (por ejemplo, el selector en Solicitudes) muestre
+    // correctamente "Unitario" vs "Por tamaños".
+    ServicioEmpresa::where('id', $servicioId)->update(['usa_tamanos' => $usaTamanos]);
+
         // upsert del ServicioCentro
         $sc = ServicioCentro::updateOrCreate(
           ['id_centrotrabajo'=>$centroId, 'id_servicio'=>$servicioId],

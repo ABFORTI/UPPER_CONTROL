@@ -22,9 +22,11 @@ class ClienteController extends Controller
     public function autorizar(Request $req, Orden $orden)
     {
         $this->authorize('autorizarCliente', $orden);
-        $u = auth()->user();
-        // sólo el cliente dueño de la solicitud (o admin)
-        if (!$u->hasRole('admin') && (int)$orden->solicitud->id_cliente !== (int)$u->id) abort(403);
+    $u = $req->user();
+        // Validación reforzada: dueño de la solicitud, admin, o cliente_centro del mismo centro
+        $esDueno = (int)($orden->solicitud->id_cliente ?? 0) === (int)$u->id;
+        $esClienteCentroMismo = $u->hasRole('cliente_centro') && (int)$u->centro_trabajo_id === (int)$orden->id_centrotrabajo;
+        if (!$u->hasRole('admin') && !$esDueno && !$esClienteCentroMismo) abort(403);
         if ($orden->calidad_resultado !== 'validado') abort(422,'Aún no está validada por Calidad.');
 
         Aprobacion::create([
@@ -39,7 +41,7 @@ class ClienteController extends Controller
         $orden->save();
 
         // Avisar a 'facturacion' del centro
-        $factUsers = Notify::usersByRoleAndCenter('facturacion', $orden->id_centrotrabajo);
+    $factUsers = Notify::usersByRoleAndCenter('facturacion', $orden->id_centrotrabajo);
         Notify::send($factUsers, new OtAutorizadaParaFacturacion($orden));
 
         $this->act('ordenes')

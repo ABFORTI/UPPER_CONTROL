@@ -7,8 +7,8 @@
     <title inertia>{{ config('app.name', 'Laravel') }}</title>
 
     <!-- Favicon / Window icon -->
-    <link rel="icon" type="image/png" href="{{ asset('img/upper_control.png') }}">
-    <link rel="shortcut icon" href="{{ asset('img/upper_control.png') }}">
+    <link rel="icon" type="image/png" href="{{ asset('img/upper_control1.png') }}">
+    <link rel="shortcut icon" href="{{ asset('img/upper_control1.png') }}">
     <meta name="theme-color" content="#0b2330">
 
         <!-- Fonts -->

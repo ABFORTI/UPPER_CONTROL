@@ -3,6 +3,7 @@
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 
 Artisan::command('inspire', function () {
@@ -47,3 +48,33 @@ Artisan::command('mail:raw {to} {--subject=Test desde Laravel} {--text=Correo de
 
     return 0;
 })->purpose('Enviar un correo RAW de prueba rápido (sin tocar BD)');
+
+// Sincroniza el campo global servicios_empresa.usa_tamanos en base a si existen precios por tamaño
+// en al menos un centro. Útil cuando en producción las etiquetas aparecen todas "(Por tamaños)"
+// por desalineación histórica entre servicios_empresa y servicios_centro/servicio_tamanos.
+// Uso: php artisan servicios:sync-modos
+Artisan::command('servicios:sync-modos', function() {
+    $this->info('Sincronizando modos de servicios (unitario / por tamaños)...');
+    $total = 0; $cAmbioTrue = 0; $cAmbioFalse = 0;
+    DB::table('servicios_empresa')->orderBy('id')->chunk(200, function($chunk) use (&$total,&$cAmbioTrue,&$cAmbioFalse) {
+        foreach ($chunk as $s) {
+            $total++;
+            // Ver si hay al menos un registro de servicio_tamanos para este servicio en cualquier centro
+            $tieneTamanos = (bool) DB::table('servicios_centro')
+                ->join('servicio_tamanos','servicio_tamanos.id_servicio_centro','=','servicios_centro.id')
+                ->where('servicios_centro.id_servicio',$s->id)
+                ->limit(1)->count();
+            if ($tieneTamanos && !$s->usa_tamanos) {
+                DB::table('servicios_empresa')->where('id',$s->id)->update(['usa_tamanos'=>1]);
+                $cAmbioTrue++;
+                $this->line("#{$s->id} -> usa_tamanos=1");
+            } elseif (!$tieneTamanos && $s->usa_tamanos) {
+                DB::table('servicios_empresa')->where('id',$s->id)->update(['usa_tamanos'=>0]);
+                $cAmbioFalse++;
+                $this->line("#{$s->id} -> usa_tamanos=0");
+            }
+        }
+    });
+    $this->info("Procesados: {$total}. Cambiados a true: {$cAmbioTrue}. Cambiados a false: {$cAmbioFalse}.");
+    $this->info('Listo. Refresca la pantalla en producción para ver etiquetas correctas.');
+})->purpose('Alinear usa_tamanos según existencia de precios por tamaño');
