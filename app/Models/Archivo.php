@@ -12,7 +12,7 @@ class Archivo extends Model {
   protected $appends = ['url'];
   public function getUrlAttribute(): string
   {
-    $base = config('filesystems.disks.public.url') ?: (config('app.url').'/storage');
-    return rtrim($base,'/').'/'.ltrim((string)$this->path,'/');
+    // Unificar con Evidencia: usar Storage::url para respetar APP_URL/serve/CDN
+    return \Illuminate\Support\Facades\Storage::disk('public')->url((string)$this->path);
   }
 }

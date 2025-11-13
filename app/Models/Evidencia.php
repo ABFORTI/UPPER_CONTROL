@@ -4,6 +4,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Storage;
 
 class Evidencia extends Model
 {
@@ -20,7 +21,8 @@ class Evidencia extends Model
   protected $appends = ['url'];
   public function getUrlAttribute(): string
   {
-    $base = config('filesystems.disks.public.url') ?: (config('app.url').'/storage');
-    return rtrim($base,'/').'/'.ltrim((string)$this->path,'/');
+    // Usar el helper oficial de Laravel para generar URL del disco.
+    // Respeta APP_URL/ASSET_URL y el modo "serve" sin necesidad de symlink.
+    return Storage::disk('public')->url((string)$this->path);
   }
 }

@@ -8,6 +8,8 @@ use App\Models\Aprobacion;
 use App\Notifications\CalidadResultadoNotification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use App\Services\Notifier;
@@ -73,8 +75,15 @@ class CalidadController extends Controller
       $orden->save();
     });
 
-  // Notificar al cliente (dueño de la solicitud)
-  optional($orden->solicitud?->cliente)->notify(new \App\Notifications\OtValidadaParaCliente($orden));
+  // Notificar al cliente (dueño de la solicitud) — no bloquear si el mail falla
+  try {
+    optional($orden->solicitud?->cliente)->notify(new \App\Notifications\OtValidadaParaCliente($orden));
+  } catch (\Throwable $e) {
+    Log::warning('Calidad.validar: fallo al enviar notificación a cliente (ignorado)', [
+      'orden_id' => $orden->id,
+      'error'    => $e->getMessage(),
+    ]);
+  }
   
     $this->act('ordenes')
       ->performedOn($orden)
@@ -108,7 +117,7 @@ class CalidadController extends Controller
     // - delete avances (work reports)
     // - reset cantidad_real and subtotal on orden_items
     // - reset orden totals and mark as en_progreso so team can continue work
-    DB::transaction(function() use ($orden, $req) {
+  DB::transaction(function() use ($orden, $req) {
   // Keep historical avances: do NOT delete them so history remains available for audit.
 
       // Reset each item
@@ -125,8 +134,10 @@ class CalidadController extends Controller
     $orden->acciones_correctivas = $req->input('acciones_correctivas');
     // Move back to en_proceso so TL can re-open work (if previously completed)
     $orden->estatus = 'en_proceso';
-    // Limpiar fecha_completada para indicar que la OT ya no está completada
-    $orden->fecha_completada = null;
+    // Limpiar fecha_completada para indicar que la OT ya no está completada (si existe la columna)
+    if (Schema::hasColumn('ordenes_trabajo', 'fecha_completada')) {
+      $orden->fecha_completada = null;
+    }
     $orden->save();
     });
     // Registrar un avance informativo en el historial con motivo y acciones
@@ -144,7 +155,14 @@ class CalidadController extends Controller
     ]);
   // Notificar a cliente (y/o TL/Coordinador) si quieres:
   $cliente = $orden->solicitud->cliente;
-  Notification::send($cliente, new CalidadResultadoNotification($orden, 'RECHAZADO', $req->observaciones));
+  try {
+    Notification::send($cliente, new CalidadResultadoNotification($orden, 'RECHAZADO', $req->observaciones));
+  } catch (\Throwable $e) {
+    Log::warning('Calidad.rechazar: fallo al enviar notificación (ignorado)', [
+      'orden_id' => $orden->id,
+      'error'    => $e->getMessage(),
+    ]);
+  }
   Notifier::toUser(
     $orden->solicitud->id_cliente,
     'Calidad rechazada',

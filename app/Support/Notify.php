@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Models\User;
+use Illuminate\Support\Facades\Log;
 
 class Notify
 {
@@ -25,6 +26,16 @@ class Notify
     /** Notificar a una colección de usuarios */
     public static function send($users, $notification): void
     {
-        foreach ($users as $u) { $u->notify($notification); }
+        foreach ($users as $u) {
+            try {
+                $u->notify($notification);
+            } catch (\Throwable $e) {
+                Log::warning('Notify.send: fallo al notificar (ignorado)', [
+                    'user_id' => $u->id ?? null,
+                    'type'    => get_class($notification),
+                    'error'   => $e->getMessage(),
+                ]);
+            }
+        }
     }
 }

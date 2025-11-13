@@ -39,7 +39,7 @@ if (props.canChooseCentro) {
 }
 
 
-// Servicios disponibles según el centro
+// Servicios disponibles según el centro (solo los que tienen precio definido)
 const filteredServicios = computed(() => {
   if (props.canChooseCentro) {
     const cid = Number(form.id_centrotrabajo)
@@ -77,7 +77,16 @@ const filteredMarcas = computed(() => {
 })
 
 const servicio = computed(() => filteredServicios.value.find(s => s.id === Number(form.id_servicio)) || null)
-const usaTamanos = computed(() => !!servicio.value?.usa_tamanos)
+// MODO PER-CENTRO: detectar si para el centro elegido existen precios por tamaño
+function serviceUsesSizesInCentro(serviceId){
+  const cid = Number(form.id_centrotrabajo)
+  if (!cid || !serviceId) return false
+  const data = props.preciosPorCentro?.[cid]?.[serviceId]
+  if (!data) return false
+  const t = data.tamanos || {}
+  return ['chico','mediano','grande','jumbo'].some(k => t[k] !== undefined && t[k] !== null)
+}
+const usaTamanos = computed(() => serviceUsesSizesInCentro(Number(form.id_servicio)))
 const totalTamanos = computed(() => (
   Number(form.tamanos.chico||0)
   + Number(form.tamanos.mediano||0)
@@ -287,7 +296,7 @@ function handleFiles(e) {
                   >
                     <option value="">— Seleccione un servicio —</option>
                     <option v-for="s in filteredServicios" :key="s.id" :value="s.id">
-                      {{ s.nombre }} {{ s.usa_tamanos ? '(Por tamaños)' : '' }}
+                      {{ s.nombre }} {{ serviceUsesSizesInCentro(s.id) ? '(Por tamaños)' : '(Unitario)' }}
                     </option>
                   </select>
                   <p v-if="form.errors.id_servicio" class="text-red-600 text-sm mt-2 flex items-center gap-1">

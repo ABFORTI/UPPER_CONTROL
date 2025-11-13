@@ -256,6 +256,24 @@ Route::post('/admin/impersonate/leave', [ImpersonateController::class,'leave'])
 // Auth (login/registro de Breeze)
 require __DIR__.'/auth.php';
 
+/* =============================
+ |  Fallback para servir /storage
+ * =============================
+  Si el symlink public/storage NO existe (hosting compartido, restricción), se evitarán 404
+  al abrir evidencias y archivos. Sólo usuarios autenticados.
+  Nota: El path recibido puede venir como 'evidencias/...'
+        o con prefijo 'app/public/evidencias/...'; se normaliza al root del disco.
+*/
+Route::middleware('auth')->get('/storage/{path}', function (string $path) {
+    $disk = \Illuminate\Support\Facades\Storage::disk('public');
+    // Compatibilidad PHP<8: normalizar prefijo 'app/public/' manualmente
+    if (strpos($path, 'app/public/') === 0) {
+        $path = substr($path, strlen('app/public/'));
+    }
+    if (!$disk->exists($path)) { abort(404); }
+    return response()->file($disk->path($path));
+})->where('path','.*');
+
 // TEMPORAL: Debug de roles
 Route::middleware('auth')->get('/test-roles-debug', function () {
     $user = request()->user();

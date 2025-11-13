@@ -39,7 +39,22 @@ return [
         'public' => [
             'driver' => 'local',
             'root' => storage_path('app/public'),
-            'url' => env('APP_URL').'/storage',
+            // Usar ASSET_URL si está definido (permite subcarpetas o CDN), de lo contrario APP_URL
+                'url' => (function(){
+                    $base = env('ASSET_URL', env('APP_URL')) ?? '';
+                    $base = rtrim($base, '/');
+                    // Compatibilidad PHP<8: comprobar sufijo manualmente
+                    if (substr($base, -7) === '/public') {
+                        $base = substr($base, 0, -7);
+                    }
+                    // En este hosting, la ruta pública accesible incluye /storage/app/public
+                    // para exponer los archivos del disco 'public'.
+                    return $base . '/storage/app/public';
+                })(),
+            // En hostings donde los symlinks no son posibles, habilitar 'serve' para
+            // que Laravel sirva los archivos del disco 'public' vía ruta interna.
+            // Si existe el symlink public/storage, seguirá funcionando igual.
+            'serve' => true,
             'visibility' => 'public',
             'throw' => false,
             'report' => false,
