@@ -33,9 +33,12 @@ archivos: [],
 id_centrocosto: null,
 id_marca: null,
 })
-// Inicializar centro si aplica
+// Inicializar centro: si puede elegir usa el selectedCentroId o primer centro disponible;
+// si no puede elegir (cliente), usa igualmente selectedCentroId (su centro asignado)
 if (props.canChooseCentro) {
   form.id_centrotrabajo = props.selectedCentroId || (props.centros[0]?.id ?? null)
+} else {
+  form.id_centrotrabajo = props.selectedCentroId
 }
 
 
@@ -79,9 +82,18 @@ const filteredMarcas = computed(() => {
 const servicio = computed(() => filteredServicios.value.find(s => s.id === Number(form.id_servicio)) || null)
 // MODO PER-CENTRO: detectar si para el centro elegido existen precios por tamaño
 function serviceUsesSizesInCentro(serviceId){
-  const cid = Number(form.id_centrotrabajo)
-  if (!cid || !serviceId) return false
-  const data = props.preciosPorCentro?.[cid]?.[serviceId]
+  if (!serviceId) return false
+  
+  let data = null
+  if (props.canChooseCentro) {
+    const cid = Number(form.id_centrotrabajo)
+    if (!cid) return false
+    data = props.preciosPorCentro?.[cid]?.[serviceId]
+  } else {
+    // Cliente: usar directamente el mapa de precios (ya filtrado por su centro)
+    data = props.precios?.[serviceId]
+  }
+  
   if (!data) return false
   const t = data.tamanos || {}
   return ['chico','mediano','grande','jumbo'].some(k => t[k] !== undefined && t[k] !== null)
