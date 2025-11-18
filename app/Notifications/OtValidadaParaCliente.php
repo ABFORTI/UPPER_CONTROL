@@ -41,10 +41,11 @@ class OtValidadaParaCliente extends Notification
     public function toDatabase($notifiable): array
     {
         return [
+            'title' => 'OT Validada por Calidad',
+            'message' => "La OT #{$this->orden->id} fue validada exitosamente. Revisa y autoriza para continuar con la facturación.",
+            'url' => route('ordenes.show', $this->orden),
             'type' => 'ot_validada_cliente',
             'orden_id' => $this->orden->id,
-            'mensaje' => "OT #{$this->orden->id} validada; pendiente autorización del cliente.",
-            'url' => route('ordenes.show', $this->orden),
         ];
     }
 }

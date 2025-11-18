@@ -8,7 +8,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
-class RecordatorioValidacionOt extends Notification implements ShouldQueue
+class RecordatorioValidacionOt extends Notification
 {
     use Queueable;
 
@@ -62,11 +62,12 @@ class RecordatorioValidacionOt extends Notification implements ShouldQueue
     public function toDatabase($notifiable): array
     {
         return [
+            'title' => 'Recordatorio de Autorización',
+            'message' => "La OT #{$this->orden->id} lleva {$this->horasEspera}h esperando tu autorización. Por favor revísala.",
+            'url' => route('ordenes.show', $this->orden),
             'type' => 'recordatorio_validacion',
             'orden_id' => $this->orden->id,
             'horas_espera' => $this->horasEspera,
-            'mensaje' => "Recordatorio: OT #{$this->orden->id} pendiente de autorización ({$this->horasEspera}h en espera)",
-            'url' => route('ordenes.show', $this->orden),
         ];
     }
 }

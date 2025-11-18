@@ -345,8 +345,8 @@ function canPreview(mime) {
             </div>
           </div>
 
-          <!-- Generar OT Card -->
-          <div v-if="solicitud.estatus === 'aprobada'" class="bg-white rounded-2xl shadow-lg border-2 border-gray-100 overflow-hidden hover:shadow-xl transition-shadow duration-300">
+          <!-- Generar OT Card - Solo para coordinadores y admin -->
+          <div v-if="can?.generar_ot" class="bg-white rounded-2xl shadow-lg border-2 border-gray-100 overflow-hidden hover:shadow-xl transition-shadow duration-300">
             <div class="bg-gradient-to-r from-gray-700 to-gray-900 px-6 py-4">
               <h3 class="text-lg font-bold text-white flex items-center gap-2">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

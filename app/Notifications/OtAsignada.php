@@ -39,10 +39,11 @@ class OtAsignada extends Notification
     public function toDatabase($notifiable): array
     {
         return [
+            'title' => 'Nueva OT Asignada',
+            'message' => "Se te asignó la OT #{$this->orden->id} ({$this->orden->servicio?->nombre}).",
+            'url' => route('ordenes.show', $this->orden),
             'type' => 'ot_asignada',
             'orden_id' => $this->orden->id,
-            'mensaje' => "OT #{$this->orden->id} asignada",
-            'url' => route('ordenes.show', $this->orden),
         ];
     }
 }

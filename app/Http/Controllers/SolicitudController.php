@@ -494,6 +494,9 @@ class SolicitudController extends Controller
         $canAprobar = $user->hasAnyRole(['coordinador','admin'])
             && $solicitud->estatus === 'pendiente';
 
+        $canGenerarOt = $user->hasAnyRole(['coordinador','admin'])
+            && $solicitud->estatus === 'aprobada';
+
         // Cotización para visualizar precios con IVA
         $cotizacion = $this->buildCotizacion($solicitud);
 
@@ -502,6 +505,7 @@ class SolicitudController extends Controller
             'can' => [
                 'aprobar'  => $canAprobar,
                 'rechazar' => $canAprobar,
+                'generar_ot' => $canGenerarOt,
             ],
             'urls' => [
                 'aprobar'    => route('solicitudes.aprobar', $solicitud),

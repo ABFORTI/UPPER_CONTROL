@@ -26,7 +26,9 @@ class CalidadController extends Controller
       $this->authorize('calidad', $orden);
       $this->authCalidad($orden);
     }
-    if ($orden->estatus !== 'completada') abort(422,'La OT aún no está completada.');
+    if (!in_array($orden->estatus, $this->calidadVisibleStatuses(), true)) {
+      abort(422,'La OT aún no está lista para revisión de calidad.');
+    }
     return \Inertia\Inertia::render('Calidad/Review', [
       'orden' => $orden->load('solicitud.cliente','centro','servicio','items'),
       'urls'  => [
@@ -202,6 +204,8 @@ class CalidadController extends Controller
   ];
 
   $q = \App\Models\Orden::with('servicio','centro','area','solicitud.marca','teamLeader')
+    // Mostrar OTs completadas y las etapas posteriores del flujo
+    ->whereIn('estatus', $this->calidadVisibleStatuses())
     // Admin ve todos los centros. Gerente restringido a centros asignados (solo lectura).
     ->when(!$u->hasRole('admin'), function($qq) use ($u) {
       $ids = $this->allowedCentroIds($u);
@@ -215,11 +219,11 @@ class CalidadController extends Controller
         if (in_array((int)$filters['centro'], array_map('intval',$ids), true)) { $qq->where('id_centrotrabajo', $filters['centro']); }
       }
     })
-    // Lógica de filtrado:
-    // - Pendientes: sólo OTs completadas y calidad pendiente
+    // Lógica de filtrado por resultado de calidad:
+    // - Pendientes: calidad pendiente
     // - Validadas/Rechazadas: mostrar independientemente de si pasaron a 'autorizada_cliente'
     ->when($estadoNorm === 'pendiente', function($qq){
-      $qq->where('estatus','completada')->where('calidad_resultado','pendiente');
+      $qq->where('calidad_resultado','pendiente');
     })
     ->when($estadoNorm !== 'pendiente' && $estadoNorm !== 'todos', function($qq) use ($estadoNorm){
       $qq->where('calidad_resultado',$estadoNorm);
@@ -286,6 +290,14 @@ class CalidadController extends Controller
     $primary = (int)($u->centro_trabajo_id ?? 0);
     if ($primary) $ids[] = $primary;
     return array_values(array_unique(array_filter($ids)));
+  }
+
+  /**
+   * Estatus visibles para el módulo de calidad una vez concluido el trabajo.
+   */
+  private function calidadVisibleStatuses(): array
+  {
+    return ['completada','autorizada_cliente','facturada'];
   }
 
 }

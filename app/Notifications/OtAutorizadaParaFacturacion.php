@@ -41,10 +41,11 @@ class OtAutorizadaParaFacturacion extends Notification
     public function toDatabase($notifiable): array
     {
         return [
+            'title' => 'OT Autorizada para Facturación',
+            'message' => "La OT #{$this->orden->id} fue autorizada por el cliente. Procede a generar la factura.",
+            'url' => route('facturas.createFromOrden', $this->orden),
             'type' => 'ot_autorizada_facturacion',
             'orden_id' => $this->orden->id,
-            'mensaje' => "OT #{$this->orden->id} autorizada por cliente (facturar).",
-            'url' => route('facturas.createFromOrden', $this->orden),
         ];
     }
 }

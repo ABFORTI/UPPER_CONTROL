@@ -733,7 +733,7 @@ class OrdenController extends Controller
     /** Definir desglose por tamaños para OT (flujo diferido) */
     public function definirTamanos(Request $req, Orden $orden)
     {
-        $this->authorize('createFromSolicitud', [Orden::class, $orden->id_centrotrabajo]);
+        $this->authorize('definirTamanos', $orden);
         $this->authorizeFromCentro($orden->id_centrotrabajo, $orden);
 
         $orden->load(['servicio','solicitud.tamanos','items']);
