@@ -86,6 +86,16 @@ class OrdenPolicy
             ($u->hasRole('coordinador') && (int)$u->centro_trabajo_id === $centroId);
     }
 
+    // Definir desglose por tamaños (coordinador, admin o team_leader asignado)
+    public function definirTamanos(User $u, Orden $o): bool
+    {
+        if ($u->hasRole('admin')) return true;
+        if ($u->hasRole('coordinador') && (int)$u->centro_trabajo_id === (int)$o->id_centrotrabajo) return true;
+        // Team leader asignado a la OT también puede definir tamaños
+        if ($u->hasRole('team_leader') && (int)$o->team_leader_id === (int)$u->id) return true;
+        return false;
+    }
+
 
     // calidad (solo calidad/admin del mismo centro)
     public function calidad(User $u, Orden $o): bool {

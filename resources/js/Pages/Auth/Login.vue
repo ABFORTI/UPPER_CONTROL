@@ -37,13 +37,13 @@ const submit = () => {
     <div class="bg-white rounded-2xl shadow-2xl flex w-full max-w-4xl overflow-hidden scale-105">
   <!-- Branding / Info (hidden on small screens) -->
   <div class="hidden md:flex md:w-1/2 bg-[#F5F7FA] flex-col items-center justify-center p-10">
-        <div class="w-25 h-25 mb-6 flex items-center justify-center">
+        <div class="w-25 h-25 mb-4 flex items-center justify-center">
           <img :src="asset('img/upper_control.png')" alt="Upper Control" loading="lazy" class="w-full h-full object-contain" />
         </div>
         <div class="text-center">
-          <div class="font-poppins font-bold text-2xl text-[#2E3A59] mb-1"></div>
-          <div class="font-poppins text-sm text-[#1A73E8] mb-2">Plataforma de Gestión Logística</div>
-          <div class="text-base text-[#2E3A59] opacity-80 font-roboto">Solicita, cotiza y realiza seguimiento de servicios logísticos de manera centralizada y transparente</div>
+          <div class="text-[18px] md:text-[22px] font-bold tracking-[0.22em]">UPPER CONTROL</div>
+          <div class="mt-1 text-sm md:text-sm tracking-[0.35em] text-[#1A73E8]">BY UPPER LOGISTICS</div>
+          <div class="mt-3 text-base text-[#2E3A59] opacity-80 font-roboto">Solicita, cotiza y realiza seguimiento de servicios logísticos de manera centralizada y transparente</div>
         </div>
       </div>
   <!-- Login Form -->

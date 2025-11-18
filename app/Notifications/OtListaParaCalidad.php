@@ -39,10 +39,11 @@ class OtListaParaCalidad extends Notification
     public function toDatabase($notifiable): array
     {
         return [
+            'title' => 'OT Lista para Calidad',
+            'message' => "La OT #{$this->orden->id} está completada y lista para revisión de calidad.",
+            'url' => route('calidad.show', $this->orden),
             'type' => 'ot_lista_calidad',
             'orden_id' => $this->orden->id,
-            'mensaje' => "OT #{$this->orden->id} lista para calidad",
-            'url' => route('calidad.show', $this->orden),
         ];
     }
 }

@@ -47,7 +47,11 @@ const filtered = computed(()=>{
   // Búsqueda
   if (ui.q) {
     const q = ui.q.toLowerCase()
-    list = list.filter(n => (`${n.data?.mensaje ?? ''} ${n.created_at ?? ''}`).toLowerCase().includes(q))
+    list = list.filter(n => (
+      `${n.data?.message ?? ''} ${n.data?.title ?? ''} ${n.created_at ?? ''}`
+        .toLowerCase()
+        .includes(q)
+    ))
   }
   // Orden descendente por fecha
   list = list.sort((a,b)=> new Date(b.created_at) - new Date(a.created_at))
@@ -131,9 +135,16 @@ const BRAND = { green:'#006657', gold:'#BC955C', teal:'#0ea5e9' }
 
             <div class="text-xs text-slate-500">{{ new Date(n.created_at).toLocaleString('es-MX') }}</div>
             <div class="mt-1 flex items-start gap-2">
-              <p class="font-medium text-slate-900 leading-6">{{ n.data?.mensaje }}</p>
+              <div class="flex-1">
+                <p class="font-semibold text-slate-900 leading-6 mb-1">
+                  {{ n.data?.title || 'Notificación' }}
+                </p>
+                <p v-if="n.data?.message" class="text-sm text-slate-600 leading-relaxed">
+                  {{ n.data?.message }}
+                </p>
+              </div>
               <span v-if="!n.read_at"
-                    class="px-2 py-0.5 rounded-full text-[11px] font-medium ml-auto"
+                    class="px-2 py-0.5 rounded-full text-[11px] font-medium shrink-0"
                     :style="{ background: '#F6EDE2', color: BRAND.gold, border:`1px solid ${BRAND.gold}33` }">
                 nuevo
               </span>

@@ -9,7 +9,7 @@ use Illuminate\Notifications\Notification;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\Facades\Storage;
 
-class FacturaGeneradaNotification extends Notification implements ShouldQueue
+class FacturaGeneradaNotification extends Notification
 {
     use Queueable;
 

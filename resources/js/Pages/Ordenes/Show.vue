@@ -272,13 +272,14 @@ function definirTamanos() {
             <div class="flex flex-wrap gap-3">
               <span class="px-4 py-2 rounded-xl font-semibold text-sm backdrop-blur-sm border-2"
                     :class="{
-                      'bg-white text-[#1E1C8F] border-white': orden?.estatus === 'generada',
-                      'bg-yellow-500 text-white border-yellow-600': orden?.estatus === 'nueva',
-                      'bg-blue-100 text-blue-800 border-blue-200': orden?.estatus === 'asignada',
-                      'bg-orange-100 text-orange-800 border-orange-200': orden?.estatus === 'en_proceso',
+                      'bg-slate-100 text-slate-700 border-slate-300': orden?.estatus === 'generada',
+                      'bg-violet-100 text-violet-800 border-violet-300': orden?.estatus === 'nueva',
+                      'bg-blue-100 text-blue-700 border-blue-300': orden?.estatus === 'asignada',
+                      'bg-orange-100 text-orange-700 border-orange-300': orden?.estatus === 'en_proceso',
                       'bg-emerald-600 text-white border-emerald-700': orden?.estatus === 'completada',
-                      'bg-teal-600 text-white border-teal-700': orden?.estatus === 'validada_calidad',
-                      'bg-slate-700 text-white border-slate-800': orden?.estatus === 'validada_cliente' || orden?.estatus === 'autorizada_cliente',
+                      'bg-teal-500 text-white border-teal-600': orden?.estatus === 'validada_calidad',
+                      'bg-indigo-600 text-white border-indigo-700': orden?.estatus === 'validada_cliente',
+                      'bg-lime-600 text-white border-lime-700': orden?.estatus === 'autorizada_cliente',
                       'bg-gray-800 text-white border-gray-900': orden?.estatus === 'facturada',
                       'bg-red-600 text-white border-red-700': orden?.estatus === 'cancelada',
                       'bg-gray-200 text-gray-800 border-gray-300': orden?.estatus === 'pendiente'
