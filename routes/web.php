@@ -24,7 +24,8 @@ use App\Http\Controllers\Admin\{
 };
 
 // Home -> Dashboard (el dashboard está protegido con 'auth')
-Route::get('/', fn () => redirect()->route('dashboard'))->name('home');
+// Usar redirect en lugar de Closure para que la ruta sea cacheable (evita errores con route:cache)
+Route::redirect('/', '/dashboard')->name('home');
 
 /* ===========================
  |  DASHBOARD & NOTIFICACIONES
@@ -34,33 +35,14 @@ Route::middleware('auth')->group(function () {
     Route::get('/dashboard/export/ots', [DashboardController::class, 'exportOts'])->name('dashboard.export.ots');
     Route::get('/dashboard/export/facturas', [DashboardController::class, 'exportFacturas'])->name('dashboard.export.facturas');
 
-    Route::get('/notificaciones', function () {
-        return inertia('Notificaciones/Index', [
-            'items' => auth()->user()->notifications()->latest()->limit(50)->get()
-                ->map(fn($n)=>[
-                    'id'=>$n->id,
-                    'type'=>$n->type,
-                    'data'=>$n->data,
-                    'read_at'=>$n->read_at,
-                    'created_at'=>$n->created_at,
-                ]),
-        ]);
-    })->name('notificaciones.index');
+    Route::get('/notificaciones', [\App\Http\Controllers\SupportController::class, 'notificacionesIndex'])
+        ->name('notificaciones.index');
 
-    Route::post('/notificaciones/read-all', function () {
-        auth()->user()->unreadNotifications->markAsRead();
-        return back();
-    })->name('notificaciones.read_all');
+    Route::post('/notificaciones/read-all', [\App\Http\Controllers\SupportController::class, 'notificacionesReadAll'])
+        ->name('notificaciones.read_all');
 
-    Route::post('/notificaciones/{notification}/read', function ($notificationId) {
-        $user = request()->user();
-        $notification = $user->notifications()->whereKey($notificationId)->firstOrFail();
-        if (is_null($notification->read_at)) {
-            $notification->markAsRead();
-        }
-        // Devolvemos 204 para que el front pueda continuar con la navegación deseada
-        return response()->noContent();
-    })->name('notificaciones.read');
+    Route::post('/notificaciones/{notification}/read', [\App\Http\Controllers\SupportController::class, 'notificacionesRead'])
+        ->name('notificaciones.read');
 });
 
 /* ==========
@@ -264,27 +246,8 @@ require __DIR__.'/auth.php';
   Nota: El path recibido puede venir como 'evidencias/...'
         o con prefijo 'app/public/evidencias/...'; se normaliza al root del disco.
 */
-Route::middleware('auth')->get('/storage/{path}', function (string $path) {
-    $disk = \Illuminate\Support\Facades\Storage::disk('public');
-    // Compatibilidad PHP<8: normalizar prefijo 'app/public/' manualmente
-    if (strpos($path, 'app/public/') === 0) {
-        $path = substr($path, strlen('app/public/'));
-    }
-    if (!$disk->exists($path)) { abort(404); }
-    return response()->file($disk->path($path));
-})->where('path','.*');
+Route::middleware('auth')->get('/storage/{path}', [\App\Http\Controllers\SupportController::class, 'storage'])
+    ->where('path','.*');
 
 // TEMPORAL: Debug de roles
-Route::middleware('auth')->get('/test-roles-debug', function () {
-    $user = request()->user();
-    return response()->json([
-        'user_id' => $user->id,
-        'email' => $user->email,
-        'name' => $user->name,
-        'roles' => $user->roles->pluck('name'),
-        'has_control' => $user->hasRole('control'),
-        'has_comercial' => $user->hasRole('comercial'),
-        'has_any_role' => $user->hasAnyRole(['admin','coordinador','control','comercial']),
-        'permissions' => $user->getAllPermissions()->pluck('name'),
-    ]);
-});
+Route::middleware('auth')->get('/test-roles-debug', [\App\Http\Controllers\SupportController::class, 'testRolesDebug']);
