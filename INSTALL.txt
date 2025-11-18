@@ -1,0 +1,165 @@
+================================================================================
+  UPPER CONTROL - INSTRUCCIONES DE INSTALACIÓN EN HOSTING COMPARTIDO
+================================================================================
+
+📦 Este paquete incluye:
+  ✅ Código fuente actualizado (commit: b90e847)
+  ✅ Assets compilados (public/build/)
+  ✅ Cachés de Laravel pre-generados (bootstrap/cache/)
+  ✅ Dependencias de Composer (vendor/)
+
+================================================================================
+  PASOS DE INSTALACIÓN
+================================================================================
+
+1. SUBIR ARCHIVOS AL SERVIDOR
+   --------------------------------
+   - Descomprime el archivo ZIP
+   - Sube TODO el contenido a tu directorio web (ej: public_html/upper-control/)
+   - Asegúrate de que la carpeta "public" sea accesible por el dominio
+
+2. CONFIGURAR .env
+   --------------------------------
+   - Copia el archivo .env.example a .env
+   - Edita .env con los datos de tu servidor:
+
+     APP_ENV=production
+     APP_DEBUG=false
+     APP_URL=https://tu-dominio.com
+
+     DB_CONNECTION=mysql
+     DB_HOST=localhost
+     DB_PORT=3306
+     DB_DATABASE=tu_base_datos
+     DB_USERNAME=tu_usuario
+     DB_PASSWORD=tu_password
+
+     # Cache/Sessions (usar database si no hay Redis)
+     CACHE_STORE=database
+     SESSION_DRIVER=database
+     QUEUE_CONNECTION=database
+
+3. CONFIGURAR PERMISOS (VÍA FTP/CPANEL FILE MANAGER)
+   --------------------------------
+   Permisos 755 (rwxr-xr-x):
+     - Todas las carpetas del proyecto
+
+   Permisos 775 (rwxrwxr-x):
+     - storage/
+     - storage/app/
+     - storage/framework/
+     - storage/framework/cache/
+     - storage/framework/sessions/
+     - storage/framework/views/
+     - storage/logs/
+     - bootstrap/cache/
+
+   Permisos 644 (rw-r--r--):
+     - Todos los archivos .php
+     - .env
+
+4. CONFIGURAR DOCUMENT ROOT (IMPORTANTE)
+   --------------------------------
+   El dominio debe apuntar a la carpeta "public/" del proyecto.
+   
+   En cPanel:
+   - Domains > Manage > Edit Domain
+   - Document Root: /home/usuario/public_html/upper-control/public
+
+   O crear un .htaccess en la raíz que redirija:
+   
+   RewriteEngine On
+   RewriteRule ^(.*)$ public/$1 [L]
+
+5. GENERAR APP_KEY (OBLIGATORIO)
+   --------------------------------
+   Si tu hosting tiene acceso a terminal (SSH):
+     php artisan key:generate
+
+   Si NO tienes terminal, genera la clave manualmente:
+   - Ve a: https://generate-random.org/laravel-key-generator
+   - Copia la clave generada (ejemplo: base64:xxxxxxxxxxxxx)
+   - Edita .env y pega en: APP_KEY=base64:xxxxxxxxxxxxx
+
+6. EJECUTAR MIGRACIONES (si aplica)
+   --------------------------------
+   Si tu hosting tiene terminal:
+     php artisan migrate --force
+
+   Si NO tienes terminal:
+   - Importa el archivo SQL de respaldo en tu base de datos
+   - O usa el panel de phpMyAdmin para ejecutar las migraciones manualmente
+
+7. CREAR SYMLINK PARA STORAGE (IMPORTANTE)
+   --------------------------------
+   Si tu hosting tiene terminal:
+     php artisan storage:link
+
+   Si NO tienes terminal:
+   - Ve a public/ vía FTP/File Manager
+   - Crea un enlace simbólico llamado "storage" que apunte a:
+     ../storage/app/public
+   
+   O crea el archivo public/.htaccess con:
+   
+   RewriteEngine On
+   RewriteRule ^storage/(.*)$ ../storage/app/public/$1 [L]
+
+8. VERIFICAR INSTALACIÓN
+   --------------------------------
+   - Accede a tu dominio: https://tu-dominio.com
+   - Deberías ver la pantalla de login con el logo y "BY UPPER LOGISTICS"
+   - Verifica que no haya errores 404 o 500
+
+================================================================================
+  SOLUCIÓN DE PROBLEMAS COMUNES
+================================================================================
+
+❌ Error 500 "Call to undefined function highlight_file()"
+   Solución: En .env, asegúrate de tener: APP_DEBUG=false
+
+❌ Error "Please provide a valid app key"
+   Solución: Sigue el paso 5 para generar APP_KEY
+
+❌ Imágenes/archivos no cargan (404 en /storage/...)
+   Solución: Sigue el paso 7 para crear el symlink
+
+❌ Error "SQLSTATE[HY000] [1045] Access denied"
+   Solución: Verifica credenciales de BD en .env
+
+❌ Pantalla en blanco
+   Solución 1: Verifica permisos de storage/ y bootstrap/cache/
+   Solución 2: Revisa storage/logs/laravel.log
+
+❌ Error "The stream or file could not be opened"
+   Solución: Permisos incorrectos en storage/logs/
+            Debe ser 775 (rwxrwxr-x)
+
+================================================================================
+  OPTIMIZACIONES INCLUIDAS
+================================================================================
+
+✅ Rutas cacheadas (bootstrap/cache/routes-v7.php)
+✅ Configuración cacheada (bootstrap/cache/config.php)
+✅ Vistas compiladas (storage/framework/views/)
+✅ Assets optimizados (public/build/)
+✅ Autoloader optimizado (vendor/composer/autoload_*.php)
+
+Si necesitas limpiar cachés:
+  - Elimina los archivos en bootstrap/cache/ (excepto .gitignore)
+  - Elimina los archivos en storage/framework/cache/
+  - Elimina los archivos en storage/framework/views/
+
+================================================================================
+  CONTACTO Y SOPORTE
+================================================================================
+
+Si necesitas ayuda adicional:
+  📧 Contacta al equipo de desarrollo
+  📄 Revisa DESPLIEGUE_PRODUCCION.md para más detalles
+  📝 Consulta storage/logs/laravel.log para errores
+
+================================================================================
+Versión: 18 de noviembre de 2025
+Commit: b90e847
+================================================================================

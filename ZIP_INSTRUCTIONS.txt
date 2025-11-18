@@ -1,0 +1,72 @@
+================================================================================
+  ARCHIVOS A EXCLUIR DEL ZIP (NO SUBIR AL SERVIDOR)
+================================================================================
+
+Para reducir el tamaño del archivo y evitar problemas, NO incluyas:
+
+📁 Carpetas grandes (se regeneran en servidor):
+   ❌ node_modules/           (350+ MB - regenerar con npm install si es necesario)
+   ❌ .git/                   (historial de git - opcional)
+
+📄 Archivos de desarrollo:
+   ❌ .env                    (contiene datos locales - crear nuevo en servidor)
+   ❌ .env.local              
+   ❌ .env.backup
+   ❌ *.log                   (logs locales)
+
+📁 Carpetas de cache/temporal locales:
+   ❌ storage/logs/*.log      (logs de desarrollo)
+   ❌ storage/framework/cache/data/*  (cache local)
+   ❌ storage/framework/sessions/*    (sesiones locales)
+   ❌ storage/framework/testing/*     (archivos de testing)
+
+================================================================================
+  ARCHIVOS QUE SÍ DEBEN IR EN EL ZIP
+================================================================================
+
+✅ vendor/                    (dependencias de Composer - 150MB aprox)
+✅ public/build/              (assets compilados - 2MB)
+✅ bootstrap/cache/*.php      (cachés de Laravel pre-generados)
+✅ storage/app/               (estructura de carpetas)
+✅ storage/framework/views/   (vistas compiladas)
+✅ Todo el código fuente PHP
+✅ .htaccess                  (redirección a public/)
+✅ .env.production            (plantilla para configurar)
+✅ INSTALL.txt                (instrucciones)
+
+================================================================================
+  PASOS PARA CREAR EL ZIP
+================================================================================
+
+Opción A - PowerShell (Excluyendo archivos innecesarios):
+-------------------------------------------------------
+$exclude = @('.git', 'node_modules', '.env', '*.log')
+$files = Get-ChildItem -Path . -Recurse | Where-Object { 
+    $item = $_
+    -not ($exclude | Where-Object { $item.FullName -like "*$_*" })
+}
+Compress-Archive -Path $files -DestinationPath ..\upper-control-production.zip -Force
+
+Opción B - Herramienta de compresión (7-Zip, WinRAR):
+-------------------------------------------------------
+1. Abre el explorador de archivos en c:\xampp\htdocs\upper-control
+2. Selecciona TODO excepto:
+   - node_modules
+   - .git
+   - .env (el archivo, NO .env.production)
+3. Click derecho > Enviar a > Carpeta comprimida
+   O usa 7-Zip/WinRAR para crear el ZIP
+
+Opción C - ZIP completo simple (más pesado pero seguro):
+-------------------------------------------------------
+Compress-Archive -Path * -DestinationPath ..\upper-control-production.zip -Force
+
+================================================================================
+  TAMAÑOS APROXIMADOS
+================================================================================
+
+Con node_modules:         ~400 MB
+Sin node_modules:         ~170 MB  ← RECOMENDADO
+Solo código esencial:      ~25 MB  (sin vendor/ - requiere composer install)
+
+================================================================================
