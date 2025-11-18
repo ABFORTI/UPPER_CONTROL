@@ -1,7 +1,7 @@
 # 📦 Cambios para Despliegue a Producción
 **Fecha**: 18 de noviembre de 2025  
 **Branch**: master  
-**Commit**: d32e412
+**Commit**: 7f26989
 
 ---
 
@@ -20,7 +20,16 @@
 - **Cambio**: Se agregó la leyenda "BY UPPER LOGISTICS" debajo del logo en la vista de login
 - **Impacto Visual**: Mejora del branding en la pantalla de inicio de sesión
 
-### 3. **Assets Compilados**
+### 3. **Fix: Rutas Cacheables para Producción**
+- **Archivos**: `routes/web.php`, `app/Http/Controllers/SupportController.php`
+- **Problema**: Las Closures en rutas impedían ejecutar `php artisan route:cache` causando errores HTTP 405/500
+- **Solución**: 
+  - Reemplazada ruta raíz `fn() => redirect()` por `Route::redirect('/', '/dashboard')`
+  - Movidas rutas de notificaciones y storage a `SupportController`
+  - Todas las rutas ahora son cacheables
+- **Impacto**: El cacheo de rutas funciona correctamente, mejorando performance
+
+### 4. **Assets Compilados**
 - ✅ Build de producción completado exitosamente con Vite
 - ✅ 814 módulos transformados
 - ✅ Assets optimizados y comprimidos (gzip)
@@ -48,7 +57,7 @@ git pull origin master
 
 # Verificar que estás en el commit correcto
 git log --oneline -1
-# Debe mostrar: d32e412 fix: corregir lógica de es_corregido en avances...
+# Debe mostrar: 7f26989 chore: reemplazar closures por SupportController...
 ```
 
 ### 3. Actualizar Dependencias (si es necesario)
@@ -163,7 +172,7 @@ Si algo sale mal, ejecutar:
 ```bash
 cd /var/www/upper-control
 
-# Volver al commit anterior
+# Volver al commit anterior (antes de este deploy)
 git reset --hard 029dfe8
 
 # Recompilar assets del commit anterior
@@ -179,6 +188,42 @@ php artisan view:clear
 sudo systemctl restart php8.2-fpm
 sudo systemctl reload nginx
 ```
+
+---
+
+## ⚠️ Notas Importantes para Producción
+
+### Función `highlight_file()` Deshabilitada
+Si al acceder al sitio ves el error:
+```
+Call to undefined function Symfony\Component\ErrorHandler\ErrorRenderer\highlight_file()
+```
+
+**Solución**:
+1. Verifica si está deshabilitada:
+```bash
+php -r "var_dump(function_exists('highlight_file'));"
+php -i | grep disable_functions
+```
+
+2. Si está en `disable_functions`, edita el `php.ini`:
+```bash
+# Encuentra el archivo php.ini activo
+php --ini
+
+# Edita y elimina 'highlight_file' de la lista disable_functions
+sudo nano /etc/php/8.2/fpm/php.ini  # ajusta la ruta según tu sistema
+
+# Reinicia PHP-FPM
+sudo systemctl restart php8.2-fpm
+```
+
+3. **Alternativa temporal**: Establece `APP_DEBUG=false` en `.env` para evitar que Symfony intente renderizar errores con syntax highlighting.
+
+### Error HTTP 405 en Ruta Raíz
+Este error ocurría por rutas no cacheables (Closures). Ya está corregido en este deploy.
+- Las rutas ahora usan controladores o `Route::redirect()`
+- `php artisan route:cache` funcionará sin errores
 
 ---
 
