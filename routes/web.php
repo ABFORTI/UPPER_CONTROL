@@ -12,7 +12,8 @@ use App\Http\Controllers\{
     FacturaController,
     DashboardController,
     PrecioController,
-    EvidenciaController
+    EvidenciaController,
+    HomeController
 };
 
 use App\Http\Controllers\Admin\{
@@ -23,9 +24,9 @@ use App\Http\Controllers\Admin\{
     BackupController
 };
 
-// Home -> Dashboard (el dashboard está protegido con 'auth')
-// Usar redirect en lugar de Closure para que la ruta sea cacheable (evita errores con route:cache)
-Route::redirect('/', '/dashboard')->name('home');
+// Home -> Redirige a dashboard (o login si no está autenticado)
+// Definir explícitamente GET como primer método
+Route::match(['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'], '/', [HomeController::class, 'index'])->name('home');
 
 /* ===========================
  |  DASHBOARD & NOTIFICACIONES

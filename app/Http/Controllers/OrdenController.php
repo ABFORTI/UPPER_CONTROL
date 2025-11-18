@@ -419,15 +419,23 @@ class OrdenController extends Controller
 
             // Registrar avances en la tabla de avances
             // Marcar como corregido SOLO si:
-            // 1. La orden fue rechazada previamente por calidad, Y
-            // 2. Actualmente el estado de calidad es "rechazado" (no "pendiente" tras completarse de nuevo)
-            // Esto evita marcar los primeros avances como "corregidos" innecesariamente
-            $isCorregido = ($orden->calidad_resultado === 'rechazado') &&
-                \App\Models\Aprobacion::where('aprobable_type', \App\Models\Orden::class)
-                    ->where('aprobable_id', $orden->id)
-                    ->where('tipo', 'calidad')
-                    ->where('resultado', 'rechazado')
+            // 1. Existe un rechazo de calidad registrado para esta orden
+            // 2. Y ese rechazo fue DESPUÉS de que ya había avances (es decir, es una corrección real)
+            $rechazoCalidad = \App\Models\Aprobacion::where('aprobable_type', \App\Models\Orden::class)
+                ->where('aprobable_id', $orden->id)
+                ->where('tipo', 'calidad')
+                ->where('resultado', 'rechazado')
+                ->latest()
+                ->first();
+            
+            // Solo es corregido si hay un rechazo Y había avances antes de ese rechazo
+            $isCorregido = false;
+            if ($rechazoCalidad) {
+                $avancesAntesDeRechazo = \App\Models\Avance::where('id_orden', $orden->id)
+                    ->where('created_at', '<', $rechazoCalidad->created_at)
                     ->exists();
+                $isCorregido = $avancesAntesDeRechazo;
+            }
             
             foreach ($data['items'] as $d) {
                 if ((int)$d['cantidad'] > 0) {

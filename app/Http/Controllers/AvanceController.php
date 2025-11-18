@@ -33,12 +33,24 @@ class AvanceController extends Controller
         $path = $req->file('evidencia')->store("ordenes/{$orden->id}/avances", 'public');
       }
 
-      // Consider an avance "corregido" if the order was rejected by calidad at any point
-      $isCorregido = \App\Models\Aprobacion::where('aprobable_type', \App\Models\Orden::class)
+      // Marcar como corregido SOLO si:
+      // 1. Existe un rechazo de calidad registrado para esta orden
+      // 2. Y ese rechazo fue DESPUÉS de que ya había avances (es decir, es una corrección real)
+      $rechazoCalidad = \App\Models\Aprobacion::where('aprobable_type', \App\Models\Orden::class)
         ->where('aprobable_id', $orden->id)
-        ->where('tipo','calidad')
-        ->where('resultado','rechazado')
-        ->exists();
+        ->where('tipo', 'calidad')
+        ->where('resultado', 'rechazado')
+        ->latest()
+        ->first();
+      
+      // Solo es corregido si hay un rechazo Y había avances antes de ese rechazo
+      $isCorregido = false;
+      if ($rechazoCalidad) {
+        $avancesAntesDeRechazo = \App\Models\Avance::where('id_orden', $orden->id)
+          ->where('created_at', '<', $rechazoCalidad->created_at)
+          ->exists();
+        $isCorregido = $avancesAntesDeRechazo;
+      }
 
       Avance::create([
         'id_orden'  => $orden->id,
