@@ -17,7 +17,11 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // Deshabilitar Symfony error renderer en producción
+        // Esto evita errores cuando highlight_file() está deshabilitado
+        if (!config('app.debug')) {
+            ini_set('display_errors', '0');
+        }
     }
 
     /**

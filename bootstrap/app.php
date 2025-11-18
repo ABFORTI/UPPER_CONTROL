@@ -26,5 +26,9 @@ return Application::configure(basePath: dirname(__DIR__))
         //
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        //
+        // Deshabilitar renderizado visual de errores en producción
+        // para evitar problemas con highlight_file() deshabilitado
+        if (!config('app.debug')) {
+            $exceptions->dontReport([]);
+        }
     })->create();
