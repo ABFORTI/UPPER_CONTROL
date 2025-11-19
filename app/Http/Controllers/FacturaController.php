@@ -1169,10 +1169,10 @@ private function xmlElementToArray(\SimpleXMLElement $element): array
     ]);
     // Notificar al cliente
     Notifier::toUser(
-        $factura->orden->solicitud->id_cliente,
-        'Factura actualizada',
-        "La factura #{$factura->id} cambió a estatus: {$factura->estatus}.",
-        route('facturas.show',$factura->id)
+      $factura->orden->solicitud->id_cliente,
+      'Factura actualizada',
+      "Tu factura #{$factura->id} está lista para pago. Favor de realizarlo en el tiempo establecido.",
+      route('facturas.show',$factura->id)
     );
         $this->act('facturas')
             ->performedOn($factura)
@@ -1191,7 +1191,7 @@ private function xmlElementToArray(\SimpleXMLElement $element): array
   Notifier::toUser(
     $factura->orden->solicitud->id_cliente,
     'Factura actualizada',
-    "La factura #{$factura->id} cambió a estatus: {$factura->estatus}.",
+    "Tu factura #{$factura->id} está lista para pagar. Favor de hacerlo en el tiempo establecido.",
     route('facturas.show',$factura->id)
   );
         $this->act('facturas')
@@ -1211,7 +1211,7 @@ private function xmlElementToArray(\SimpleXMLElement $element): array
   Notifier::toUser(
     $factura->orden->solicitud->id_cliente,
     'Factura actualizada',
-    "La factura #{$factura->id} cambió a estatus: {$factura->estatus}.",
+    "Tu factura #{$factura->id} ha sido marcada como pagada. ¡Gracias por completar el proceso!", 
     route('facturas.show',$factura->id)
   );
         $this->act('facturas')

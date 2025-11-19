@@ -312,7 +312,10 @@ function nav (path) {
               <div class="w-full h-24 bg-slate-100 rounded-md overflow-hidden flex items-end">
                 <div class="w-full bg-gradient-to-t from-indigo-600 to-sky-400" :style="{ height: pct(d.total, Math.max(1, ...series.ots_por_dia.map(x=>x.total))) + '%' }"></div>
               </div>
-              <div class="mt-1 text-[10px] text-slate-500">{{ new Date(d.fecha).toLocaleDateString('es-MX',{weekday:'short'}) }}</div>
+              <div class="mt-1 text-[10px] text-slate-500">
+                <span>{{ new Date(d.fecha + 'T00:00:00').toLocaleDateString('es-MX',{weekday:'short'}) }}</span>
+                <span class="ml-1 font-medium">{{ new Date(d.fecha + 'T00:00:00').getDate() }}</span>
+              </div>
               <div class="text-xs font-semibold text-slate-700">{{ d.total }}</div>
             </div>
           </div>
