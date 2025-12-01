@@ -1140,15 +1140,24 @@ private function xmlElementToArray(\SimpleXMLElement $element): array
       return $f;
     });
 
-    // Notificaciones mínimas
+    // Notificaciones: enviar a TODOS los clientes del centro de trabajo
+    // de las OTs facturadas (facturación por periodos por centro).
     try {
-      foreach ($ordenes as $o) {
-        Notifier::toUser(
-          $o->solicitud?->id_cliente,
-          'Factura generada',
-          "Tu OT #{$o->id} fue facturada (Factura #{$factura->id}).",
-          route('facturas.show', $factura->id)
-        );
+      $centroId = (int)($ordenes->first()?->id_centrotrabajo ?? 0);
+      if ($centroId > 0) {
+        // Obtener todos los clientes cuyo centro_trabajo_id coincide
+        $clientes = \App\Models\User::role('cliente')
+          ->where('centro_trabajo_id', $centroId)
+          ->get();
+
+        foreach ($clientes as $cliente) {
+          Notifier::toUser(
+            $cliente->id,
+            'Factura generada',
+            "Se generó la factura #{$factura->id} para órdenes de tu centro de trabajo.",
+            route('facturas.show', $factura->id)
+          );
+        }
       }
     } catch (\Throwable $e) { /* noop */ }
 
@@ -1167,13 +1176,23 @@ private function xmlElementToArray(\SimpleXMLElement $element): array
       'folio_externo'=>$req->folio_externo,
       'fecha_facturado'=>now()->toDateString(),
     ]);
-    // Notificar al cliente
-    Notifier::toUser(
-      $factura->orden->solicitud->id_cliente,
-      'Factura actualizada',
-      "Tu factura #{$factura->id} está lista para pago. Favor de realizarlo en el tiempo establecido.",
-      route('facturas.show',$factura->id)
-    );
+    // Notificar a todos los clientes del centro de trabajo de la factura
+    try {
+      $centroId = (int)($factura->orden?->id_centrotrabajo ?? 0);
+      if ($centroId > 0) {
+        $clientes = \App\Models\User::role('cliente')
+          ->where('centro_trabajo_id', $centroId)
+          ->get();
+        foreach ($clientes as $cliente) {
+          Notifier::toUser(
+            $cliente->id,
+            'Factura actualizada',
+            "La factura #{$factura->id} está lista para pago. Favor de realizarlo en el tiempo establecido.",
+            route('facturas.show',$factura->id)
+          );
+        }
+      }
+    } catch (\Throwable $e) { /* noop */ }
         $this->act('facturas')
             ->performedOn($factura)
             ->event('estatus')
@@ -1187,13 +1206,23 @@ private function xmlElementToArray(\SimpleXMLElement $element): array
   $this->authorize('operar', $factura);
   $this->authFacturacion($factura->orden);
   $factura->update(['estatus'=>'por_pagar', 'fecha_cobro'=>now()->toDateString()]);
-  // Notificar al cliente
-  Notifier::toUser(
-    $factura->orden->solicitud->id_cliente,
-    'Factura actualizada',
-    "Tu factura #{$factura->id} está lista para pagar. Favor de hacerlo en el tiempo establecido.",
-    route('facturas.show',$factura->id)
-  );
+  // Notificar a todos los clientes del centro de trabajo de la factura
+  try {
+    $centroId = (int)($factura->orden?->id_centrotrabajo ?? 0);
+    if ($centroId > 0) {
+      $clientes = \App\Models\User::role('cliente')
+        ->where('centro_trabajo_id', $centroId)
+        ->get();
+      foreach ($clientes as $cliente) {
+        Notifier::toUser(
+          $cliente->id,
+          'Factura actualizada',
+          "La factura #{$factura->id} está lista para pagar. Favor de hacerlo en el tiempo establecido.",
+          route('facturas.show',$factura->id)
+        );
+      }
+    }
+  } catch (\Throwable $e) { /* noop */ }
         $this->act('facturas')
             ->performedOn($factura)
             ->event('estatus')
@@ -1207,13 +1236,23 @@ private function xmlElementToArray(\SimpleXMLElement $element): array
   $this->authorize('operar', $factura);
   $this->authFacturacion($factura->orden);
   $factura->update(['estatus'=>'pagado', 'fecha_pagado'=>now()->toDateString()]);
-  // Notificar al cliente
-  Notifier::toUser(
-    $factura->orden->solicitud->id_cliente,
-    'Factura actualizada',
-    "Tu factura #{$factura->id} ha sido marcada como pagada. ¡Gracias por completar el proceso!", 
-    route('facturas.show',$factura->id)
-  );
+  // Notificar a todos los clientes del centro de trabajo de la factura
+  try {
+    $centroId = (int)($factura->orden?->id_centrotrabajo ?? 0);
+    if ($centroId > 0) {
+      $clientes = \App\Models\User::role('cliente')
+        ->where('centro_trabajo_id', $centroId)
+        ->get();
+      foreach ($clientes as $cliente) {
+        Notifier::toUser(
+          $cliente->id,
+          'Factura actualizada',
+          "La factura #{$factura->id} ha sido marcada como pagada. ¡Gracias por completar el proceso!",
+          route('facturas.show',$factura->id)
+        );
+      }
+    }
+  } catch (\Throwable $e) { /* noop */ }
         $this->act('facturas')
             ->performedOn($factura)
             ->event('estatus')
