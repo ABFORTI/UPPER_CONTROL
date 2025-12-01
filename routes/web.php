@@ -239,16 +239,17 @@ Route::post('/admin/impersonate/leave', [ImpersonateController::class,'leave'])
 // Auth (login/registro de Breeze)
 require __DIR__.'/auth.php';
 
-/* =============================
- |  Fallback para servir /storage
- * =============================
+/* ======================================
+ |  Fallback para servir archivos públicos
+ * ======================================
   Si el symlink public/storage NO existe (hosting compartido, restricción), se evitarán 404
-  al abrir evidencias y archivos. Sólo usuarios autenticados.
+  al abrir evidencias y demás archivos almacenados en el disco `public`. Sólo usuarios autenticados.
   Nota: El path recibido puede venir como 'evidencias/...'
-        o con prefijo 'app/public/evidencias/...'; se normaliza al root del disco.
+      o con prefijo 'app/public/evidencias/...'; se normaliza al root del disco.
 */
-Route::middleware('auth')->get('/storage/{path}', [\App\Http\Controllers\SupportController::class, 'storage'])
-    ->where('path','.*');
+Route::middleware('auth')->get('/secure-files/{path}', [\App\Http\Controllers\SupportController::class, 'storage'])
+    ->where('path','.*')
+    ->name('storage.serve');
 
 // TEMPORAL: Debug de roles
 Route::middleware('auth')->get('/test-roles-debug', [\App\Http\Controllers\SupportController::class, 'testRolesDebug']);

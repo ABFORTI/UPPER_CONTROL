@@ -6,6 +6,9 @@ use Illuminate\Database\Eloquent\Model;
 class Avance extends Model {
   protected $table='avances';
   protected $fillable=['id_orden','id_item','id_usuario','cantidad','comentario','evidencia_url','es_corregido'];
+  protected $casts = [
+    'es_corregido' => 'boolean',
+  ];
   protected $appends=['isCorregido']; // Serializa el accessor en JSON
   
   public function orden(){ return $this->belongsTo(Orden::class,'id_orden'); }
