@@ -1,0 +1,29 @@
+{
+  "name": "Upper Control",
+  "short_name": "UpperCtrl",
+  "description": "Panel de control para monitorear y administrar operaciones de Upper Logistics.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0b2330",
+  "theme_color": "#0b2330",
+  "orientation": "portrait",
+  "id": "/",
+  "icons": [
+    {
+      "src": "/img/upper_control192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/img/upper_control512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/img/upper_control1024.png",
+      "sizes": "1024x1024",
+      "type": "image/png"
+    }
+  ]
+}

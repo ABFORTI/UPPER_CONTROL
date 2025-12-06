@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Upper Control | Sin conexión</title>
+    <style>
+      :root {
+        color-scheme: dark light;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(135deg, #0b2330 0%, #122b3a 50%, #1b3d52 100%);
+        color: #f4f8fb;
+        text-align: center;
+        padding: 2rem;
+      }
+      .box {
+        max-width: 420px;
+        background: rgba(12, 32, 46, 0.78);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 18px;
+        padding: 2.5rem 2rem;
+        box-shadow: 0 20px 45px rgba(5, 17, 26, 0.35);
+      }
+      h1 {
+        font-size: 1.85rem;
+        margin: 0 0 1rem;
+        letter-spacing: 0.08em;
+      }
+      p {
+        margin: 0 0 1.5rem;
+        line-height: 1.5;
+        font-size: 0.98rem;
+        color: rgba(244, 248, 251, 0.85);
+      }
+      button {
+        cursor: pointer;
+        padding: 0.9rem 1.6rem;
+        border-radius: 999px;
+        border: none;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        background: linear-gradient(135deg, #ffae3b, #1fd8ff);
+        color: #0b2330;
+        box-shadow: 0 12px 30px rgba(31, 216, 255, 0.25);
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+      }
+      button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 14px 34px rgba(31, 216, 255, 0.32);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="box">
+      <h1>Sin conexión</h1>
+      <p>
+        No pudimos conectarnos a Upper Control. Revisa tu conexión a internet y vuelve a intentarlo.
+      </p>
+      <button type="button" onclick="window.location.reload()">Reintentar</button>
+    </div>
+  </body>
+</html>

@@ -45,12 +45,12 @@ function canPreview(mime) {
 
 
 <template>
-  <div class="min-h-screen bg-slate-50 py-8 px-4 sm:px-6 lg:px-8">
+  <div class="min-h-screen bg-slate-50 dark:bg-slate-950 py-8 px-4 sm:px-6 lg:px-8 transition-colors">
     <div class="max-w-5xl mx-auto space-y-6">
       
       <!-- Header Card -->
-      <div class="bg-white rounded-2xl shadow-xl border-2 border-upper-50 overflow-hidden">
-  <div class="px-6 py-5 bg-[#1E1C8F]">
+        <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-xl border-2 border-upper-50 dark:border-slate-800 overflow-hidden transition-colors">
+      <div class="px-6 py-5 bg-[#1E1C8F]">
           <div class="flex items-center justify-between">
             <div>
               <h1 class="text-3xl font-bold text-white mb-1">{{ solicitud.folio }}</h1>
@@ -84,7 +84,7 @@ function canPreview(mime) {
         </div>
 
         <!-- Action Buttons -->
-  <div v-if="can?.aprobar" class="px-6 py-4 border-b border-upper-50 bg-white">
+  <div v-if="can?.aprobar" class="px-6 py-4 border-b border-upper-50 dark:border-slate-800 bg-white dark:bg-slate-900">
           <div class="flex gap-3">
       <button @click="aprobar" 
         class="flex-1 px-6 py-3 rounded-xl bg-emerald-600 text-white font-semibold shadow-lg hover:bg-emerald-700 hover:shadow-xl hover:scale-105 transform transition-all duration-200 flex items-center justify-center gap-2">
@@ -111,7 +111,7 @@ function canPreview(mime) {
         <div class="lg:col-span-2 space-y-6">
           
           <!-- Información General -->
-          <div class="bg-white rounded-2xl shadow-lg border-2 border-upper-50 overflow-hidden hover:shadow-xl transition-shadow duration-300">
+          <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-lg border-2 border-upper-50 dark:border-slate-800 overflow-hidden hover:shadow-xl transition-shadow duration-300">
             <div class="px-6 py-4 bg-[#1E1C8F]">
               <h2 class="text-xl font-bold text-white flex items-center gap-2">
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -122,66 +122,66 @@ function canPreview(mime) {
             </div>
             <div class="p-6 space-y-4">
               <div class="grid md:grid-cols-2 gap-4">
-                <div class="bg-upper-50 rounded-xl p-4 border border-upper-50">
-                  <label class="text-xs font-semibold text-[#1E1C8F] uppercase tracking-wide">Servicio</label>
-                  <p class="mt-1 text-lg font-bold text-gray-800">{{ solicitud.servicio?.nombre }}</p>
+                <div class="bg-upper-50 dark:bg-slate-900/70 rounded-xl p-4 border border-upper-50 dark:border-slate-700 transition-colors">
+                  <label class="text-xs font-semibold text-[#9CA3FF] dark:text-indigo-200 uppercase tracking-wide">Servicio</label>
+                  <p class="mt-1 text-lg font-bold text-gray-800 dark:text-slate-100">{{ solicitud.servicio?.nombre }}</p>
                 </div>
-                <div class="bg-upper-50 rounded-xl p-4 border border-upper-50">
-                  <label class="text-xs font-semibold text-[#1E1C8F] uppercase tracking-wide">Centro de Trabajo</label>
-                  <p class="mt-1 text-lg font-bold text-gray-800">{{ solicitud.centro?.nombre }}</p>
+                <div class="bg-upper-50 dark:bg-slate-900/70 rounded-xl p-4 border border-upper-50 dark:border-slate-700 transition-colors">
+                  <label class="text-xs font-semibold text-[#9CA3FF] dark:text-indigo-200 uppercase tracking-wide">Centro de Trabajo</label>
+                  <p class="mt-1 text-lg font-bold text-gray-800 dark:text-slate-100">{{ solicitud.centro?.nombre }}</p>
                 </div>
               </div>
 
               <div class="grid md:grid-cols-2 gap-4">
-                <div class="bg-indigo-50 rounded-xl p-4 border border-indigo-100">
-                  <label class="text-xs font-semibold text-indigo-700 uppercase tracking-wide">Centro de Costos</label>
-                  <p class="mt-1 text-lg font-bold text-gray-800">{{ solicitud.centro_costo?.nombre || solicitud.centroCosto?.nombre }}</p>
+                <div class="bg-indigo-50 dark:bg-indigo-500/20 rounded-xl p-4 border border-indigo-100 dark:border-indigo-500/40">
+                  <label class="text-xs font-semibold text-indigo-700 dark:text-indigo-200 uppercase tracking-wide">Centro de Costos</label>
+                  <p class="mt-1 text-lg font-bold text-gray-800 dark:text-slate-100">{{ solicitud.centro_costo?.nombre || solicitud.centroCosto?.nombre }}</p>
                 </div>
-                <div class="bg-fuchsia-50 rounded-xl p-4 border border-fuchsia-100" v-if="solicitud.marca">
-                  <label class="text-xs font-semibold text-fuchsia-700 uppercase tracking-wide">Marca</label>
-                  <p class="mt-1 text-lg font-bold text-gray-800">{{ solicitud.marca?.nombre }}</p>
+                <div class="bg-fuchsia-50 dark:bg-fuchsia-500/20 rounded-xl p-4 border border-fuchsia-100 dark:border-fuchsia-500/40" v-if="solicitud.marca">
+                  <label class="text-xs font-semibold text-fuchsia-700 dark:text-fuchsia-200 uppercase tracking-wide">Marca</label>
+                  <p class="mt-1 text-lg font-bold text-gray-800 dark:text-slate-100">{{ solicitud.marca?.nombre }}</p>
                 </div>
               </div>
               
-              <div v-if="solicitud.area" class="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl p-4 border border-emerald-100">
-                <label class="text-xs font-semibold text-emerald-600 uppercase tracking-wide">Área</label>
-                <p class="mt-1 text-lg font-bold text-gray-800">{{ solicitud.area.nombre }}</p>
+              <div v-if="solicitud.area" class="bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-500/20 dark:to-teal-500/10 rounded-xl p-4 border border-emerald-100 dark:border-emerald-500/40">
+                <label class="text-xs font-semibold text-emerald-600 dark:text-emerald-200 uppercase tracking-wide">Área</label>
+                <p class="mt-1 text-lg font-bold text-gray-800 dark:text-slate-100">{{ solicitud.area.nombre }}</p>
               </div>
 
               <div class="grid md:grid-cols-2 gap-4">
-                <div v-if="solicitud.tamano" class="bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl p-4 border border-orange-100">
-                  <label class="text-xs font-semibold text-orange-600 uppercase tracking-wide">Tamaño</label>
-                  <p class="mt-1 text-lg font-bold text-gray-800 capitalize">{{ solicitud.tamano }}</p>
+                <div v-if="solicitud.tamano" class="bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-500/20 dark:to-amber-500/10 rounded-xl p-4 border border-orange-100 dark:border-orange-500/40">
+                  <label class="text-xs font-semibold text-orange-600 dark:text-orange-200 uppercase tracking-wide">Tamaño</label>
+                  <p class="mt-1 text-lg font-bold text-gray-800 dark:text-slate-100 capitalize">{{ solicitud.tamano }}</p>
                 </div>
-                <div class="bg-gradient-to-br from-cyan-50 to-blue-50 rounded-xl p-4 border border-cyan-100">
-                  <label class="text-xs font-semibold text-cyan-600 uppercase tracking-wide">Cantidad</label>
-                  <p class="mt-1 text-lg font-bold text-gray-800">{{ solicitud.cantidad }}</p>
+                <div class="bg-gradient-to-br from-cyan-50 to-blue-50 dark:from-cyan-500/20 dark:to-blue-500/10 rounded-xl p-4 border border-cyan-100 dark:border-cyan-500/40">
+                  <label class="text-xs font-semibold text-cyan-600 dark:text-cyan-200 uppercase tracking-wide">Cantidad</label>
+                  <p class="mt-1 text-lg font-bold text-gray-800 dark:text-slate-100">{{ solicitud.cantidad }}</p>
                 </div>
               </div>
 
-              <div v-if="solicitud.descripcion" class="bg-gray-50 rounded-xl p-4 border border-gray-200">
-                <label class="text-xs font-semibold text-gray-600 uppercase tracking-wide">Descripción</label>
-                <p class="mt-2 text-gray-700 leading-relaxed">{{ solicitud.descripcion }}</p>
+              <div v-if="solicitud.descripcion" class="bg-gray-50 dark:bg-slate-800/70 rounded-xl p-4 border border-gray-200 dark:border-slate-700">
+                <label class="text-xs font-semibold text-gray-600 dark:text-slate-300 uppercase tracking-wide">Descripción</label>
+                <p class="mt-2 text-gray-700 dark:text-slate-200 leading-relaxed">{{ solicitud.descripcion }}</p>
               </div>
 
-              <div v-if="solicitud.notas" class="bg-amber-50 rounded-xl p-4 border border-amber-200">
-                <label class="text-xs font-semibold text-amber-600 uppercase tracking-wide flex items-center gap-1">
+              <div v-if="solicitud.notas" class="bg-amber-50 dark:bg-amber-500/20 rounded-xl p-4 border border-amber-200 dark:border-amber-500/40">
+                <label class="text-xs font-semibold text-amber-600 dark:text-amber-200 uppercase tracking-wide flex items-center gap-1">
                   <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                     <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z"/>
                   </svg>
                   Notas Adicionales
                 </label>
-                <p class="mt-2 text-gray-700 leading-relaxed">{{ solicitud.notas }}</p>
+                <p class="mt-2 text-gray-700 dark:text-slate-200 leading-relaxed">{{ solicitud.notas }}</p>
               </div>
 
-              <div v-if="solicitud.motivo_rechazo" class="bg-red-50 rounded-xl p-4 border border-red-200">
-                <label class="text-xs font-semibold text-red-600 uppercase tracking-wide flex items-center gap-1">
+              <div v-if="solicitud.motivo_rechazo" class="bg-red-50 dark:bg-rose-500/20 rounded-xl p-4 border border-red-200 dark:border-rose-500/40">
+                <label class="text-xs font-semibold text-red-600 dark:text-rose-200 uppercase tracking-wide flex items-center gap-1">
                   <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                     <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
                   </svg>
                   Motivo del Rechazo
                 </label>
-                <p class="mt-2 text-gray-700 leading-relaxed whitespace-pre-wrap">{{ solicitud.motivo_rechazo }}</p>
+                <p class="mt-2 text-gray-700 dark:text-slate-200 leading-relaxed whitespace-pre-wrap">{{ solicitud.motivo_rechazo }}</p>
               </div>
             </div>
           </div>
@@ -204,10 +204,10 @@ function canPreview(mime) {
                     <th class="text-right px-6 py-4 text-sm font-bold text-[#1E1C8F] uppercase tracking-wider">Cantidad</th>
                   </tr>
                 </thead>
-                <tbody class="divide-y divide-gray-100">
-                  <tr v-for="t in solicitud.tamanos" :key="t.id" class="hover:bg-upper-50 transition-colors duration-150">
-                    <td class="px-6 py-4 text-gray-800 font-medium capitalize">{{ t.tamano }}</td>
-                    <td class="px-6 py-4 text-right text-gray-800 font-bold">{{ t.cantidad }}</td>
+                <tbody class="divide-y divide-gray-100 dark:divide-slate-800">
+                  <tr v-for="t in solicitud.tamanos" :key="t.id" class="hover:bg-upper-50 dark:hover:bg-slate-800/60 transition-colors duration-150">
+                    <td class="px-6 py-4 text-gray-800 dark:text-slate-100 font-medium capitalize">{{ t.tamano }}</td>
+                    <td class="px-6 py-4 text-right text-gray-800 dark:text-slate-100 font-bold">{{ t.cantidad }}</td>
                   </tr>
                 </tbody>
               </table>
@@ -215,7 +215,7 @@ function canPreview(mime) {
           </div>
 
           <!-- Archivos Adjuntos -->
-          <div v-if="solicitud.archivos?.length" class="bg-white rounded-2xl shadow-lg border-2 border-indigo-100 overflow-hidden hover:shadow-xl transition-shadow duration-300">
+          <div v-if="solicitud.archivos?.length" class="bg-white dark:bg-slate-900 rounded-2xl shadow-lg border-2 border-indigo-100 dark:border-slate-800 overflow-hidden hover:shadow-xl transition-shadow duration-300">
             <div class="px-6 py-4 bg-[#1E1C8F]">
               <h2 class="text-xl font-bold text-white flex items-center gap-2">
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -226,17 +226,17 @@ function canPreview(mime) {
             </div>
             <div class="p-4 space-y-2">
            <div v-for="archivo in solicitud.archivos" :key="archivo.id" 
-             class="flex items-center justify-between p-4 bg-white rounded-xl border border-gray-200 hover:border-upper-200 hover:shadow-md transition-all duration-200">
+             class="flex items-center justify-between p-4 bg-white dark:bg-slate-900/70 rounded-xl border border-gray-200 dark:border-slate-700 hover:border-upper-200 dark:hover:border-indigo-400/60 hover:shadow-md transition-all duration-200">
                 <div class="flex items-center gap-4">
-                  <div class="p-3 rounded-xl bg-[#1E1C8F]">
+                  <div class="p-3 rounded-xl bg-[#1E1C8F] bg-opacity-95">
                     <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                     </svg>
                   </div>
                   <div>
-                    <div class="font-semibold text-gray-800">{{ archivo.nombre_original || archivo.path?.split('/').pop() || 'Archivo' }}</div>
-                    <div class="text-sm text-gray-500 flex items-center gap-2 mt-1">
-                      <span class="px-2 py-0.5 bg-gray-200 rounded text-xs font-medium">
+                    <div class="font-semibold text-gray-800 dark:text-slate-100">{{ archivo.nombre_original || archivo.path?.split('/').pop() || 'Archivo' }}</div>
+                    <div class="text-sm text-gray-500 dark:text-slate-400 flex items-center gap-2 mt-1">
+                      <span class="px-2 py-0.5 bg-gray-200 dark:bg-slate-700 rounded text-xs font-medium">
                         {{ archivo.size ? (archivo.size / 1024).toFixed(0) : '0' }} KB
                       </span>
                       <span v-if="archivo.mime" class="text-xs">{{ archivo.mime }}</span>
@@ -246,7 +246,7 @@ function canPreview(mime) {
                 <div class="flex gap-2">
       <button v-if="canPreview(archivo.mime)"
         @click="openPreview(archivo)"
-        class="px-4 py-2 rounded-xl bg-gray-600 text-white font-medium hover:bg-gray-700 shadow-md hover:shadow-lg transform hover:scale-105 transition-all duration-200 flex items-center gap-2">
+        class="px-4 py-2 rounded-xl bg-gray-600 dark:bg-slate-700 text-white font-medium hover:bg-gray-700 dark:hover:bg-slate-600 shadow-md hover:shadow-lg transform hover:scale-105 transition-all duration-200 flex items-center gap-2">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
@@ -270,7 +270,7 @@ function canPreview(mime) {
         <div class="lg:col-span-1 space-y-6">
           
           <!-- Cotización Sticky Card -->
-          <div class="bg-white rounded-2xl shadow-lg border-2 border-emerald-100 overflow-hidden sticky top-6 hover:shadow-xl transition-shadow duration-300">
+          <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-lg border-2 border-emerald-100 dark:border-emerald-500/30 overflow-hidden sticky top-6 hover:shadow-xl transition-shadow duration-300">
             <div class="px-6 py-4 bg-[#1E1C8F]">
               <h2 class="text-xl font-bold text-white flex items-center gap-2">
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -284,15 +284,15 @@ function canPreview(mime) {
               <!-- Items -->
               <div class="space-y-3 mb-4">
        <div v-for="(l,i) in cotizacion.lines" :key="i" 
-         class="bg-gray-50 rounded-xl p-4 border border-upper-50">
-                  <div class="font-semibold text-gray-800 mb-2">{{ l.label }}</div>
+         class="bg-gray-50 dark:bg-slate-800/70 rounded-xl p-4 border border-upper-50 dark:border-slate-700">
+                  <div class="font-semibold text-gray-800 dark:text-slate-100 mb-2">{{ l.label }}</div>
                   <div class="grid grid-cols-2 gap-2 text-sm">
-                    <div class="text-gray-600">Cantidad:</div>
-                    <div class="text-right font-bold text-gray-800">{{ l.cantidad }}</div>
-                    <div class="text-gray-600">P. Unitario:</div>
-                    <div class="text-right font-bold text-[#1E1C8F]">${{ (l.pu||0).toFixed(2) }}</div>
-                    <div class="text-gray-600">Subtotal:</div>
-                    <div class="text-right font-bold text-gray-800">${{ (l.subtotal||0).toFixed(2) }}</div>
+                    <div class="text-gray-600 dark:text-slate-400">Cantidad:</div>
+                    <div class="text-right font-bold text-gray-800 dark:text-slate-100">{{ l.cantidad }}</div>
+                    <div class="text-gray-600 dark:text-slate-400">P. Unitario:</div>
+                    <div class="text-right font-bold text-[#1E1C8F] dark:text-indigo-300">${{ (l.pu||0).toFixed(2) }}</div>
+                    <div class="text-gray-600 dark:text-slate-400">Subtotal:</div>
+                    <div class="text-right font-bold text-gray-800 dark:text-slate-100">${{ (l.subtotal||0).toFixed(2) }}</div>
                   </div>
                 </div>
               </div>
@@ -300,12 +300,12 @@ function canPreview(mime) {
               <!-- Totales -->
               <div class="border-t-2 border-upper-50 pt-4 space-y-3">
                 <div class="flex justify-between items-center text-sm">
-                  <span class="text-gray-600 font-medium">Subtotal:</span>
-                  <span class="font-bold text-gray-800 text-lg">${{ (cotizacion.subtotal||0).toFixed(2) }}</span>
+                  <span class="text-gray-600 dark:text-slate-400 font-medium">Subtotal:</span>
+                  <span class="font-bold text-gray-800 dark:text-slate-100 text-lg">${{ (cotizacion.subtotal||0).toFixed(2) }}</span>
                 </div>
                 <div class="flex justify-between items-center text-sm">
-                  <span class="text-gray-600 font-medium">IVA ({{ ((cotizacion.iva_rate||0)*100).toFixed(0) }}%):</span>
-                  <span class="font-bold text-gray-800 text-lg">${{ (cotizacion.iva||0).toFixed(2) }}</span>
+                  <span class="text-gray-600 dark:text-slate-400 font-medium">IVA ({{ ((cotizacion.iva_rate||0)*100).toFixed(0) }}%):</span>
+                  <span class="font-bold text-gray-800 dark:text-slate-100 text-lg">${{ (cotizacion.iva||0).toFixed(2) }}</span>
                 </div>
                 <div class="rounded-xl px-4 py-3 flex justify-between items-center bg-[#FF7A00]">
                   <span class="text-white font-bold text-lg">Total:</span>
@@ -316,7 +316,7 @@ function canPreview(mime) {
 
             <!-- Modo pendiente por tamaños: sin líneas, totales en cero -->
             <div v-else-if="cotizacion?.mode === 'pendiente_tamanos'" class="p-5 space-y-4">
-              <div class="px-4 py-3 rounded-xl bg-blue-50 border-2 border-blue-200 text-blue-800">
+              <div class="px-4 py-3 rounded-xl bg-blue-50 dark:bg-blue-500/20 border-2 border-blue-200 dark:border-blue-500/40 text-blue-800 dark:text-blue-100">
                 <div class="flex items-start gap-3">
                   <svg class="w-5 h-5 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
                     <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
@@ -330,12 +330,12 @@ function canPreview(mime) {
 
               <div class="border-t-2 border-upper-50 pt-4 space-y-3">
                 <div class="flex justify-between items-center text-sm">
-                  <span class="text-gray-600 font-medium">Subtotal:</span>
-                  <span class="font-bold text-gray-800 text-lg">$0.00</span>
+                  <span class="text-gray-600 dark:text-slate-400 font-medium">Subtotal:</span>
+                  <span class="font-bold text-gray-800 dark:text-slate-100 text-lg">$0.00</span>
                 </div>
                 <div class="flex justify-between items-center text-sm">
-                  <span class="text-gray-600 font-medium">IVA:</span>
-                  <span class="font-bold text-gray-800 text-lg">$0.00</span>
+                  <span class="text-gray-600 dark:text-slate-400 font-medium">IVA:</span>
+                  <span class="font-bold text-gray-800 dark:text-slate-100 text-lg">$0.00</span>
                 </div>
                 <div class="rounded-xl px-4 py-3 flex justify-between items-center bg-[#FF7A00]">
                   <span class="text-white font-bold text-lg">Total:</span>
@@ -346,7 +346,7 @@ function canPreview(mime) {
           </div>
 
           <!-- Generar OT Card - Solo para coordinadores y admin -->
-          <div v-if="can?.generar_ot" class="bg-white rounded-2xl shadow-lg border-2 border-gray-100 overflow-hidden hover:shadow-xl transition-shadow duration-300">
+          <div v-if="can?.generar_ot" class="bg-white dark:bg-slate-900 rounded-2xl shadow-lg border-2 border-gray-100 dark:border-slate-800 overflow-hidden hover:shadow-xl transition-shadow duration-300">
             <div class="bg-gradient-to-r from-gray-700 to-gray-900 px-6 py-4">
               <h3 class="text-lg font-bold text-white flex items-center gap-2">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -366,7 +366,7 @@ function canPreview(mime) {
                 </a>
               </template>
               <template v-else>
-                <div class="px-4 py-3 rounded-xl bg-gradient-to-r from-yellow-100 to-amber-100 border-2 border-yellow-300 text-yellow-800 text-center">
+                <div class="px-4 py-3 rounded-xl bg-gradient-to-r from-yellow-100 to-amber-100 dark:from-yellow-500/20 dark:to-amber-500/10 border-2 border-yellow-300 dark:border-amber-500/40 text-yellow-800 dark:text-amber-100 text-center">
                   <svg class="w-5 h-5 inline-block mr-2" fill="currentColor" viewBox="0 0 20 20">
                     <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
                   </svg>

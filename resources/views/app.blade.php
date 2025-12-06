@@ -7,9 +7,20 @@
     <title inertia>{{ config('app.name', 'Laravel') }}</title>
 
     <!-- Favicon / Window icon -->
-    <link rel="icon" type="image/png" href="{{ asset('img/upper_control1.png') }}">
-    <link rel="shortcut icon" href="{{ asset('img/upper_control1.png') }}">
-    <meta name="theme-color" content="#0b2330">
+    <link rel="icon" type="image/png" href="{{ asset('img/upper_control192.png') }}">
+    <link rel="shortcut icon" href="{{ asset('img/upper_control192.png') }}">
+    <!-- Explicit Apple touch icons for iOS/Safari (bigger source is ok) -->
+    <link rel="apple-touch-icon" sizes="180x180" href="{{ asset('img/upper_control512.png') }}">
+    <link rel="apple-touch-icon" sizes="152x152" href="{{ asset('img/upper_control512.png') }}">
+    <!-- Manifest with cache-bust query to help browsers fetch the updated file -->
+    <link rel="manifest" href="{{ asset('manifest.json') }}?v=2">
+    <meta name="color-scheme" content="light dark">
+    <meta name="theme-color" content="#F5F7FA">
+    <meta name="theme-color" content="#F5F7FA" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#0B2330" media="(prefers-color-scheme: dark)">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta name="mobile-web-app-capable" content="yes">
 
         <!-- Fonts -->
         <link rel="preconnect" href="https://fonts.bunny.net">

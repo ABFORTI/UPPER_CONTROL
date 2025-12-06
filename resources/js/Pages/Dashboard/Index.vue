@@ -70,20 +70,20 @@ function nav (path) {
 </script>
 
 <template>
-<div class="-mx-4 sm:-mx-6 lg:-mx-8"> 
-  <div class="min-h-screen bg-[#F9FAFB]">
+<div class="-mx-4 sm:-mx-6 lg:-mx-8">
+  <div class="min-h-screen bg-[#F9FAFB] dark:bg-[#0B1521]">
     <div class="w-full max-w-none px-4 sm:px-6 lg:px-8 py-6 space-y-8">
 
 
       <!-- Header + filtros -->
       <!-- HEADER igual al de la imagen -->
-<div class="border-b border-slate-200 pb-3">
+<div class="border-b border-slate-200 dark:border-slate-800 pb-3">
   <div class="flex flex-wrap items-center justify-between gap-3">
     <!-- Marca + título -->
       <div class="flex items-center gap-3">
       <div class="flex items-center gap-3">
-  <img :src="asset('img/upper_control.png')" alt="Upper Control" loading="lazy" class="h-12 w-auto" />
-        <h1 class="text-[22px] leading-6 font-semibold text-slate-900">Dashboard</h1>
+    <img :src="asset('img/upper_control.png')" alt="Upper Control" loading="lazy" class="h-12 w-auto" />
+      <h1 class="text-[22px] leading-6 font-semibold text-slate-900 dark:text-slate-100">Dashboard</h1>
       </div>
     </div>
 
@@ -93,8 +93,8 @@ function nav (path) {
       <select
         name="year"
         :value="props.filters.year"
-        class="w-full sm:w-auto min-w-0 sm:min-w-[5rem] px-3 py-2 text-sm border border-slate-300 rounded-2xl bg-white text-slate-900 shadow-sm
-               focus:outline-none focus:ring-2 focus:ring-[#006657]/30 focus:border-[#006657]"
+         class="w-full sm:w-auto min-w-0 sm:min-w-[5rem] px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm
+           focus:outline-none focus:ring-2 focus:ring-[#006657]/30 focus:border-[#006657]"
       >
         <option v-for="y in [props.filters.year-2, props.filters.year-1, props.filters.year, props.filters.year+1]" :key="y" :value="y">
           {{ y }}
@@ -105,8 +105,8 @@ function nav (path) {
       <select
         name="week"
         :value="props.filters.week"
-        class="w-full sm:w-auto min-w-0 sm:min-w-[7rem] px-3 py-2 text-sm border border-slate-300 rounded-2xl bg-white text-slate-900 shadow-sm
-               focus:outline-none focus:ring-2 focus:ring-[#006657]/30 focus:border-[#006657]"
+         class="w-full sm:w-auto min-w-0 sm:min-w-[7rem] px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm
+           focus:outline-none focus:ring-2 focus:ring-[#006657]/30 focus:border-[#006657]"
       >
         <option v-for="w in 53" :key="w" :value="w">Semana {{ w }}</option>
       </select>
@@ -116,8 +116,8 @@ function nav (path) {
         v-if="centros.length"
         name="centro"
         :value="props.filters.centro"
-        class="w-full sm:w-auto min-w-0 sm:min-w-[15rem] px-3 py-2 text-sm border border-slate-300 rounded-2xl bg-white text-slate-900 shadow-sm
-               focus:outline-none focus:ring-2 focus:ring-[#006657]/30 focus:border-[#006657]"
+         class="w-full sm:w-auto min-w-0 sm:min-w-[15rem] px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm
+           focus:outline-none focus:ring-2 focus:ring-[#006657]/30 focus:border-[#006657]"
       >
         <option value="">— Todos los Centros —</option>
         <option v-for="c in centros" :key="c.id" :value="c.id">{{ c.nombre }}</option>
@@ -135,16 +135,16 @@ function nav (path) {
 
       <a
         :href="urlOtsXlsx"
-        class="w-full sm:w-auto px-3 py-2 rounded-2xl text-sm font-medium border border-slate-300 bg-white text-slate-700
-               hover:bg-slate-50 shadow-sm"
+         class="w-full sm:w-auto px-3 py-2 rounded-2xl text-sm font-medium border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200
+           hover:bg-slate-50 dark:hover:bg-slate-800 shadow-sm"
       >
         OTs XLSX
       </a>
 
       <a
         :href="urlOtsCsv"
-        class="w-full sm:w-auto px-3 py-2 rounded-2xl text-sm font-medium border border-slate-300 bg-white text-slate-700
-               hover:bg-slate-50 shadow-sm"
+         class="w-full sm:w-auto px-3 py-2 rounded-2xl text-sm font-medium border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200
+           hover:bg-slate-50 dark:hover:bg-slate-800 shadow-sm"
       >
         OTs CSV
       </a>
@@ -159,40 +159,40 @@ function nav (path) {
         <div role="button" @click="nav('solicitudes')" title="Ver solicitudes"
              class="cursor-pointer rounded-2xl p-[1px] shadow-md hover:shadow-lg active:scale-[0.995] transition bg-gradient-to-br"
              :style="{ backgroundImage: `linear-gradient(135deg, ${BRAND.green}, #0ea5e9)` }">
-          <div class="rounded-2xl bg-white p-5 h-full">
+          <div class="rounded-2xl bg-white dark:bg-slate-900 p-5 h-full">
             <div class="flex items-center justify-between">
-              <div class="text-[11px] uppercase tracking-wide text-slate-600">Solicitudes</div>
+              <div class="text-[11px] uppercase tracking-wide text-slate-600 dark:text-slate-300">Solicitudes</div>
               <span class="h-2 w-2 rounded-full" :style="{ background: BRAND.gold }"></span>
             </div>
-            <div class="mt-2 text-4xl font-bold text-slate-900">{{ kpis.solicitudes ?? 0 }}</div>
+            <div class="mt-2 text-4xl font-bold text-slate-900 dark:text-white">{{ kpis.solicitudes ?? 0 }}</div>
           </div>
         </div>
 
         <div role="button" @click="nav('ordenes')" title="Ver órdenes de trabajo"
              class="cursor-pointer rounded-2xl p-[1px] shadow-md hover:shadow-lg active:scale-[0.995] transition"
              style="background-image:linear-gradient(135deg,#5b5bd6,#c026d3)">
-          <div class="rounded-2xl bg-white p-5 h-full">
+          <div class="rounded-2xl bg-white dark:bg-slate-900 p-5 h-full">
             <div class="flex items-center justify-between">
-              <div class="text-[11px] uppercase tracking-wide text-slate-600">OTs Totales</div>
+              <div class="text-[11px] uppercase tracking-wide text-slate-600 dark:text-slate-300">OTs Totales</div>
               <span class="h-2 w-2 rounded-full" :style="{ background: BRAND.gold }"></span>
             </div>
-            <div class="mt-2 text-4xl font-bold text-slate-900">{{ kpis.ots ?? 0 }}</div>
-            <div class="text-[11px] text-slate-600 mt-1">Completadas: {{ kpis.ots_completadas ?? 0 }} · Aut Cliente: {{ kpis.ots_aut_cliente ?? 0 }}</div>
+            <div class="mt-2 text-4xl font-bold text-slate-900 dark:text-white">{{ kpis.ots ?? 0 }}</div>
+            <div class="text-[11px] text-slate-600 dark:text-slate-400 mt-1">Completadas: {{ kpis.ots_completadas ?? 0 }} · Aut Cliente: {{ kpis.ots_aut_cliente ?? 0 }}</div>
           </div>
         </div>
 
         <div role="button" @click="nav('calidad')" title="Ir a Calidad"
              class="cursor-pointer rounded-2xl p-[1px] shadow-md hover:shadow-lg active:scale-[0.995] transition"
              style="background-image:linear-gradient(135deg,#f59e0b,#f43f5e)">
-          <div class="rounded-2xl bg-white p-5 h-full">
-            <div class="text-[11px] uppercase tracking-wide text-slate-600">Calidad Pendiente</div>
-            <div class="mt-2 text-4xl font-bold text-slate-900">{{ kpis.ots_cal_pend ?? 0 }}</div>
-            <div class="mt-3 h-2 bg-slate-200 rounded-full overflow-hidden">
+          <div class="rounded-2xl bg-white dark:bg-slate-900 p-5 h-full">
+            <div class="text-[11px] uppercase tracking-wide text-slate-600 dark:text-slate-300">Calidad Pendiente</div>
+            <div class="mt-2 text-4xl font-bold text-slate-900 dark:text-white">{{ kpis.ots_cal_pend ?? 0 }}</div>
+            <div class="mt-3 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
               <div class="h-2 rounded-full"
                    style="background:#111827"
                    :style="{ width: (kpis.ots_completadas>0 ? ((kpis.ots_cal_pend / kpis.ots_completadas)*100).toFixed(1) : 0)+'%' }"></div>
             </div>
-            <div class="text-[11px] text-slate-600 mt-1">
+            <div class="text-[11px] text-slate-600 dark:text-slate-400 mt-1">
               {{ kpis.ots_completadas > 0 ? ((kpis.ots_cal_pend / kpis.ots_completadas) * 100).toFixed(1) : 0 }}% de OTs completas
             </div>
           </div>
@@ -201,45 +201,45 @@ function nav (path) {
         <div role="button" @click="nav('gastos')" title="Ver Gastos"
              class="cursor-pointer rounded-2xl p-[1px] shadow-md hover:shadow-lg active:scale-[0.995] transition"
              style="background-image:linear-gradient(135deg,#10b981,#06b6d4)">
-          <div class="rounded-2xl bg-white p-5 h-full">
+          <div class="rounded-2xl bg-white dark:bg-slate-900 p-5 h-full">
             <div class="flex items-center justify-between">
-              <div class="text-[11px] uppercase tracking-wide text-slate-600">Gastos (Periodo)</div>
+              <div class="text-[11px] uppercase tracking-wide text-slate-600 dark:text-slate-300">Gastos (Periodo)</div>
               <span class="h-2 w-2 rounded-full" :style="{ background: BRAND.gold }"></span>
             </div>
-            <div class="mt-2 text-2xl font-bold text-slate-900">{{ fmtCurrency(kpis.gastos || 0) }}</div>
-            <div class="text-[11px] text-slate-600 mt-1">Suma de totales de OTs</div>
+            <div class="mt-2 text-2xl font-bold text-slate-900 dark:text-white">{{ fmtCurrency(kpis.gastos || 0) }}</div>
+            <div class="text-[11px] text-slate-600 dark:text-slate-400 mt-1">Suma de totales de OTs</div>
           </div>
         </div>
 
         <div role="button" @click="nav('notificaciones')" title="Ver notificaciones"
              class="cursor-pointer rounded-2xl p-[1px] shadow-md hover:shadow-lg active:scale-[0.995] transition"
              :style="{ backgroundImage: `linear-gradient(135deg, ${BRAND.gold}, #0ea5e9)` }">
-          <div class="rounded-2xl bg-white p-5 h-full">
+          <div class="rounded-2xl bg-white dark:bg-slate-900 p-5 h-full">
             <div class="flex items-center justify-between">
-              <div class="text-[11px] uppercase tracking-wide text-slate-600">Notificaciones</div>
+              <div class="text-[11px] uppercase tracking-wide text-slate-600 dark:text-slate-300">Notificaciones</div>
               <span class="h-2 w-2 rounded-full" :style="{ background: BRAND.green }"></span>
             </div>
-            <div class="mt-2 text-4xl font-bold text-slate-900">{{ Number(kpis.notificaciones || 0) }}</div>
-            <div class="text-[11px] text-slate-600 mt-1">No leídas</div>
+            <div class="mt-2 text-4xl font-bold text-slate-900 dark:text-white">{{ Number(kpis.notificaciones || 0) }}</div>
+            <div class="text-[11px] text-slate-600 dark:text-slate-400 mt-1">No leídas</div>
           </div>
         </div>
       </div>
 
       <!-- Top servicios pedidos -->
       <div class="grid lg:grid-cols-1 gap-6">
-        <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-          <h2 class="font-semibold mb-3 text-sm tracking-wide uppercase text-slate-700">Servicios más pedidos</h2>
-          <div v-if="(series.top_servicios_pedidos || []).length === 0" class="text-sm text-slate-500">No hay datos en el periodo.</div>
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
+          <h2 class="font-semibold mb-3 text-sm tracking-wide uppercase text-slate-700 dark:text-slate-200">Servicios más pedidos</h2>
+          <div v-if="(series.top_servicios_pedidos || []).length === 0" class="text-sm text-slate-500 dark:text-slate-400">No hay datos en el periodo.</div>
           <ul v-else class="space-y-3">
             <li v-for="(s,idx) in series.top_servicios_pedidos" :key="s.servicio" class="flex items-center gap-3">
               <div class="flex-1">
-                <div class="text-sm font-medium text-slate-900">{{ s.servicio }}</div>
-                <div class="text-xs text-slate-500">Pedidos: {{ s.pedidos }}</div>
-                <div class="mt-2 h-2 bg-slate-100 rounded-full overflow-hidden">
+                <div class="text-sm font-medium text-slate-900 dark:text-white">{{ s.servicio }}</div>
+                <div class="text-xs text-slate-500 dark:text-slate-400">Pedidos: {{ s.pedidos }}</div>
+                <div class="mt-2 h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
                   <div class="h-2 rounded-full bg-indigo-600" :style="{ width: ((s.pedidos / Math.max(1, series.top_servicios_pedidos[0].pedidos)) * 100) + '%' }"></div>
                 </div>
               </div>
-              <div class="w-16 text-right font-semibold text-slate-700">{{ s.pedidos }}</div>
+              <div class="w-16 text-right font-semibold text-slate-700 dark:text-slate-200">{{ s.pedidos }}</div>
             </li>
           </ul>
         </div>
@@ -247,48 +247,48 @@ function nav (path) {
 
       <!-- Distribuciones (sin la tarjeta de Distribución OTs) -->
       <div class="grid lg:grid-cols-3 gap-6">
-        <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
           <div class="flex items-center justify-between mb-3">
-            <h2 class="font-semibold text-sm tracking-wide uppercase text-slate-700">Calidad y Facturación</h2>
+            <h2 class="font-semibold text-sm tracking-wide uppercase text-slate-700 dark:text-slate-200">Calidad y Facturación</h2>
             <div class="flex items-center gap-2 text-xs">
               <button type="button" @click="nav('calidad')"
-                      class="px-2 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100">Calidad</button>
+                      class="px-2 py-1 rounded-full bg-indigo-50 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-200 border border-indigo-200 dark:border-indigo-500/40 hover:bg-indigo-100 dark:hover:bg-indigo-500/30">Calidad</button>
               <button type="button" @click="nav('facturas')"
-                      class="px-2 py-1 rounded-full bg-fuchsia-50 text-fuchsia-700 border border-fuchsia-200 hover:bg-fuchsia-100">Facturas</button>
+                      class="px-2 py-1 rounded-full bg-fuchsia-50 dark:bg-fuchsia-500/20 text-fuchsia-700 dark:text-fuchsia-200 border border-fuchsia-200 dark:border-fuchsia-500/40 hover:bg-fuchsia-100 dark:hover:bg-fuchsia-500/30">Facturas</button>
             </div>
           </div>
 
           <div class="space-y-2 text-sm mb-4">
             <div class="flex items-center gap-2">
-              <span class="w-32 text-slate-600">Calidad Pend.</span>
-              <div class="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden">
+              <span class="w-32 text-slate-600 dark:text-slate-300">Calidad Pend.</span>
+              <div class="flex-1 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
                 <div class="h-2 rounded-full bg-amber-500"
                      :style="{ width: calidadProg.total ? ((calidadProg.pend / calidadProg.total) * 100)+'%' : '0%' }"></div>
               </div>
-              <span class="w-10 text-right tabular-nums">{{ calidadProg.pend }}</span>
+              <span class="w-10 text-right tabular-nums text-slate-700 dark:text-slate-200">{{ calidadProg.pend }}</span>
             </div>
             <div class="flex items-center gap-2">
-              <span class="w-32 text-slate-600">Calidad Val.</span>
-              <div class="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden">
+              <span class="w-32 text-slate-600 dark:text-slate-300">Calidad Val.</span>
+              <div class="flex-1 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
                 <div class="h-2 rounded-full"
                      :style="{ width: calidadProg.total ? ((calidadProg.val / calidadProg.total) * 100)+'%' : '0%', background: BRAND.green }"></div>
               </div>
-              <span class="w-10 text-right tabular-nums">{{ calidadProg.val }}</span>
+              <span class="w-10 text-right tabular-nums text-slate-700 dark:text-slate-200">{{ calidadProg.val }}</span>
             </div>
             <div class="flex items-center gap-2">
-              <span class="w-32 text-slate-600">Calidad Rech.</span>
-              <div class="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden">
+              <span class="w-32 text-slate-600 dark:text-slate-300">Calidad Rech.</span>
+              <div class="flex-1 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
                 <div class="h-2 rounded-full bg-rose-500"
                      :style="{ width: calidadProg.total ? ((calidadProg.rech / calidadProg.total) * 100)+'%' : '0%' }"></div>
               </div>
-              <span class="w-10 text-right tabular-nums">{{ calidadProg.rech }}</span>
+              <span class="w-10 text-right tabular-nums text-slate-700 dark:text-slate-200">{{ calidadProg.rech }}</span>
             </div>
           </div>
 
           <div class="space-y-2 text-sm">
             <div class="flex items-center gap-2" v-for="(val,label) in distribuciones.facturacion" :key="label">
-              <span class="w-32 capitalize text-slate-600">{{ label.replace('_',' ') }}</span>
-              <div class="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden">
+              <span class="w-32 capitalize text-slate-600 dark:text-slate-300">{{ label.replace('_',' ') }}</span>
+              <div class="flex-1 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
                 <div class="h-2 rounded-full"
                      :class="{
                        'bg-slate-500': label==='sin_factura',
@@ -298,43 +298,43 @@ function nav (path) {
                      }"
                      :style="{ width: pct(val, (kpis.ots||1))+'%', background: label==='pagado' ? BRAND.gold : undefined }"></div>
               </div>
-              <span class="w-10 text-right tabular-nums">{{ val }}</span>
+              <span class="w-10 text-right tabular-nums text-slate-700 dark:text-slate-200">{{ val }}</span>
             </div>
           </div>
         </div>
 
         <!-- Actividad de la semana (mini barras) -->
-        <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-          <h2 class="font-semibold mb-3 text-sm tracking-wide uppercase text-slate-700">Actividad de la semana</h2>
-          <div v-if="(series.ots_por_dia || []).length === 0" class="text-sm text-slate-500">Sin datos en el periodo.</div>
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
+          <h2 class="font-semibold mb-3 text-sm tracking-wide uppercase text-slate-700 dark:text-slate-200">Actividad de la semana</h2>
+          <div v-if="(series.ots_por_dia || []).length === 0" class="text-sm text-slate-500 dark:text-slate-400">Sin datos en el periodo.</div>
           <div v-else class="grid grid-cols-7 gap-3">
             <div v-for="d in series.ots_por_dia" :key="d.fecha" class="flex flex-col items-center">
-              <div class="w-full h-24 bg-slate-100 rounded-md overflow-hidden flex items-end">
+              <div class="w-full h-24 bg-slate-100 dark:bg-slate-700 rounded-md overflow-hidden flex items-end">
                 <div class="w-full bg-gradient-to-t from-indigo-600 to-sky-400" :style="{ height: pct(d.total, Math.max(1, ...series.ots_por_dia.map(x=>x.total))) + '%' }"></div>
               </div>
-              <div class="mt-1 text-[10px] text-slate-500">
+              <div class="mt-1 text-[10px] text-slate-500 dark:text-slate-400">
                 <span>{{ new Date(d.fecha + 'T00:00:00').toLocaleDateString('es-MX',{weekday:'short'}) }}</span>
                 <span class="ml-1 font-medium">{{ new Date(d.fecha + 'T00:00:00').getDate() }}</span>
               </div>
-              <div class="text-xs font-semibold text-slate-700">{{ d.total }}</div>
+              <div class="text-xs font-semibold text-slate-700 dark:text-slate-200">{{ d.total }}</div>
             </div>
           </div>
         </div>
 
         <!-- Usuarios del centro -->
         <div role="button" @click="nav('admin/users')" title="Administrar usuarios"
-             class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-          <h2 class="font-semibold mb-3 text-sm tracking-wide uppercase text-slate-700">Usuarios del centro</h2>
-          <div v-if="!usuarios_centro.length" class="text-sm text-slate-500">Selecciona un centro para ver sus usuarios.</div>
-          <ul v-else class="divide-y divide-slate-200">
+             class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
+          <h2 class="font-semibold mb-3 text-sm tracking-wide uppercase text-slate-700 dark:text-slate-200">Usuarios del centro</h2>
+          <div v-if="!usuarios_centro.length" class="text-sm text-slate-500 dark:text-slate-400">Selecciona un centro para ver sus usuarios.</div>
+          <ul v-else class="divide-y divide-slate-200 dark:divide-slate-800">
             <li v-for="u in usuarios_centro" :key="u.id" class="py-2 flex items-start justify-between gap-4">
               <div>
-                <div class="font-medium leading-5 text-slate-900">{{ u.nombre }}</div>
-                <div class="text-xs text-slate-500">{{ u.email }}</div>
+                <div class="font-medium leading-5 text-slate-900 dark:text-white">{{ u.nombre }}</div>
+                <div class="text-xs text-slate-500 dark:text-slate-400">{{ u.email }}</div>
               </div>
               <div class="flex flex-wrap gap-1">
                 <span v-for="r in u.roles" :key="r"
-                      class="px-2 py-0.5 rounded-full text-xs bg-slate-100 border border-slate-200 text-slate-700">
+                      class="px-2 py-0.5 rounded-full text-xs bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200">
                   {{ r }}
                 </span>
               </div>
