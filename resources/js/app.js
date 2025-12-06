@@ -6,12 +6,15 @@ import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import { createApp, h } from 'vue';
 import { ZiggyVue } from 'ziggy-js';
 import AuthenticatedLayout from './Layouts/AuthenticatedLayout.vue';
+import { initializeTheme } from './Support/useTheme';
 // Ziggy ya incluye las rutas automáticamente con Vite
 // Solo registra el plugin:
 // ...existing code...
 
 
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
+
+initializeTheme();
 
 // Simple gestor del splash principal (login/logout)
 function splashShow() {
@@ -276,6 +279,15 @@ createInertiaApp({
                     }
                 } catch { stopProc(); }
                 return Promise.reject(error);
+            });
+        }
+
+        // Registrar Service Worker para capacidades PWA
+        if (typeof window !== 'undefined' && 'serviceWorker' in navigator && !import.meta.env.DEV) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js').catch((error) => {
+                    console.error('SW registration failed', error);
+                });
             });
         }
         return app;

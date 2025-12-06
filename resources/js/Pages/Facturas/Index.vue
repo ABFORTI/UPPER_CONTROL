@@ -17,6 +17,7 @@ const centroSel = ref(props.filtros?.centro || '')
 const centroCostoSel = ref(props.filtros?.centro_costo || '')
 const yearSel = ref(props.filtros?.year || new Date().getFullYear())
 const weekSel = ref(props.filtros?.week || '')
+const estatuses = computed(() => props.estatuses || [])
 function applyFilter(){
   const params = {}
   if (sel.value) params.estatus = sel.value
@@ -29,6 +30,19 @@ function applyFilter(){
 }
 // Nota: el buscador fue removido; para limpiar filtros usa la píldora "Todos"
 
+const currentPeriod = computed(() => {
+  if (weekSel.value) return Number(weekSel.value)
+  const now = new Date()
+  const value = isoWeekNumber(now)
+  return value || '—'
+})
+
+const currentYear = computed(() => {
+  const parsed = Number(yearSel.value)
+  if (!Number.isNaN(parsed) && parsed) return parsed
+  return new Date().getFullYear()
+})
+
 // Utilidades UI
 function badgeClass(estatus){
   const e = String(estatus||'').toLowerCase()
@@ -38,54 +52,6 @@ function badgeClass(estatus){
   if (e === 'autorizada_cliente') return 'bg-blue-100 text-blue-700'
   if (e === 'sin_factura') return 'bg-slate-100 text-slate-700'
   return 'bg-gray-100 text-gray-700'
-}
-
-// Exportar/Copy (cliente)
-function toCsv(items){
-  const headers = ['ID','OT','Servicio','Producto','Centro','Periodo','Total','Estatus','Folio','Fecha']
-  const rows = items.map(f => [
-    f.id,
-    `OT ${f.orden_id ?? ''}`,
-    f.servicio ?? '',
-    f.descripcion_general ?? '',
-    f.centro ?? '',
-    isoWeekNumber(f.created_at) || '',
-    f.total ?? '',
-    f.estatus ?? '',
-    f.folio ?? '',
-    (f.created_at||'').slice(0,16)
-  ])
-  const csv = [headers, ...rows].map(r => r.map(v => `"${String(v??'').replaceAll('"','""')}"`).join(',')).join('\n')
-  return csv
-}
-function downloadExcel(){
-  const csv = toCsv(props.items || [])
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = 'facturacion.csv'
-  a.click()
-  URL.revokeObjectURL(url)
-}
-async function copyTable(){
-  try{
-    const tsv = (props.items||[]).map(f => [
-      f.id,
-      `OT ${f.orden_id??''}`,
-      f.servicio??'',
-      f.descripcion_general??'',
-      f.centro??'',
-      isoWeekNumber(f.created_at) || '',
-      f.total??'',
-      f.estatus??'',
-      f.folio??'',
-      (f.created_at||'').slice(0,16)
-    ].join('\t')).join('\n')
-    await navigator.clipboard.writeText(tsv)
-    // opcional: feedback simple
-    // alert('Copiado al portapapeles')
-  }catch(e){ console.warn('No se pudo copiar:', e) }
 }
 
 // Periodo (semana ISO) desde created_at
@@ -132,115 +98,137 @@ function goToPage(p){
 </script>
 
 <template>
-  <div class="p-4 sm:p-6 max-w-none mx-auto">
-    <!-- Header -->
-    <h1 class="text-3xl font-extrabold tracking-tight mb-2 uppercase">Facturación</h1>
+  <div class="max-w-none px-4 py-6 sm:px-6 lg:px-8">
+    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-5">
+      <h1 class="text-3xl font-extrabold tracking-tight uppercase text-slate-900">Facturación</h1>
+      <div class="mt-3 sm:mt-0 inline-flex flex-col gap-1 rounded-xl border border-slate-200 bg-slate-900/5 px-4 py-3 shadow-sm self-start sm:self-end">
+        <span class="text-[0.7rem] uppercase tracking-wide text-slate-500">Periodo actual</span>
+        <span class="text-xl font-semibold text-slate-900">Periodo {{ currentPeriod }}</span>
+        <span class="text-xs text-slate-500">Año {{ currentYear }}</span>
+      </div>
+    </div>
 
-    <!-- Contenedor principal en tarjeta blanca -->
-  <div class="rounded-xl border bg-white">
-      <!-- Acciones y filtros dentro de la tarjeta -->
-  <div class="px-4 sm:px-8 py-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
-        <div class="flex items-center gap-2">
-          <button @click="downloadExcel" class="px-4 py-2 rounded text-white" style="background:#22c55e">Excel</button>
-          <button @click="copyTable" class="px-4 py-2 rounded text-white" style="background:#64748b">Copiar</button>
-        </div>
-
-  <div class="flex flex-wrap items-center gap-2 w-full lg:w-auto">
-          <!-- Centro -->
-          <select v-model="centroSel" @change="applyFilter" class="w-full sm:w-auto min-w-0 sm:min-w-[180px] border p-2 rounded">
+    <div class="rounded-xl border bg-white shadow-sm overflow-hidden">
+      <div class="px-4 py-4 sm:px-6 lg:px-8 space-y-3 lg:space-y-0 lg:flex lg:flex-wrap lg:items-center lg:justify-start lg:gap-3">
+        <div class="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full lg:w-auto">
+          <select v-model="centroSel" @change="applyFilter" class="border p-2 rounded w-full sm:w-auto sm:min-w-[180px]">
             <option value="">Todos los centros</option>
             <option v-for="c in (props.centros||[])" :key="c.id" :value="c.id">{{ c.nombre }}</option>
           </select>
-          <!-- Centro de costos -->
-          <select v-model="centroCostoSel" @change="applyFilter" class="w-full sm:w-auto min-w-0 sm:min-w-[220px] border p-2 rounded">
-            <option value="">Todos los centros de costos</option>
+          <select v-model="centroCostoSel" @change="applyFilter" class="border p-2 rounded w-full sm:w-auto sm:min-w-[200px]">
+            <option value="">Todos los centros de costo</option>
             <option v-for="cc in (props.centrosCosto||[])" :key="cc.id" :value="cc.id">{{ cc.nombre }}</option>
           </select>
-          <!-- Año -->
-          <select v-model="yearSel" @change="applyFilter" class="w-full sm:w-auto min-w-0 sm:min-w-[100px] border p-2 rounded">
+          <select v-model="yearSel" @change="applyFilter" class="border p-2 rounded w-full sm:w-auto sm:min-w-[120px]">
             <option v-for="y in [yearSel-2, yearSel-1, yearSel, yearSel+1]" :key="y" :value="y">{{ y }}</option>
           </select>
-          
-          <!-- Semana -->
-          <select v-model="weekSel" @change="applyFilter" class="w-full sm:w-auto min-w-0 sm:min-w-[120px] border p-2 rounded">
+          <select v-model="weekSel" @change="applyFilter" class="border p-2 rounded w-full sm:w-auto sm:min-w-[140px]">
             <option value="">Periodos</option>
             <option v-for="w in 53" :key="w" :value="w">Periodo {{ w }}</option>
           </select>
-          
-          <!-- Filtros de estatus (píldoras) -->
-          <div class="flex flex-wrap items-center gap-2">
-            <button @click="sel=''; applyFilter()" :class="['px-4 py-2 rounded-full text-base border', sel==='' ? 'text-white border-[#1A73E8]' : 'bg-white text-slate-700 border-slate-300']" :style="sel==='' ? 'background-color: #1A73E8' : ''">Todos</button>
-            <button v-for="e in estatuses" :key="e" @click="sel=e; applyFilter()" :class="['px-4 py-2 rounded-full text-base border capitalize', sel===e ? 'text-white border-[#1A73E8]' : 'bg-white text-slate-700 border-slate-300']" :style="sel===e ? 'background-color: #1A73E8' : ''">{{ e }}</button>
+        </div>
+
+        <div class="flex flex-wrap gap-2 overflow-x-auto lg:overflow-visible w-full py-1 lg:w-auto">
+          <button @click="sel=''; applyFilter()" :class="['flex-shrink-0 px-4 py-2 rounded-full text-sm font-semibold border transition-colors', sel==='' ? 'text-white border-[#1A73E8]' : 'bg-white text-slate-700 border-slate-300']" :style="sel==='' ? 'background-color: #1A73E8' : ''">Todos</button>
+          <button v-for="e in estatuses" :key="e" @click="sel=e; applyFilter()" :class="['flex-shrink-0 px-4 py-2 rounded-full text-sm font-semibold border capitalize transition-colors', sel===e ? 'text-white border-[#1A73E8]' : 'bg-white text-slate-700 border-slate-300']" :style="sel===e ? 'background-color: #1A73E8' : ''">{{ e }}</button>
+        </div>
+      </div>
+
+      <div class="px-3 sm:px-4 lg:px-6 pb-4 hidden md:block">
+        <div class="rounded-lg shadow-sm border border-slate-200">
+          <div class="overflow-x-auto">
+            <table class="w-full text-[0.65rem] sm:text-[0.75rem] xl:text-xs 2xl:text-sm table-auto">
+              <thead class="bg-slate-800 text-white uppercase text-xs">
+                <tr>
+                  <th class="px-1.5 sm:px-2 py-2 text-left align-top w-[3.75rem] md:w-[4.25rem] xl:w-[4.75rem]">ID</th>
+                  <th class="px-1.5 sm:px-2 py-2 text-left align-top w-[7rem] md:w-[7.5rem] xl:w-[8.5rem]">OT</th>
+                  <th class="px-1.5 sm:px-2 py-2 text-left align-top w-[6rem] md:w-[6.5rem] xl:w-[7rem]">Servicio</th>
+                  <th class="px-1 sm:px-1.5 py-2 text-left align-top w-[7.5rem] md:w-[8.5rem] xl:w-[9rem] 2xl:w-[10rem]">Centro de costo</th>
+                  <th class="px-1 sm:px-1.5 py-2 text-left align-top w-[7rem] md:w-[7.5rem] xl:w-[8rem] 2xl:w-[8.5rem]">Centro</th>
+                  <th class="px-1.5 sm:px-2 py-2 text-left align-top w-[4.25rem] md:w-[4.75rem] xl:w-[5.25rem]">Periodo</th>
+                  <th class="px-1.5 sm:px-2 py-2 text-right align-top w-[5.5rem] md:w-[6.25rem] xl:w-[6.75rem]">Total</th>
+                  <th class="px-1.5 sm:px-2 py-2 text-left align-top w-[7rem]">Estatus</th>
+                  <th class="px-1.5 sm:px-2 py-2 text-left align-top w-[8.5rem] md:w-[10rem] xl:w-[14rem] 2xl:w-[18rem]">Folio</th>
+                  <th class="px-1.5 sm:px-2 py-2 text-left align-top w-[6rem] md:w-[6.5rem] xl:w-[7rem]">Fecha</th>
+                  <th class="px-1.5 sm:px-2 py-2 text-left align-top w-[6rem] md:w-[6.75rem] xl:w-[7.5rem]">Acción</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="f in pageItems" :key="f.id" class="border-t even:bg-slate-50 hover:bg-slate-100/60">
+                  <td class="px-1.5 sm:px-2 py-2.5 leading-snug font-mono whitespace-nowrap">#{{ f.id }}</td>
+                  <td class="px-1.5 sm:px-2 py-2.5 leading-snug whitespace-normal break-words w-[7rem] md:w-[7.5rem] xl:w-[8.5rem] 2xl:w-[10rem]">
+                    <template v-if="f.multi">
+                      <span :title="f.ots_label || ''">OTs: varias</span>
+                    </template>
+                    <template v-else-if="f.ots_label">OTs: {{ f.ots_label }}</template>
+                    <template v-else>OT #{{ f.orden_id }}</template>
+                  </td>
+                  <td class="px-1.5 sm:px-2 py-2.5 leading-snug whitespace-normal break-words w-[6rem] md:w-[6.5rem] xl:w-[7rem]">{{ f.servicio || '—' }}</td>
+                  <td class="px-1 sm:px-1.5 py-2.5 leading-snug whitespace-normal break-words w-[7.5rem] md:w-[8.5rem] xl:w-[9rem] 2xl:w-[10rem]">{{ f.centro_costo || '—' }}</td>
+                  <td class="px-1 sm:px-1.5 py-2.5 leading-snug whitespace-normal break-words w-[7rem] md:w-[7.5rem] xl:w-[8rem] 2xl:w-[8.5rem]">{{ f.centro || '—' }}</td>
+                  <td class="px-1.5 sm:px-2 py-2.5 leading-snug whitespace-nowrap text-center w-[4.25rem] md:w-[4.75rem] xl:w-[5.25rem]">{{ isoWeekNumber(f.created_at) || '—' }}</td>
+                  <td class="px-1.5 sm:px-2 py-2.5 leading-snug text-right whitespace-nowrap font-semibold">${{ f.total }}</td>
+                  <td class="px-1.5 sm:px-2 py-2.5 leading-snug whitespace-normal break-words">
+                    <span class="px-2 py-1 rounded-full text-[0.6rem] sm:text-[0.65rem] font-semibold uppercase tracking-wide" :class="badgeClass(f.estatus)">{{ f.estatus }}</span>
+                  </td>
+                  <td class="px-1.5 sm:px-2 py-2.5 leading-snug break-all w-[8.5rem] md:w-[10rem] xl:w-[14rem] 2xl:w-[18rem]">{{ f.folio || '—' }}</td>
+                  <td class="px-1.5 sm:px-2 py-2.5 leading-snug whitespace-nowrap">{{ f.created_at?.slice(0,16) || '—' }}</td>
+                  <td class="px-1.5 sm:px-2 py-2.5 leading-snug">
+                    <div class="flex flex-wrap items-center justify-start gap-2 min-h-[2rem]">
+                      <Link :href="f.url" :class="['inline-flex items-center gap-1 px-3 py-1.5 rounded text-white text-[0.65rem] sm:text-xs font-medium transition-colors', f.estatus === 'autorizada_cliente' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-slate-700 hover:bg-slate-800']">
+                        <span v-if="f.estatus === 'autorizada_cliente'">Generar</span>
+                        <span v-else>Ver</span>
+                      </Link>
+                    </div>
+                  </td>
+                </tr>
+                <tr v-if="pageItems.length===0">
+                  <td colspan="11" class="p-4 text-center text-sm text-slate-500">Sin registros</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
 
-      <!-- Tabla -->
-      <div class="px-4 sm:px-8 pb-4">
-        <div class="rounded-lg overflow-hidden shadow-sm">
-        <div class="overflow-x-auto">
-        <table class="min-w-full text-base">
-        <thead class="bg-slate-800 text-white uppercase text-sm">
-          <tr>
-            <th class="px-4 py-3 text-left">ID</th>
-            <th class="px-4 py-3 text-left">OT</th>
-            <th class="px-4 py-3 text-left">Servicio</th>
-            <th class="px-4 py-3 text-left hidden sm:table-cell">Producto</th>
-            <th class="px-4 py-3 text-left hidden sm:table-cell">Área</th>
-            <th class="px-4 py-3 text-left hidden sm:table-cell">Centro de costos</th>
-            <th class="px-4 py-3 text-left hidden sm:table-cell">Marca</th>
-            <th class="px-4 py-3 text-left">Centro</th>
-            <th class="px-4 py-3 text-left hidden sm:table-cell">Periodo</th>
-            <th class="px-4 py-3 text-right">Total</th>
-            <th class="px-4 py-3 text-left">Estatus</th>
-            <th class="px-4 py-3 text-left hidden sm:table-cell">Folio</th>
-            <th class="px-4 py-3 text-left">Fecha</th>
-            <th class="px-4 py-3 text-right">Acción</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="f in pageItems" :key="f.id" class="border-t even:bg-slate-50 hover:bg-slate-100/60">
-            <td class="px-4 py-3 font-mono">#{{ f.id }}</td>
-            <td class="px-4 py-3">
-              <template v-if="f.multi">
-                <span :title="f.ots_label || ''">OTs: varias</span>
-              </template>
-              <template v-else-if="f.ots_label">OTs: {{ f.ots_label }}</template>
-              <template v-else>OT #{{ f.orden_id }}</template>
-            </td>
-            <td class="px-4 py-3">
-              <div>{{ f.servicio || '—' }}</div>
-            </td>
-            <td class="px-4 py-3 truncate max-w-[16rem] hidden sm:table-cell" :title="f.producto || ''">{{ f.producto || '—' }}</td>
-            <td class="px-4 py-3 hidden sm:table-cell">{{ f.area || '—' }}</td>
-            <td class="px-4 py-3 hidden sm:table-cell">{{ f.centro_costo || '—' }}</td>
-            <td class="px-4 py-3 hidden sm:table-cell">{{ f.marca || '—' }}</td>
-            <td class="px-4 py-3">{{ f.centro || '—' }}</td>
-            <td class="px-4 py-3 hidden sm:table-cell">{{ isoWeekNumber(f.created_at) || '—' }}</td>
-            <td class="px-4 py-3 text-right">${{ f.total }}</td>
-            <td class="px-4 py-3">
-              <span class="px-2 py-1 rounded text-xs font-medium" :class="badgeClass(f.estatus)">{{ f.estatus }}</span>
-            </td>
-            <td class="px-4 py-3 hidden sm:table-cell">{{ f.folio || '—' }}</td>
-            <td class="px-4 py-3 whitespace-nowrap">{{ f.created_at?.slice(0,16) }}</td>
-            <td class="px-4 py-3 text-right">
-              <Link :href="f.url" :class="['inline-flex items-center gap-2 px-3 py-1.5 rounded text-white', f.estatus === 'autorizada_cliente' ? 'bg-blue-500 hover:bg-blue-600' : 'bg-slate-700 hover:bg-slate-800']">
+      <div class="md:hidden px-4 sm:px-6 lg:px-8 pb-4">
+        <div class="space-y-4">
+          <div v-for="f in pageItems" :key="f.id" class="border border-slate-200 rounded-xl p-4 shadow-sm">
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <div class="text-xs uppercase tracking-wide text-slate-500">Folio</div>
+                <div class="text-lg font-semibold text-slate-900">#{{ f.id }}</div>
+              </div>
+              <span class="px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wide" :class="badgeClass(f.estatus)">{{ f.estatus }}</span>
+            </div>
+            <div class="mt-3 space-y-2 text-sm">
+              <div class="flex justify-between gap-3"><span class="text-slate-500">OT</span><span class="font-medium text-right text-slate-800">
+                <template v-if="f.multi">
+                  <span :title="f.ots_label || ''">Varias</span>
+                </template>
+                <template v-else-if="f.ots_label">{{ f.ots_label }}</template>
+                <template v-else>#{{ f.orden_id }}</template>
+              </span></div>
+              <div class="flex justify-between gap-3"><span class="text-slate-500">Servicio</span><span class="font-medium text-right text-slate-800">{{ f.servicio || '—' }}</span></div>
+              <div class="flex justify-between gap-3"><span class="text-slate-500">Centro</span><span class="font-medium text-right text-slate-800">{{ f.centro || '—' }}</span></div>
+              <div class="flex justify-between gap-3"><span class="text-slate-500">Centro costo</span><span class="font-medium text-right text-slate-800">{{ f.centro_costo || '—' }}</span></div>
+              <div class="flex justify-between gap-3"><span class="text-slate-500">Periodo</span><span class="font-medium text-right text-slate-800">{{ isoWeekNumber(f.created_at) || '—' }}</span></div>
+              <div class="flex justify-between gap-3"><span class="text-slate-500">Total</span><span class="font-semibold text-right text-slate-900">${{ f.total }}</span></div>
+              <div class="flex justify-between gap-3"><span class="text-slate-500">Folio</span><span class="font-medium text-right text-slate-800">{{ f.folio || '—' }}</span></div>
+              <div class="flex justify-between gap-3"><span class="text-slate-500">Fecha</span><span class="font-medium text-right text-slate-800">{{ f.created_at?.slice(0,16) || '—' }}</span></div>
+            </div>
+            <div class="mt-4 flex justify-end">
+              <Link :href="f.url" :class="['inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-white text-sm font-medium transition-colors', f.estatus === 'autorizada_cliente' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-slate-700 hover:bg-slate-800']">
                 <span v-if="f.estatus === 'autorizada_cliente'">Generar</span>
                 <span v-else>Ver</span>
               </Link>
-            </td>
-          </tr>
-          <tr v-if="!(pageItems?.length) && !(props.items?.length)">
-            <td colspan="14" class="p-6 text-center text-slate-500">Sin registros</td>
-          </tr>
-        </tbody>
-        </table>
-        </div>
+            </div>
+          </div>
+          <div v-if="pageItems.length===0" class="text-center text-sm text-slate-500">Sin registros</div>
         </div>
       </div>
 
-      <!-- Paginación dentro de la tarjeta -->
-      <div class="px-4 sm:px-8 py-3 flex items-center justify-end gap-2">
+      <div class="px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-end gap-2">
         <button class="px-3 py-1.5 rounded border text-sm disabled:opacity-50" :disabled="currentPage<=1" @click="goToPage(currentPage-1)">Anterior</button>
         <span class="text-sm">Página {{ currentPage }} de {{ totalPages }}</span>
         <button class="px-3 py-1.5 rounded border text-sm disabled:opacity-50" :disabled="currentPage>=totalPages" @click="goToPage(currentPage+1)">Siguiente</button>

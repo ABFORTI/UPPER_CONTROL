@@ -3,10 +3,26 @@ import { ref, computed } from 'vue'
 import { usePage, router, Link } from '@inertiajs/vue3'
 import Icon from '@/Components/Icon.vue'
 import { useAssetUrl } from '@/Support/useAssetUrl'
+import { useTheme } from '@/Support/useTheme'
 
 const page  = usePage()
 const mobileOpen = ref(false)
 const asset = useAssetUrl()
+
+const labelVisibilityClasses = computed(() =>
+  mobileOpen.value
+    ? 'w-auto opacity-100'
+    : 'w-0 opacity-0 sm:group-hover:w-auto sm:group-hover:opacity-100'
+)
+const navArrangementClasses = computed(() =>
+  mobileOpen.value
+    ? 'justify-start gap-3'
+    : 'justify-center gap-0 sm:group-hover:justify-start sm:group-hover:gap-3'
+)
+
+const { currentTheme, toggleTheme } = useTheme()
+const isDarkTheme = computed(() => currentTheme.value === 'dark')
+const themeToggleText = computed(() => (isDarkTheme.value ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'))
 
 // Fallbacks seguros
 const url   = computed(() => page.url || '')
@@ -86,7 +102,7 @@ function closeMobile () {
             <div class="w-8 h-8 shrink-0">
             <img :src="asset('img/upper_control.png')" alt="Upper Control" class="w-full h-full object-contain rounded-md" loading="lazy" />
           </div>
-          <div class="overflow-hidden w-0 group-hover:w-auto group-hover:opacity-100 opacity-0 transition-all duration-200 whitespace-nowrap font-semibold">Upper Control</div>
+          <div :class="['overflow-hidden transition-all duration-200 whitespace-nowrap font-semibold', labelVisibilityClasses]">Upper Control</div>
         </div>
 
         <!-- Usuario / Rol / Notificaciones -->
@@ -95,7 +111,7 @@ function closeMobile () {
             <div class="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-200 font-semibold shrink-0">
               {{ (user?.name || '?').slice(0,1).toUpperCase() }}
             </div>
-            <div class="overflow-hidden w-0 group-hover:w-auto group-hover:opacity-100 opacity-0 transition-all duration-200">
+            <div :class="['overflow-hidden transition-all duration-200', labelVisibilityClasses]">
               <div class="text-xs text-slate-500 dark:text-slate-400">{{ mainRole || 'Usuario' }}</div>
               <div class="text-sm font-medium text-slate-800 dark:text-slate-100 truncate max-w-[10rem]">{{ user?.name }}</div>
             </div>
@@ -107,80 +123,126 @@ function closeMobile () {
         <nav class="mt-4 flex-1 overflow-y-hidden group-hover:overflow-y-auto px-2">
           <ul class="space-y-1 text-slate-600 dark:text-slate-300">
             <li v-if="!isOnlyCalidad">
-              <Link :href="route('dashboard')" class="flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-3 p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all" :class="{ 'bg-blue-50 text-blue-700 dark:bg-slate-800': url.includes('/dashboard') }">
+              <Link :href="route('dashboard')" :class="[
+                'flex items-center p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all',
+                navArrangementClasses,
+                { 'bg-blue-50 text-blue-700 dark:bg-slate-800': url.includes('/dashboard') }
+              ]">
                 <Icon name="home" :size="24" />
-                <span class="w-0 opacity-0 group-hover:w-auto group-hover:opacity-100 overflow-hidden transition-all duration-200">Dashboard</span>
+                <span :class="['overflow-hidden transition-all duration-200', labelVisibilityClasses]">Dashboard</span>
               </Link>
             </li>
             <li v-if="!isOnlyCalidad && !isOnlyControlOrComercial && !isTeamLeader">
-              <Link :href="route('solicitudes.index')" class="flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-3 p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all" :class="{ 'bg-blue-50 text-blue-700 dark:bg-slate-800': url.includes('/solicitudes') }">
+              <Link :href="route('solicitudes.index')" :class="[
+                'flex items-center p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all',
+                navArrangementClasses,
+                { 'bg-blue-50 text-blue-700 dark:bg-slate-800': url.includes('/solicitudes') }
+              ]">
                 <Icon name="document" :size="24" />
-                <span class="w-0 opacity-0 group-hover:w-auto group-hover:opacity-100 overflow-hidden transition-all duration-200">Solicitudes</span>
+                <span :class="['overflow-hidden transition-all duration-200', labelVisibilityClasses]">Solicitudes</span>
               </Link>
             </li>
             <li v-if="!isOnlyCalidad && !isOnlyControlOrComercial">
-              <Link :href="route('ordenes.index')" class="flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-3 p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all" :class="{ 'bg-blue-50 text-blue-700 dark:bg-slate-800': url.includes('/ordenes') }">
+              <Link :href="route('ordenes.index')" :class="[
+                'flex items-center p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all',
+                navArrangementClasses,
+                { 'bg-blue-50 text-blue-700 dark:bg-slate-800': url.includes('/ordenes') }
+              ]">
                 <Icon name="clipboard" :size="24" />
-                <span class="w-0 opacity-0 group-hover:w-auto group-hover:opacity-100 overflow-hidden transition-all duration-200">Órdenes</span>
+                <span :class="['overflow-hidden transition-all duration-200', labelVisibilityClasses]">Órdenes</span>
               </Link>
             </li>
             <!-- Calidad -->
             <li v-if="isAdmin || isCalidad || isGerente">
-              <Link :href="route('calidad.index')" class="flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-3 p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all" :class="{ 'bg-blue-50 text-blue-700 dark:bg-slate-800': url.includes('/calidad') }">
+              <Link :href="route('calidad.index')" :class="[
+                'flex items-center p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all',
+                navArrangementClasses,
+                { 'bg-blue-50 text-blue-700 dark:bg-slate-800': url.includes('/calidad') }
+              ]">
                 <Icon name="checkBadge" :size="24" />
-                <span class="w-0 opacity-0 group-hover:w-auto group-hover:opacity-100 overflow-hidden transition-all duration-200">Calidad</span>
+                <span :class="['overflow-hidden transition-all duration-200', labelVisibilityClasses]">Calidad</span>
               </Link>
             </li>
             <!-- Facturación - Visible para facturacion, admin Y cliente -->
             <li v-if="!isOnlyCalidad && !isOnlyControlOrComercial && (roles.includes('facturacion') || roles.includes('cliente') || isAdmin || isGerente)">
-              <Link :href="route('facturas.index')" class="flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-3 p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all" :class="{ 'bg-blue-50 text-blue-700 dark:bg-slate-800': url.includes('/facturas') }">
+              <Link :href="route('facturas.index')" :class="[
+                'flex items-center p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all',
+                navArrangementClasses,
+                { 'bg-blue-50 text-blue-700 dark:bg-slate-800': url.includes('/facturas') }
+              ]">
                 <Icon name="currency" :size="24" />
-                <span class="w-0 opacity-0 group-hover:w-auto group-hover:opacity-100 overflow-hidden transition-all duration-200">Facturación</span>
+                <span :class="['overflow-hidden transition-all duration-200', labelVisibilityClasses]">Facturación</span>
               </Link>
             </li>
 
             <li v-if="isAdmin || isCoord || isControl || isComercial || isGerente">
-              <Link :href="route('servicios.index')" class="flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-3 p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all" :class="{ 'bg-blue-50 text-blue-700 dark:bg-slate-800': url.includes('/servicios') }">
+              <Link :href="route('servicios.index')" :class="[
+                'flex items-center p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all',
+                navArrangementClasses,
+                { 'bg-blue-50 text-blue-700 dark:bg-slate-800': url.includes('/servicios') }
+              ]">
                 <Icon name="dollar" :size="24" />
-                <span class="w-0 opacity-0 group-hover:w-auto group-hover:opacity-100 overflow-hidden transition-all duration-200">Servicios</span>
+                <span :class="['overflow-hidden transition-all duration-200', labelVisibilityClasses]">Servicios</span>
               </Link>
             </li>
             <li v-if="isAdmin || isCoord || isControl || isComercial || isGerente">
-              <Link :href="route('areas.index')" class="flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-3 p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all" :class="{ 'bg-blue-50 text-blue-700 dark:bg-slate-800': url.includes('/areas') }">
+              <Link :href="route('areas.index')" :class="[
+                'flex items-center p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all',
+                navArrangementClasses,
+                { 'bg-blue-50 text-blue-700 dark:bg-slate-800': url.includes('/areas') }
+              ]">
                 <Icon name="folder" :size="24" />
-                <span class="w-0 opacity-0 group-hover:w-auto group-hover:opacity-100 overflow-hidden transition-all duration-200">Áreas</span>
+                <span :class="['overflow-hidden transition-all duration-200', labelVisibilityClasses]">Áreas</span>
               </Link>
             </li>
             <!-- Centros de costos -->
             <li v-if="isAdmin || isCoord || isControl || isComercial || isGerente">
-              <Link :href="route('centros_costos.index')" class="flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-3 p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all" :class="{ 'bg-blue-50 text-blue-700 dark:bg-slate-800': url.includes('/centros-costos') }">
+              <Link :href="route('centros_costos.index')" :class="[
+                'flex items-center p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all',
+                navArrangementClasses,
+                { 'bg-blue-50 text-blue-700 dark:bg-slate-800': url.includes('/centros-costos') }
+              ]">
                 <Icon name="chart" :size="24" />
-                <span class="w-0 opacity-0 group-hover:w-auto group-hover:opacity-100 overflow-hidden transition-all duration-200">Centros de costos</span>
+                <span :class="['overflow-hidden transition-all duration-200', labelVisibilityClasses]">Centros de costos</span>
               </Link>
             </li>
             <!-- Marcas -->
             <li v-if="isAdmin || isCoord || isControl || isComercial || isGerente">
-              <Link :href="route('marcas.index')" class="flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-3 p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all" :class="{ 'bg-blue-50 text-blue-700 dark:bg-slate-800': url.includes('/marcas') }">
+              <Link :href="route('marcas.index')" :class="[
+                'flex items-center p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all',
+                navArrangementClasses,
+                { 'bg-blue-50 text-blue-700 dark:bg-slate-800': url.includes('/marcas') }
+              ]">
                 <Icon name="tag" :size="24" />
-                <span class="w-0 opacity-0 group-hover:w-auto group-hover:opacity-100 overflow-hidden transition-all duration-200">Marcas</span>
+                <span :class="['overflow-hidden transition-all duration-200', labelVisibilityClasses]">Marcas</span>
               </Link>
             </li>
             <li v-if="isAdmin">
-              <Link :href="route('admin.users.index')" class="flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-3 p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all" :class="{ 'bg-blue-50 text-blue-700 dark:bg-slate-800': url.includes('/admin/users') }">
+              <Link :href="route('admin.users.index')" :class="[
+                'flex items-center p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all',
+                navArrangementClasses,
+                { 'bg-blue-50 text-blue-700 dark:bg-slate-800': url.includes('/admin/users') }
+              ]">
                 <Icon name="document" :size="24" />
-                <span class="w-0 opacity-0 group-hover:w-auto group-hover:opacity-100 overflow-hidden transition-all duration-200">Usuarios</span>
+                <span :class="['overflow-hidden transition-all duration-200', labelVisibilityClasses]">Usuarios</span>
               </Link>
             </li>
             <li v-if="isAdmin">
-              <Link :href="route('admin.centros.index')" class="flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-3 p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all">
+              <Link :href="route('admin.centros.index')" :class="[
+                'flex items-center p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all',
+                navArrangementClasses
+              ]">
                 <Icon name="building" :size="24" />
-                <span class="w-0 opacity-0 group-hover:w-auto group-hover:opacity-100 overflow-hidden transition-all duration-200">Centros</span>
+                <span :class="['overflow-hidden transition-all duration-200', labelVisibilityClasses]">Centros</span>
               </Link>
             </li>
             <li v-if="isAdmin">
-              <Link :href="route('admin.backups.index')" class="flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-3 p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all">
+              <Link :href="route('admin.backups.index')" :class="[
+                'flex items-center p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all',
+                navArrangementClasses
+              ]">
                 <Icon name="document" :size="24" />
-                <span class="w-0 opacity-0 group-hover:w-auto group-hover:opacity-100 overflow-hidden transition-all duration-200">Backups</span>
+                <span :class="['overflow-hidden transition-all duration-200', labelVisibilityClasses]">Backups</span>
               </Link>
             </li>
           </ul>
@@ -188,17 +250,51 @@ function closeMobile () {
 
         <!-- Footer del sidebar -->
         <div class="p-3 space-y-2 border-t border-gray-200 dark:border-slate-800 shrink-0">
+          <button
+            type="button"
+            @click="toggleTheme"
+            :class="[
+              'w-full flex items-center p-3 rounded-md border transition-all',
+              navArrangementClasses,
+              isDarkTheme
+                ? 'bg-slate-900 text-slate-100 border-slate-700 hover:bg-slate-800'
+                : 'bg-white text-slate-700 border-gray-200 hover:bg-slate-100'
+            ]"
+          >
+            <Icon :name="isDarkTheme ? 'sun' : 'moon'" :size="24" class="shrink-0" />
+            <span
+              :class="[
+                'overflow-hidden transition-all duration-200 whitespace-nowrap flex items-center gap-2',
+                labelVisibilityClasses
+              ]"
+            >
+              {{ themeToggleText }}
+              <span
+                class="text-[10px] font-semibold uppercase tracking-wide"
+                :class="isDarkTheme ? 'text-emerald-400' : 'text-slate-400'"
+              >
+                {{ isDarkTheme ? 'ON' : 'OFF' }}
+              </span>
+            </span>
+          </button>
           <!-- Notificaciones arriba de Logout -->
-          <Link :href="route('notificaciones.index')" class="w-full relative flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-3 p-3 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 transition-all" :class="{ 'bg-blue-50 text-blue-700 dark:bg-slate-800': url.includes('/notificaciones') }">
+          <Link :href="route('notificaciones.index')" :class="[
+            'w-full relative flex items-center p-3 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 transition-all',
+            navArrangementClasses,
+            { 'bg-blue-50 text-blue-700 dark:bg-slate-800': url.includes('/notificaciones') }
+          ]">
             <span class="relative inline-flex shrink-0">
               <Icon name="bell" :size="24" />
               <span v-if="unread" class="absolute -top-1 -right-1 text-[10px] leading-none bg-red-600 text-white rounded-full px-1">{{ unread }}</span>
             </span>
-            <span class="w-0 opacity-0 group-hover:w-auto group-hover:opacity-100 overflow-hidden transition-all duration-200 whitespace-nowrap">Notificaciones</span>
+            <span :class="['overflow-hidden transition-all duration-200 whitespace-nowrap', labelVisibilityClasses]">Notificaciones</span>
           </Link>
-          <Link :href="route('logout')" method="post" as="button" class="w-full flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-3 p-3 rounded-md bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 hover:bg-slate-300 transition-all">
+          <Link :href="route('logout')" method="post" as="button" :class="[
+            'w-full flex items-center p-3 rounded-md bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 hover:bg-slate-300 transition-all',
+            navArrangementClasses
+          ]">
             <Icon name="logout" :size="24" class="shrink-0" />
-            <span class="w-0 opacity-0 group-hover:w-auto group-hover:opacity-100 overflow-hidden transition-all duration-200 whitespace-nowrap">Logout</span>
+            <span :class="['overflow-hidden transition-all duration-200 whitespace-nowrap', labelVisibilityClasses]">Logout</span>
           </Link>
         </div>
       </aside>

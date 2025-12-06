@@ -1,0 +1,2 @@
+1. Analyze responsive requirements
+2. Update layout

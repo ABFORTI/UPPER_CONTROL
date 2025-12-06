@@ -130,7 +130,7 @@ function removeRow(r){
       </div>
 
       <!-- Botón Agregar servicio -->
-      <div class="mb-6 flex justify-end">
+      <div class="mb-6 flex justify-center sm:justify-end">
         <button @click="openCreateModal"
                 class="px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 font-bold text-white hover:shadow-xl transition-all duration-200 transform hover:scale-105 flex items-center gap-2">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -194,7 +194,7 @@ function removeRow(r){
 
       <!-- Tabla de servicios -->
       <div v-if="rows?.length" class="bg-white rounded-2xl shadow-xl border-2 border-gray-100 overflow-hidden">
-        <div class="bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-4">
+        <div class="bg-gradient-to-r from-emerald-600 to-teal-600 px-4 sm:px-6 py-4">
           <h2 class="text-xl font-bold text-white flex items-center gap-2">
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
@@ -203,26 +203,26 @@ function removeRow(r){
           </h2>
         </div>
         
-        <div class="overflow-x-auto">
-          <table class="min-w-full divide-y divide-gray-200">
-            <thead class="bg-gradient-to-r from-gray-50 to-gray-100">
+        <div class="hidden md:block overflow-x-auto">
+          <table class="w-full text-[0.7rem] lg:text-xs xl:text-[0.7rem] 2xl:text-sm divide-y divide-gray-200">
+            <thead class="bg-gradient-to-r from-gray-50 to-gray-100 text-gray-700 uppercase tracking-wider">
               <tr>
-                <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Servicio</th>
-                <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Tipo</th>
-                <th class="px-6 py-4 text-right text-xs font-bold text-gray-700 uppercase tracking-wider">Unitario</th>
-                <th class="px-6 py-4 text-right text-xs font-bold text-gray-700 uppercase tracking-wider">Chico</th>
-                <th class="px-6 py-4 text-right text-xs font-bold text-gray-700 uppercase tracking-wider">Mediano</th>
-                <th class="px-6 py-4 text-right text-xs font-bold text-gray-700 uppercase tracking-wider">Grande</th>
-                <th class="px-6 py-4 text-right text-xs font-bold text-gray-700 uppercase tracking-wider">Jumbo</th>
-                <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Acciones</th>
+                <th class="px-3 lg:px-4 py-3 text-left font-bold">Servicio</th>
+                <th class="px-3 lg:px-4 py-3 text-left font-bold">Tipo</th>
+                <th class="px-3 lg:px-4 py-3 text-right font-bold">Unitario</th>
+                <th class="px-3 lg:px-4 py-3 text-right font-bold">Chico</th>
+                <th class="px-3 lg:px-4 py-3 text-right font-bold">Mediano</th>
+                <th class="px-3 lg:px-4 py-3 text-right font-bold">Grande</th>
+                <th class="px-3 lg:px-4 py-3 text-right font-bold">Jumbo</th>
+                <th class="px-3 lg:px-4 py-3 text-left font-bold">Acciones</th>
               </tr>
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
               <tr v-for="r in rows" :key="r.id_servicio" class="hover:bg-emerald-50 transition-colors duration-150">
-                <td class="px-6 py-4 whitespace-nowrap">
+                <td class="px-3 lg:px-4 py-3 whitespace-nowrap">
                   <div class="font-semibold text-gray-900">{{ r.servicio }}</div>
                 </td>
-                <td class="px-6 py-4 whitespace-nowrap">
+                <td class="px-3 lg:px-4 py-3 whitespace-nowrap">
                   <span v-if="r.usa_tamanos" 
                         class="px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800 border border-gray-300">
                     Por tamaños
@@ -232,45 +232,45 @@ function removeRow(r){
                     Unitario
                   </span>
                 </td>
-                <td class="px-6 py-4 text-right">
+                <td class="px-3 lg:px-4 py-3 text-right">
                   <template v-if="!r.usa_tamanos">
                     <input type="number" 
                            step="0.01" 
                            min="0" 
                            v-model.number="r._unitario" 
-                           class="w-32 px-3 py-2 border-2 border-gray-200 rounded-lg text-right font-semibold focus:ring-2 focus:ring-emerald-200 focus:border-emerald-400 transition-all duration-200" />
+                           class="w-24 xl:w-28 px-2.5 py-2 border-2 border-gray-200 rounded-lg text-right font-semibold focus:ring-2 focus:ring-emerald-200 focus:border-emerald-400 transition-all duration-200" />
                   </template>
                   <span v-else class="text-gray-400 font-medium">—</span>
                 </td>
                 <template v-if="r.usa_tamanos">
-                  <td class="px-6 py-4 text-right">
+                  <td class="px-3 lg:px-4 py-3 text-right">
                     <input type="number" step="0.01" min="0" v-model.number="r._chico" 
-                           class="w-28 px-3 py-2 border-2 border-gray-200 rounded-lg text-right font-semibold focus:ring-2 focus:ring-emerald-200 focus:border-emerald-400 transition-all duration-200" />
+                           class="w-20 xl:w-24 px-2.5 py-2 border-2 border-gray-200 rounded-lg text-right font-semibold focus:ring-2 focus:ring-emerald-200 focus:border-emerald-400 transition-all duration-200" />
                   </td>
-                  <td class="px-6 py-4 text-right">
+                  <td class="px-3 lg:px-4 py-3 text-right">
                     <input type="number" step="0.01" min="0" v-model.number="r._mediano" 
-                           class="w-28 px-3 py-2 border-2 border-gray-200 rounded-lg text-right font-semibold focus:ring-2 focus:ring-emerald-200 focus:border-emerald-400 transition-all duration-200" />
+                           class="w-20 xl:w-24 px-2.5 py-2 border-2 border-gray-200 rounded-lg text-right font-semibold focus:ring-2 focus:ring-emerald-200 focus:border-emerald-400 transition-all duration-200" />
                   </td>
-                  <td class="px-6 py-4 text-right">
+                  <td class="px-3 lg:px-4 py-3 text-right">
                     <input type="number" step="0.01" min="0" v-model.number="r._grande" 
-                           class="w-28 px-3 py-2 border-2 border-gray-200 rounded-lg text-right font-semibold focus:ring-2 focus:ring-emerald-200 focus:border-emerald-400 transition-all duration-200" />
+                           class="w-20 xl:w-24 px-2.5 py-2 border-2 border-gray-200 rounded-lg text-right font-semibold focus:ring-2 focus:ring-emerald-200 focus:border-emerald-400 transition-all duration-200" />
                   </td>
-                  <td class="px-6 py-4 text-right">
+                  <td class="px-3 lg:px-4 py-3 text-right">
                     <input type="number" step="0.01" min="0" v-model.number="r._jumbo" 
-                           class="w-28 px-3 py-2 border-2 border-gray-200 rounded-lg text-right font-semibold focus:ring-2 focus:ring-emerald-200 focus:border-emerald-400 transition-all duration-200" />
+                           class="w-20 xl:w-24 px-2.5 py-2 border-2 border-gray-200 rounded-lg text-right font-semibold focus:ring-2 focus:ring-emerald-200 focus:border-emerald-400 transition-all duration-200" />
                   </td>
                 </template>
                 <template v-else>
-                  <td class="px-6 py-4 text-center text-gray-400 font-medium">—</td>
-                  <td class="px-6 py-4 text-center text-gray-400 font-medium">—</td>
-                  <td class="px-6 py-4 text-center text-gray-400 font-medium">—</td>
-                  <td class="px-6 py-4 text-center text-gray-400 font-medium">—</td>
+                  <td class="px-3 lg:px-4 py-3 text-center text-gray-400 font-medium">—</td>
+                  <td class="px-3 lg:px-4 py-3 text-center text-gray-400 font-medium">—</td>
+                  <td class="px-3 lg:px-4 py-3 text-center text-gray-400 font-medium">—</td>
+                  <td class="px-3 lg:px-4 py-3 text-center text-gray-400 font-medium">—</td>
                 </template>
-                <td class="px-6 py-4 whitespace-nowrap">
-                  <div class="flex gap-2">
-                    <button @click="saveRow(r)" 
-                            :disabled="saving[r.id_servicio]"
-                            class="px-4 py-2 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 font-semibold text-white hover:shadow-lg transition-all duration-200 disabled:opacity-50 flex items-center gap-1">
+                <td class="px-3 lg:px-4 py-3 whitespace-nowrap">
+                  <div class="flex flex-wrap gap-2">
+                        <button @click="saveRow(r)" 
+                          :disabled="saving[r.id_servicio]"
+                          class="px-3 sm:px-4 py-2 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 font-semibold text-white text-xs sm:text-sm hover:shadow-lg transition-all duration-200 disabled:opacity-50 flex items-center gap-1">
                       <svg v-if="!saving[r.id_servicio]" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
                       </svg>
@@ -280,8 +280,8 @@ function removeRow(r){
                       </svg>
                       {{ saving[r.id_servicio] ? 'Guardando…' : 'Guardar' }}
                     </button>
-                    <button @click="removeRow(r)" 
-                            class="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 font-semibold text-white transition-all duration-200 flex items-center gap-1">
+                        <button @click="removeRow(r)" 
+                          class="px-3 sm:px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 font-semibold text-white text-xs sm:text-sm transition-all duration-200 flex items-center gap-1">
                       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
                       </svg>
@@ -292,6 +292,73 @@ function removeRow(r){
               </tr>
             </tbody>
           </table>
+        </div>
+
+        <div class="md:hidden px-4 py-4 space-y-4">
+          <div v-for="r in rows" :key="`m-${r.id_servicio}`" class="border border-gray-200 rounded-2xl p-4 shadow-sm bg-white">
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <div class="text-xs uppercase tracking-wide text-gray-500">Servicio</div>
+                <div class="text-lg font-semibold text-gray-900">{{ r.servicio }}</div>
+              </div>
+              <span v-if="r.usa_tamanos"
+                    class="px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-800 border border-gray-300 inline-flex items-center self-start">Por tamaños</span>
+              <span v-else
+                    class="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-300 inline-flex items-center self-start">Unitario</span>
+            </div>
+
+            <div class="mt-4 space-y-3 text-sm">
+              <div v-if="!r.usa_tamanos" class="flex flex-col gap-2">
+                <label class="text-xs font-semibold text-gray-600">Precio unitario</label>
+                <input type="number" step="0.01" min="0" v-model.number="r._unitario"
+                       class="w-full px-3 py-2 border-2 border-gray-200 rounded-lg text-right font-semibold focus:ring-2 focus:ring-emerald-200 focus:border-emerald-400 transition-all duration-200" />
+              </div>
+
+              <div v-else class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label class="text-xs font-semibold text-gray-600">Chico</label>
+                  <input type="number" step="0.01" min="0" v-model.number="r._chico"
+                         class="w-full px-3 py-2 border-2 border-gray-200 rounded-lg text-right font-semibold focus:ring-2 focus:ring-emerald-200 focus:border-emerald-400 transition-all duration-200" />
+                </div>
+                <div>
+                  <label class="text-xs font-semibold text-gray-600">Mediano</label>
+                  <input type="number" step="0.01" min="0" v-model.number="r._mediano"
+                         class="w-full px-3 py-2 border-2 border-gray-200 rounded-lg text-right font-semibold focus:ring-2 focus:ring-emerald-200 focus:border-emerald-400 transition-all duration-200" />
+                </div>
+                <div>
+                  <label class="text-xs font-semibold text-gray-600">Grande</label>
+                  <input type="number" step="0.01" min="0" v-model.number="r._grande"
+                         class="w-full px-3 py-2 border-2 border-gray-200 rounded-lg text-right font-semibold focus:ring-2 focus:ring-emerald-200 focus:border-emerald-400 transition-all duration-200" />
+                </div>
+                <div>
+                  <label class="text-xs font-semibold text-gray-600">Jumbo</label>
+                  <input type="number" step="0.01" min="0" v-model.number="r._jumbo"
+                         class="w-full px-3 py-2 border-2 border-gray-200 rounded-lg text-right font-semibold focus:ring-2 focus:ring-emerald-200 focus:border-emerald-400 transition-all duration-200" />
+                </div>
+              </div>
+            </div>
+
+            <div class="mt-4 flex flex-col sm:flex-row gap-2 sm:gap-3">
+              <button @click="saveRow(r)" :disabled="saving[r.id_servicio]"
+                      class="flex-1 px-4 py-2 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 font-semibold text-white hover:shadow-lg transition-all duration-200 disabled:opacity-50 flex items-center justify-center gap-2">
+                <svg v-if="!saving[r.id_servicio]" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                </svg>
+                <svg v-else class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                {{ saving[r.id_servicio] ? 'Guardando…' : 'Guardar' }}
+              </button>
+              <button @click="removeRow(r)"
+                      class="flex-1 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 font-semibold text-white transition-all duration-200 flex items-center justify-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                Eliminar
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -306,12 +373,12 @@ function removeRow(r){
             <span class="text-sm font-semibold text-gray-700">Clonar servicios desde:</span>
           </div>
           <select v-model.number="cloneForm.centro_origen" 
-                  class="px-4 py-2.5 rounded-lg border-2 border-gray-300 bg-white font-semibold text-gray-700 focus:ring-2 focus:ring-emerald-200 min-w-[12rem]">
+                  class="px-4 py-2.5 rounded-lg border-2 border-gray-300 bg-white font-semibold text-gray-700 focus:ring-2 focus:ring-emerald-200 min-w-[12rem] w-full sm:w-auto">
             <option v-for="c in otherCentros" :key="c.id" :value="c.id">{{ c.nombre }}</option>
           </select>
           <button @click="doClone" 
                   :disabled="cloneForm.processing || !cloneForm.centro_origen"
-                  class="px-6 py-2.5 rounded-lg bg-gray-700 text-white font-semibold hover:bg-gray-800 disabled:opacity-50 transition-all duration-200 flex items-center gap-2">
+                  class="px-6 py-2.5 rounded-lg bg-gray-700 text-white font-semibold hover:bg-gray-800 disabled:opacity-50 transition-all duration-200 flex items-center gap-2 w-full sm:w-auto justify-center">
             <svg v-if="!cloneForm.processing" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
             </svg>
