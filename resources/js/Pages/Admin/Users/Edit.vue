@@ -8,7 +8,7 @@ const form = useForm({
   email: props.user?.email || '',
   phone: props.user?.phone || '',
   centro_trabajo_id: props.user?.centro_trabajo_id || '',
-  role: props.user?.role || 'cliente',
+  role: props.user?.role || 'supervisor',
   centros_ids: props.user?.centros_ids || [],
   password: '',
   password_confirmation: ''
@@ -160,8 +160,8 @@ function save(){
 
             </div>
 
-    <!-- Multiselección de centros (admin, calidad, facturacion, control, comercial y gerente) -->
-  <div v-if="['admin','calidad','facturacion','control','comercial','gerente'].includes(form.role)" 
+    <!-- Multiselección de centros (admin, calidad, facturacion, control, comercial y gerente_upper) -->
+  <div v-if="['admin','calidad','facturacion','control','comercial','gerente_upper'].includes(form.role)" 
          class="bg-gradient-to-r from-indigo-50 to-blue-50 rounded-xl p-6 border-2 border-indigo-200">
               <label class="block text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
                 <svg class="w-5 h-5 text-[#1E1C8F]" fill="none" stroke="currentColor" viewBox="0 0 24 24">

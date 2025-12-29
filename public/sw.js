@@ -1,6 +1,6 @@
 'use strict';
 
-const CACHE_VERSION = 'upper-control-v2';
+const CACHE_VERSION = 'upper-control-v6';
 const APP_SHELL = [
   '/',
   '/offline.html',

@@ -14,7 +14,7 @@ class AreaController extends Controller
     {
     /** @var \App\Models\User $user */
     $user = Auth::user();
-    if ($user->hasRole('admin')) return; // gerente no puede escribir
+    if ($user->hasRole('admin')) return; // gerente_upper no puede escribir
         
         if ($user->hasAnyRole(['coordinador', 'control', 'comercial'])) {
             // Verificar si el usuario tiene acceso a este centro
@@ -55,8 +55,8 @@ class AreaController extends Controller
                 $areas = Area::with('centro')->orderBy('id_centrotrabajo')->orderBy('nombre')->get();
             }
             $centros = CentroTrabajo::orderBy('nombre')->get();
-        } else if ($user->hasRole('gerente')) {
-            // Gerente: ver sólo sus centros asignados
+        } else if ($user->hasRole('gerente_upper')) {
+            // Gerente Upper: ver sólo sus centros asignados
             $ids = $user->centros()->pluck('centros_trabajo.id')->toArray();
             $ids = array_map('intval', $ids);
             if (empty($ids)) { abort(403, 'No tienes centros de trabajo asignados.'); }
@@ -107,7 +107,7 @@ class AreaController extends Controller
             'areas' => $areas,
             'centros' => $centros,
             'can' => [
-                // Gerente no crea ni edita
+                // Gerente_upper no crea ni edita
                 'create' => $user->hasAnyRole(['admin', 'coordinador', 'control', 'comercial']),
                 'edit' => $user->hasAnyRole(['admin', 'coordinador', 'control', 'comercial']),
             ],

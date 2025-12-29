@@ -46,7 +46,7 @@ class UsuariosPorRolSeeder extends Seeder
             }
 
             // Asignaciones de centros en pivote según rol
-            $multi = ['admin','facturacion','calidad','control','comercial','gerente'];
+            $multi = ['admin','facturacion','calidad','control','comercial','gerente_upper'];
             if (in_array($role, $multi, true) && $centro && $centroAlt) {
                 $ids = array_filter([optional($centro)->id, optional($centroAlt)->id]);
                 if (!empty($ids)) {
@@ -54,8 +54,8 @@ class UsuariosPorRolSeeder extends Seeder
                 }
             }
 
-            // Para 'cliente_centro' asegurar al menos 1 centro en pivote
-            if ($role === 'cliente_centro' && $centro) {
+            // Para 'gerente' (antes 'cliente_centro') asegurar al menos 1 centro en pivote
+            if ($role === 'gerente' && $centro) {
                 $user->centros()->syncWithoutDetaching([ $centro->id ]);
             }
             // Log informativo por rol procesado

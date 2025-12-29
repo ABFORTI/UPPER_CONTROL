@@ -36,7 +36,8 @@ const isCoord  = computed(() => roles.value.includes('coordinador'))
 const isCalidad = computed(() => roles.value.includes('calidad'))
 const isControl = computed(() => roles.value.includes('control'))
 const isComercial = computed(() => roles.value.includes('comercial'))
-const isGerente = computed(() => roles.value.includes('gerente'))
+const isGerente = computed(() => roles.value.includes('gerente_upper'))
+const isGerenteCentro = computed(() => roles.value.includes('gerente'))
 const isOnlyCalidad = computed(() => isCalidad.value && roles.value.length === 1)
 const isOnlyControlOrComercial = computed(() => (isControl.value || isComercial.value) && !isAdmin.value && !isCoord.value && !isCalidad.value)
 
@@ -163,8 +164,8 @@ function closeMobile () {
                 <span :class="['overflow-hidden transition-all duration-200', labelVisibilityClasses]">Calidad</span>
               </Link>
             </li>
-            <!-- Facturación - Visible para facturacion, admin Y cliente -->
-            <li v-if="!isOnlyCalidad && !isOnlyControlOrComercial && (roles.includes('facturacion') || roles.includes('cliente') || isAdmin || isGerente)">
+            <!-- Facturación - Visible para facturacion, admin, supervisor, gerente_upper y gerente -->
+            <li v-if="!isOnlyCalidad && !isOnlyControlOrComercial && (roles.includes('facturacion') || roles.includes('supervisor') || roles.includes('gerente') || isAdmin || isGerente)">
               <Link :href="route('facturas.index')" :class="[
                 'flex items-center p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all',
                 navArrangementClasses,

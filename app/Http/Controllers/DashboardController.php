@@ -22,8 +22,8 @@ class DashboardController extends Controller
         $u = $req->user();
         
         
-    $isCliente = method_exists($u, 'hasRole') ? $u->hasRole('cliente') : false;
-    $isClienteCentro = method_exists($u, 'hasRole') ? $u->hasRole('cliente_centro') : false;
+    $isCliente = method_exists($u, 'hasRole') ? $u->hasRole('supervisor') : false;
+    $isClienteCentro = method_exists($u, 'hasRole') ? $u->hasRole('gerente') : false;
 
         // Rango por defecto: últimos 30 días
         // Periodo por semana ISO: week del año (no editable como fechas)
@@ -33,10 +33,10 @@ class DashboardController extends Controller
         $desde = $base->startOfWeek();
         $hasta = $base->endOfWeek();
 
-        // Centro: admin/facturación pueden elegir cualquiera. Gerente sólo entre sus centros asignados (principal + pivots).
+        // Centro: admin/facturación pueden elegir cualquiera. Gerente Upper sólo entre sus centros asignados (principal + pivots).
         if ($u->hasAnyRole(['admin','facturacion'])) {
             $centroId = $req->integer('centro') ?: null;
-        } elseif ($u->hasRole('gerente')) {
+        } elseif ($u->hasRole('gerente_upper')) {
             $selected = $req->integer('centro') ?: null;
             $ids = $this->allowedCentroIds($u); // incluye principal
             $centroId = ($selected && in_array((int)$selected, $ids, true)) ? (int)$selected : null;
@@ -141,10 +141,10 @@ class DashboardController extends Controller
 
         // Centros para filtro:
         // - admin/facturación: todos
-        // - gerente: sólo asignados
+        // - gerente_upper: sólo asignados
         if ($u->hasAnyRole(['admin','facturacion'])) {
             $centros = DB::table('centros_trabajo')->select('id','nombre')->orderBy('nombre')->get();
-        } elseif ($u->hasRole('gerente')) {
+        } elseif ($u->hasRole('gerente_upper')) {
             $ids = $this->allowedCentroIds($u);
             $centros = empty($ids)
                 ? collect([])
@@ -218,7 +218,7 @@ class DashboardController extends Controller
      * IDs de Centros de Trabajo permitidos para el usuario.
      * Regla:
      * - admin y facturacion: sin restricción (array vacío para indicar "todos").
-     * - demás (p.ej. gerente): centros asignados por pivote + su centro principal.
+    * - demás (p.ej. gerente_upper): centros asignados por pivote + su centro principal.
      */
     private function allowedCentroIds(\App\Models\User $u): array
     {

@@ -20,8 +20,8 @@ class SolicitudController extends Controller
     public function index(Request $req)
     {
         $u = $req->user();
-        $isCliente = method_exists($u, 'hasRole') ? $u->hasRole('cliente') : false;
-        $isClienteCentro = method_exists($u, 'hasRole') ? $u->hasRole('cliente_centro') : false;
+        $isCliente = method_exists($u, 'hasRole') ? $u->hasRole('supervisor') : false;
+        $isClienteCentro = method_exists($u, 'hasRole') ? $u->hasRole('gerente') : false;
 
         $filters = [
             'estatus'  => $req->string('estatus')->toString(),
@@ -34,9 +34,9 @@ class SolicitudController extends Controller
         ];
 
     $q = Solicitud::with(['servicio','centro','centroCosto','marca'])
-            ->when(!$u->hasAnyRole(['admin','facturacion','calidad','control','comercial']),
+            ->when(!$u->hasAnyRole(['admin','facturacion','calidad','control','comercial','gerente_upper']),
                 fn($qq) => $qq->where('id_centrotrabajo', $u->centro_trabajo_id))
-            ->when($u->hasAnyRole(['facturacion','calidad','control','comercial']) && !$u->hasRole('admin'), function($qq) use ($u) {
+            ->when($u->hasAnyRole(['facturacion','calidad','control','comercial','gerente_upper']) && !$u->hasRole('admin'), function($qq) use ($u) {
                 $ids = $this->allowedCentroIds($u);
                 if (!empty($ids)) { $qq->whereIn('id_centrotrabajo', $ids); }
             })
@@ -106,6 +106,9 @@ class SolicitudController extends Controller
     {
         /** @var \App\Models\User $u */
         $u = \Illuminate\Support\Facades\Auth::user();
+
+        // La pantalla de crear solicitud es sólo para clientes (y admin). Evitar que gerente_upper u otros roles creen.
+        $this->authorize('create', \App\Models\Solicitud::class);
         
         // Verificar bloqueo por OTs vencidas sin autorizar
         $bloqueo = $this->verificarBloqueoOTsVencidas($u);
@@ -225,6 +228,9 @@ class SolicitudController extends Controller
     public function store(Request $req)
     {
         $u = $req->user();
+
+        // Bloquear creación a roles que no deben crear (p.ej. gerente_upper). La policy define el alcance.
+        $this->authorize('create', \App\Models\Solicitud::class);
         
         // Verificar bloqueo por OTs vencidas sin autorizar
         $bloqueo = $this->verificarBloqueoOTsVencidas($u);
