@@ -20,8 +20,8 @@ class SolicitudController extends Controller
     public function index(Request $req)
     {
         $u = $req->user();
-        $isCliente = method_exists($u, 'hasRole') ? $u->hasRole('supervisor') : false;
-        $isClienteCentro = method_exists($u, 'hasRole') ? $u->hasRole('gerente') : false;
+        $isCliente = method_exists($u, 'hasRole') ? $u->hasRole('Cliente_Supervisor') : false;
+        $isClienteCentro = method_exists($u, 'hasRole') ? $u->hasRole('Cliente_Gerente') : false;
 
         $filters = [
             'estatus'  => $req->string('estatus')->toString(),

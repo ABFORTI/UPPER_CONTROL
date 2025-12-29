@@ -880,8 +880,8 @@ class OrdenController extends Controller
     // Privilegio de vista amplia: admin, facturación y gerente_upper (solo lectura)
     $isPrivilegedViewer = $u && method_exists($u, 'hasAnyRole') ? $u->hasAnyRole(['admin','facturacion','gerente_upper']) : false;
     $isTL = $u && method_exists($u, 'hasRole') ? $u->hasRole('team_leader') : false;
-    $isCliente = $u && method_exists($u, 'hasRole') ? $u->hasRole('supervisor') : false;
-    $isClienteCentro = $u && method_exists($u, 'hasRole') ? $u->hasRole('gerente') : false;
+    $isCliente = $u && method_exists($u, 'hasRole') ? $u->hasRole('Cliente_Supervisor') : false;
+    $isClienteCentro = $u && method_exists($u, 'hasRole') ? $u->hasRole('Cliente_Gerente') : false;
 
     $filters = [
             'estatus'      => $req->string('estatus')->toString(),
@@ -1041,7 +1041,7 @@ class OrdenController extends Controller
         if ($u->hasAnyRole(['admin','facturacion'])) return; // acceso amplio
 
         // Supervisor (antes 'cliente'): permitir si es dueño de la solicitud de la OT
-        if ($orden && $u->hasRole('supervisor')) {
+        if ($orden && $u->hasRole('Cliente_Supervisor')) {
             if ($orden->solicitud && (int)$orden->solicitud->id_cliente === (int)$u->id) return;
         }
 

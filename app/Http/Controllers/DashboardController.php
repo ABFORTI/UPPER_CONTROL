@@ -22,8 +22,8 @@ class DashboardController extends Controller
         $u = $req->user();
         
         
-    $isCliente = method_exists($u, 'hasRole') ? $u->hasRole('supervisor') : false;
-    $isClienteCentro = method_exists($u, 'hasRole') ? $u->hasRole('gerente') : false;
+    $isCliente = method_exists($u, 'hasRole') ? $u->hasRole('Cliente_Supervisor') : false;
+    $isClienteCentro = method_exists($u, 'hasRole') ? $u->hasRole('Cliente_Gerente') : false;
 
         // Rango por defecto: últimos 30 días
         // Periodo por semana ISO: week del año (no editable como fechas)

@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Log;
 class OrdenPolicy
 {
     public function viewAny(User $u): bool {
-        return $u->hasAnyRole(['admin','coordinador','team_leader','calidad','facturacion','supervisor','gerente_upper']);
+        return $u->hasAnyRole(['admin','coordinador','team_leader','calidad','facturacion','Cliente_Supervisor','gerente_upper']);
     }
 
     public function view(User $u, Orden $o): bool {
@@ -44,10 +44,10 @@ class OrdenPolicy
             if ($primary) $ids[] = $primary;
             $ids = array_values(array_unique($ids));
             $allowed = in_array((int)$o->id_centrotrabajo, $ids, true);
-        } elseif ($u->hasRole('gerente')) {
+        } elseif ($u->hasRole('Cliente_Gerente')) {
             // Gerente (antes 'cliente_centro'): alcance a todo el centro
             $allowed = (int)$o->id_centrotrabajo === (int)$u->centro_trabajo_id;
-        } elseif ($u->hasRole('supervisor')) {
+        } elseif ($u->hasRole('Cliente_Supervisor')) {
             // Supervisor (antes 'cliente'): sólo sus propias OTs (las de sus solicitudes)
             $allowed = $isOwner;
         } elseif ($u->hasRole('team_leader')) {
@@ -118,7 +118,7 @@ class OrdenPolicy
         // Dueño de la solicitud
         if ((int)($o->solicitud?->id_cliente ?? 0) === (int)$u->id) return true;
         // Cliente con alcance a centro completo puede autorizar del mismo centro
-        if ($u->hasRole('gerente') && (int)$u->centro_trabajo_id === (int)$o->id_centrotrabajo) return true;
+        if ($u->hasRole('Cliente_Gerente') && (int)$u->centro_trabajo_id === (int)$o->id_centrotrabajo) return true;
         return false;
     }
 }

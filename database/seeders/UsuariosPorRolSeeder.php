@@ -55,7 +55,7 @@ class UsuariosPorRolSeeder extends Seeder
             }
 
             // Para 'gerente' (antes 'cliente_centro') asegurar al menos 1 centro en pivote
-            if ($role === 'gerente' && $centro) {
+            if ($role === 'Cliente_Gerente' && $centro) {
                 $user->centros()->syncWithoutDetaching([ $centro->id ]);
             }
             // Log informativo por rol procesado

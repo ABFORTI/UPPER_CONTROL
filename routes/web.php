@@ -161,7 +161,7 @@ Route::middleware('auth')->group(function () {
     // Facturas - Supervisor (antes 'cliente') puede ver el listado de sus facturas
     // Gerente Upper puede ver listados/detalles de facturas (solo lectura)
     Route::get('/facturas', [FacturaController::class,'index'])
-        ->middleware('role:facturacion|admin|supervisor|gerente_upper|gerente')->name('facturas.index');
+        ->middleware('role:facturacion|admin|Cliente_Supervisor|gerente_upper|Cliente_Gerente')->name('facturas.index');
     Route::get('/ordenes/{orden}/facturar', [FacturaController::class,'createFromOrden'])
         ->middleware('role:facturacion|admin')->name('facturas.createFromOrden');
     Route::post('/ordenes/{orden}/facturar', [FacturaController::class,'storeFromOrden'])
@@ -169,9 +169,9 @@ Route::middleware('auth')->group(function () {
 
     // Supervisor (antes 'cliente') puede ver factura y generar PDF
     Route::get('/facturas/{factura}', [FacturaController::class,'show'])
-        ->middleware('role:facturacion|admin|supervisor|gerente_upper|gerente')->name('facturas.show');
+        ->middleware('role:facturacion|admin|Cliente_Supervisor|gerente_upper|Cliente_Gerente')->name('facturas.show');
     Route::get('/facturas/{factura}/pdf',[FacturaController::class,'pdf'])
-        ->middleware('role:facturacion|admin|supervisor|gerente_upper|gerente')->name('facturas.pdf');
+        ->middleware('role:facturacion|admin|Cliente_Supervisor|gerente_upper|Cliente_Gerente')->name('facturas.pdf');
 
     // Solo facturacion y admin pueden ejecutar estas acciones
     Route::post('/facturas/{factura}/facturado', [FacturaController::class,'marcarFacturado'])

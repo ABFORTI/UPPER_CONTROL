@@ -14,7 +14,7 @@ class FacturaPolicy
         // Facturación puede ver todas las facturas
         if ($u->hasRole('facturacion')) return true;
         // Gerente (antes 'cliente_centro'): puede ver facturas de sus centros
-        if ($u->hasRole('gerente')) {
+        if ($u->hasRole('Cliente_Gerente')) {
             $ids = $u->centros()->pluck('centros_trabajo.id')->map(fn($v)=>(int)$v)->all();
             $primary = (int)($u->centro_trabajo_id ?? 0);
             if ($primary) $ids[] = $primary;
@@ -22,7 +22,7 @@ class FacturaPolicy
             return in_array((int)($f->orden?->id_centrotrabajo ?? 0), $ids, true);
         }
         // supervisor (antes 'cliente') puede ver su factura
-        if ($u->hasRole('supervisor')) return $f->orden->solicitud?->id_cliente === $u->id;
+        if ($u->hasRole('Cliente_Supervisor')) return $f->orden->solicitud?->id_cliente === $u->id;
         return false;
     }
 

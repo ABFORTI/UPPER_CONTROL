@@ -20,9 +20,9 @@ class FacturaController extends Controller
     $u = $request->user();
     
     // Supervisor (antes 'cliente') solo puede ver sus propias facturas
-    $isCliente = $u->hasRole('supervisor');
+    $isCliente = $u->hasRole('Cliente_Supervisor');
     // Gerente (antes 'cliente_centro'): puede ver facturas de sus centros (solo lectura)
-    $isGerente = $u->hasRole('gerente');
+    $isGerente = $u->hasRole('Cliente_Gerente');
     
     // Gerente Upper / gerente: acceso solo lectura a consulta
     if (!$u->hasAnyRole(['admin','facturacion','gerente_upper']) && !$isCliente && !$isGerente) {
@@ -1148,7 +1148,7 @@ private function xmlElementToArray(\SimpleXMLElement $element): array
       $centroId = (int)($ordenes->first()?->id_centrotrabajo ?? 0);
       if ($centroId > 0) {
         // Obtener todos los clientes cuyo centro_trabajo_id coincide
-        $clientes = \App\Models\User::role('supervisor')
+        $clientes = \App\Models\User::role('Cliente_Supervisor')
           ->where('centro_trabajo_id', $centroId)
           ->get();
 
@@ -1182,7 +1182,7 @@ private function xmlElementToArray(\SimpleXMLElement $element): array
     try {
       $centroId = (int)($factura->orden?->id_centrotrabajo ?? 0);
       if ($centroId > 0) {
-        $clientes = \App\Models\User::role('supervisor')
+        $clientes = \App\Models\User::role('Cliente_Supervisor')
           ->where('centro_trabajo_id', $centroId)
           ->get();
         foreach ($clientes as $cliente) {
@@ -1212,7 +1212,7 @@ private function xmlElementToArray(\SimpleXMLElement $element): array
   try {
     $centroId = (int)($factura->orden?->id_centrotrabajo ?? 0);
     if ($centroId > 0) {
-      $clientes = \App\Models\User::role('supervisor')
+      $clientes = \App\Models\User::role('Cliente_Supervisor')
         ->where('centro_trabajo_id', $centroId)
         ->get();
       foreach ($clientes as $cliente) {
@@ -1242,7 +1242,7 @@ private function xmlElementToArray(\SimpleXMLElement $element): array
   try {
     $centroId = (int)($factura->orden?->id_centrotrabajo ?? 0);
     if ($centroId > 0) {
-      $clientes = \App\Models\User::role('supervisor')
+      $clientes = \App\Models\User::role('Cliente_Supervisor')
         ->where('centro_trabajo_id', $centroId)
         ->get();
       foreach ($clientes as $cliente) {
