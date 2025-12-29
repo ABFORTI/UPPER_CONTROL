@@ -19,11 +19,13 @@ class FacturaController extends Controller
   {
     $u = $request->user();
     
-    // Cliente solo puede ver sus propias facturas
-    $isCliente = $u->hasRole('cliente');
+    // Supervisor (antes 'cliente') solo puede ver sus propias facturas
+    $isCliente = $u->hasRole('supervisor');
+    // Gerente (antes 'cliente_centro'): puede ver facturas de sus centros (solo lectura)
+    $isGerente = $u->hasRole('gerente');
     
-    // Gerente: acceso solo lectura a consulta
-    if (!$u->hasAnyRole(['admin','facturacion','gerente']) && !$isCliente) {
+    // Gerente Upper / gerente: acceso solo lectura a consulta
+    if (!$u->hasAnyRole(['admin','facturacion','gerente_upper']) && !$isCliente && !$isGerente) {
       abort(403);
     }
 
@@ -118,8 +120,8 @@ class FacturaController extends Controller
   // 2) OTs sin factura (incluye autorizada_cliente para generar) - SOLO para facturacion/admin
   $items = collect();
 
-  // Cliente NO debe ver la lista de OTs pendientes de facturar (no puede crearlas)
-  if (!$isCliente && (!$estatus || $estatus === 'autorizada_cliente' || $estatus === 'sin_factura')) {
+  // Solo admin/facturación deben ver la lista de OTs pendientes de facturar (son quienes pueden crearlas)
+  if ($u->hasAnyRole(['admin','facturacion']) && (!$estatus || $estatus === 'autorizada_cliente' || $estatus === 'sin_factura')) {
     // Excluir OTs que ya tengan factura (directa o pivot)
     $ordenesConFacturaDirecta = Factura::query()
       ->when(!$u->hasRole('admin') && !$u->hasRole('facturacion'), function($q) use ($u) {
@@ -188,7 +190,7 @@ class FacturaController extends Controller
       $items = $ots;
     }
   } else {
-    // Filtro de factura -> solo facturas
+    // Resto de roles (supervisor, gerente, gerente_upper): solo facturas (solo lectura)
     $items = $facturas;
   }
 
@@ -1146,7 +1148,7 @@ private function xmlElementToArray(\SimpleXMLElement $element): array
       $centroId = (int)($ordenes->first()?->id_centrotrabajo ?? 0);
       if ($centroId > 0) {
         // Obtener todos los clientes cuyo centro_trabajo_id coincide
-        $clientes = \App\Models\User::role('cliente')
+        $clientes = \App\Models\User::role('supervisor')
           ->where('centro_trabajo_id', $centroId)
           ->get();
 
@@ -1180,7 +1182,7 @@ private function xmlElementToArray(\SimpleXMLElement $element): array
     try {
       $centroId = (int)($factura->orden?->id_centrotrabajo ?? 0);
       if ($centroId > 0) {
-        $clientes = \App\Models\User::role('cliente')
+        $clientes = \App\Models\User::role('supervisor')
           ->where('centro_trabajo_id', $centroId)
           ->get();
         foreach ($clientes as $cliente) {
@@ -1210,7 +1212,7 @@ private function xmlElementToArray(\SimpleXMLElement $element): array
   try {
     $centroId = (int)($factura->orden?->id_centrotrabajo ?? 0);
     if ($centroId > 0) {
-      $clientes = \App\Models\User::role('cliente')
+      $clientes = \App\Models\User::role('supervisor')
         ->where('centro_trabajo_id', $centroId)
         ->get();
       foreach ($clientes as $cliente) {
@@ -1240,7 +1242,7 @@ private function xmlElementToArray(\SimpleXMLElement $element): array
   try {
     $centroId = (int)($factura->orden?->id_centrotrabajo ?? 0);
     if ($centroId > 0) {
-      $clientes = \App\Models\User::role('cliente')
+      $clientes = \App\Models\User::role('supervisor')
         ->where('centro_trabajo_id', $centroId)
         ->get();
       foreach ($clientes as $cliente) {

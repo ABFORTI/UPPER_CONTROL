@@ -239,8 +239,8 @@ class PrecioController extends Controller
     $u = Auth::user();
     if (!$u) abort(403);
     if ($u->hasAnyRole(['admin', 'coordinador', 'control', 'comercial'])) return;
-    // Gerente: permitir solo lectura (GET/HEAD/OPTIONS)
-    if ($u->hasRole('gerente')) {
+    // Gerente Upper: permitir solo lectura (GET/HEAD/OPTIONS)
+    if ($u->hasRole('gerente_upper')) {
       $m = strtoupper(request()->method());
       if (in_array($m, ['GET','HEAD','OPTIONS'], true)) return;
       abort(403);

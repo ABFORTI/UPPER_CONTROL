@@ -29,13 +29,13 @@ class CheckServiciosAccess
             'can_servicios_list' => $user->can('servicios.list'),
         ]);
         
-        // Rol GERENTE: sólo lectura (permitir únicamente métodos seguros)
-        if ($user->hasRole('gerente')) {
+        // Rol GERENTE_UPPER: sólo lectura (permitir únicamente métodos seguros)
+        if ($user->hasRole('gerente_upper')) {
             if (in_array(strtoupper($request->method()), ['GET','HEAD','OPTIONS'], true)) {
-                Log::info('CheckServiciosAccess: Acceso gerente (solo lectura)');
+                Log::info('CheckServiciosAccess: Acceso gerente_upper (solo lectura)');
                 return $next($request);
             }
-            Log::warning('CheckServiciosAccess: Gerente bloqueado en método no seguro', ['method' => $request->method(), 'path' => $request->path()]);
+            Log::warning('CheckServiciosAccess: gerente_upper bloqueado en método no seguro', ['method' => $request->method(), 'path' => $request->path()]);
             abort(403, 'Solo lectura: no puedes modificar esta sección.');
         }
 

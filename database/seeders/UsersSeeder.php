@@ -21,7 +21,7 @@ class UsersSeeder extends Seeder
             'calidad'       => ['name' => 'Calidad',      'email' => 'calidad@gmail.com'],
             'team_leader'   => ['name' => 'Team Leader',  'email' => 'teamleader@gmail.com'],
             'coordinador'   => ['name' => 'Coordinador',  'email' => 'coordinador@gmail.com'],
-            'cliente'       => ['name' => 'Cliente',      'email' => 'cliente@gmail.com'],
+            'supervisor'    => ['name' => 'Supervisor',   'email' => 'supervisor@gmail.com'],
         ];
 
         foreach ($usersByRole as $role => $data) {

@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Log;
 class OrdenPolicy
 {
     public function viewAny(User $u): bool {
-        return $u->hasAnyRole(['admin','coordinador','team_leader','calidad','facturacion','cliente','gerente']);
+        return $u->hasAnyRole(['admin','coordinador','team_leader','calidad','facturacion','supervisor','gerente_upper']);
     }
 
     public function view(User $u, Orden $o): bool {
@@ -30,25 +30,25 @@ class OrdenPolicy
             return true;
         }
 
-        // 2) Dueño de la solicitud (cliente propietario) SIEMPRE puede ver, incluso si también tiene rol cliente_centro
+        // 2) Dueño de la solicitud (cliente propietario) SIEMPRE puede ver, incluso si también tiene rol gerente
         $isOwner = (int)($o->solicitud?->id_cliente ?? 0) === (int)$u->id;
         if ($isOwner) {
             return true;
         }
 
         $allowed = false;
-        // 3) Gerente: puede ver si la OT pertenece a alguno de sus centros asignados (principal + pivots)
-        if ($u->hasRole('gerente')) {
+        // 3) Gerente Upper: puede ver si la OT pertenece a alguno de sus centros asignados (principal + pivots)
+        if ($u->hasRole('gerente_upper')) {
             $ids = $u->centros()->pluck('centros_trabajo.id')->map(fn($v)=>(int)$v)->all();
             $primary = (int)($u->centro_trabajo_id ?? 0);
             if ($primary) $ids[] = $primary;
             $ids = array_values(array_unique($ids));
             $allowed = in_array((int)$o->id_centrotrabajo, $ids, true);
-        } elseif ($u->hasRole('cliente_centro')) {
-            // Cliente con alcance a todo el centro (rol opcional 'cliente_centro')
+        } elseif ($u->hasRole('gerente')) {
+            // Gerente (antes 'cliente_centro'): alcance a todo el centro
             $allowed = (int)$o->id_centrotrabajo === (int)$u->centro_trabajo_id;
-        } elseif ($u->hasRole('cliente')) {
-            // Cliente estándar: sólo sus propias OTs (las de sus solicitudes)
+        } elseif ($u->hasRole('supervisor')) {
+            // Supervisor (antes 'cliente'): sólo sus propias OTs (las de sus solicitudes)
             $allowed = $isOwner;
         } elseif ($u->hasRole('team_leader')) {
             $allowed = (int)$o->team_leader_id === (int)$u->id;
@@ -100,8 +100,8 @@ class OrdenPolicy
     // calidad (solo calidad/admin del mismo centro)
     public function calidad(User $u, Orden $o): bool {
         if ($u->hasRole('admin')) return true;
-        // Gerente: solo lectura (no debe ejecutar acciones de validar/rechazar) -> devolver false aquí
-        if ($u->hasRole('gerente')) return false;
+        // Gerente Upper: solo lectura (no debe ejecutar acciones de validar/rechazar) -> devolver false aquí
+        if ($u->hasRole('gerente_upper')) return false;
         if (!$u->hasRole('calidad')) return false;
         // Permitimos centros asignados por pivot más el centro principal
         $ids = $u->centros()->pluck('centros_trabajo.id')->map(fn($v)=>(int)$v)->all();
@@ -118,7 +118,7 @@ class OrdenPolicy
         // Dueño de la solicitud
         if ((int)($o->solicitud?->id_cliente ?? 0) === (int)$u->id) return true;
         // Cliente con alcance a centro completo puede autorizar del mismo centro
-        if ($u->hasRole('cliente_centro') && (int)$u->centro_trabajo_id === (int)$o->id_centrotrabajo) return true;
+        if ($u->hasRole('gerente') && (int)$u->centro_trabajo_id === (int)$o->id_centrotrabajo) return true;
         return false;
     }
 }

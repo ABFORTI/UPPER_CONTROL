@@ -66,10 +66,10 @@ async function copyTable(){
   }catch(e){ console.warn('No se pudo copiar:', e) }
 }
 
-// Roles para ocultar botón crear a gerente (solo lectura)
+// Roles para ocultar botón crear a gerente_upper (solo lectura)
 const page = usePage()
 const roles = computed(() => page.props.auth?.user?.roles ?? [])
-const isGerente = computed(() => roles.value.includes('gerente'))
+const isGerente = computed(() => roles.value.includes('gerente_upper'))
 
 </script>
 

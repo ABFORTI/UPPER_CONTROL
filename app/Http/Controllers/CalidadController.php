@@ -21,8 +21,8 @@ class CalidadController extends Controller
   public function show(Orden $orden) {
   $u = Auth::user();
   /** @var \App\Models\User $u */
-    // Gerente: solo lectura, sin necesidad de cumplir policy de 'calidad'
-    if (!$u->hasRole('gerente')) {
+    // Gerente Upper: solo lectura, sin necesidad de cumplir policy de 'calidad'
+    if (!$u->hasRole('gerente_upper')) {
       $this->authorize('calidad', $orden);
       $this->authCalidad($orden);
     }
@@ -206,7 +206,7 @@ class CalidadController extends Controller
   $q = \App\Models\Orden::with('servicio','centro','area','solicitud.marca','teamLeader')
     // Mostrar OTs completadas y las etapas posteriores del flujo
     ->whereIn('estatus', $this->calidadVisibleStatuses())
-    // Admin ve todos los centros. Gerente restringido a centros asignados (solo lectura).
+    // Admin ve todos los centros. Gerente Upper restringido a centros asignados (solo lectura).
     ->when(!$u->hasRole('admin'), function($qq) use ($u) {
       $ids = $this->allowedCentroIds($u);
       if (!empty($ids)) { $qq->whereIn('id_centrotrabajo', $ids); }

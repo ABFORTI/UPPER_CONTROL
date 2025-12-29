@@ -877,11 +877,11 @@ class OrdenController extends Controller
     public function index(Request $req)
     {
     $u = $req->user();
-    // Privilegio de vista amplia: admin, facturación y gerente (solo lectura)
-    $isPrivilegedViewer = $u && method_exists($u, 'hasAnyRole') ? $u->hasAnyRole(['admin','facturacion','gerente']) : false;
+    // Privilegio de vista amplia: admin, facturación y gerente_upper (solo lectura)
+    $isPrivilegedViewer = $u && method_exists($u, 'hasAnyRole') ? $u->hasAnyRole(['admin','facturacion','gerente_upper']) : false;
     $isTL = $u && method_exists($u, 'hasRole') ? $u->hasRole('team_leader') : false;
-    $isCliente = $u && method_exists($u, 'hasRole') ? $u->hasRole('cliente') : false;
-    $isClienteCentro = $u && method_exists($u, 'hasRole') ? $u->hasRole('cliente_centro') : false;
+    $isCliente = $u && method_exists($u, 'hasRole') ? $u->hasRole('supervisor') : false;
+    $isClienteCentro = $u && method_exists($u, 'hasRole') ? $u->hasRole('gerente') : false;
 
     $filters = [
             'estatus'      => $req->string('estatus')->toString(),
@@ -1013,7 +1013,7 @@ class OrdenController extends Controller
         }
 
         // Lista de centros para selector
-        $centrosLista = $u->hasAnyRole(['admin','facturacion','gerente'])
+        $centrosLista = $u->hasAnyRole(['admin','facturacion','gerente_upper'])
             ? \App\Models\CentroTrabajo::select('id','nombre')->orderBy('nombre')->get()
             : \App\Models\CentroTrabajo::whereIn('id', $centrosPermitidos)->select('id','nombre')->orderBy('nombre')->get();
 
@@ -1022,7 +1022,7 @@ class OrdenController extends Controller
             'filters'   => $req->only(['id','estatus','calidad','servicio','centro','centro_costo','facturacion','desde','hasta','year','week']),
             'servicios' => \App\Models\ServicioEmpresa::select('id','nombre')->orderBy('nombre')->get(),
             'centros'   => $centrosLista,
-            'centrosCostos' => $u->hasAnyRole(['admin','facturacion','gerente'])
+            'centrosCostos' => $u->hasAnyRole(['admin','facturacion','gerente_upper'])
                 ? \App\Models\CentroCosto::select('id','nombre','id_centrotrabajo')->orderBy('nombre')->get()
                 : \App\Models\CentroCosto::whereIn('id_centrotrabajo', $centrosPermitidos)->select('id','nombre','id_centrotrabajo')->orderBy('nombre')->get(),
             'urls'      => [
@@ -1040,8 +1040,8 @@ class OrdenController extends Controller
         if (!($u instanceof \App\Models\User)) abort(403);
         if ($u->hasAnyRole(['admin','facturacion'])) return; // acceso amplio
 
-        // Cliente: permitir si es dueño de la solicitud de la OT
-        if ($orden && $u->hasRole('cliente')) {
+        // Supervisor (antes 'cliente'): permitir si es dueño de la solicitud de la OT
+        if ($orden && $u->hasRole('supervisor')) {
             if ($orden->solicitud && (int)$orden->solicitud->id_cliente === (int)$u->id) return;
         }
 
