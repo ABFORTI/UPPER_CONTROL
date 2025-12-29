@@ -27,7 +27,7 @@ class FacturaExport implements FromQuery, WithMapping, WithHeadings, ShouldAutoS
         $q = Factura::query()
             ->with(['orden.servicio','orden.centro','orden.solicitud.cliente'])
             // visibilidad por rol (supervisor (antes 'cliente') ve solo sus facturas)
-            ->when($u->hasRole('supervisor'), fn($qq) =>
+            ->when($u->hasRole('Cliente_Supervisor'), fn($qq) =>
                 $qq->whereHas('orden.solicitud', fn($w)=>$w->where('id_cliente',$u->id))
             )
             ->when(!$u->hasAnyRole(['admin','facturacion']), fn($qq) =>

@@ -33,7 +33,7 @@ class OtExport implements FromQuery, WithMapping, WithHeadings, ShouldAutoSize, 
             ->when($u->hasRole('team_leader'), fn($qq) =>
                 $qq->where('team_leader_id', $u->id)
             )
-            ->when($u->hasRole('supervisor'), fn($qq) =>
+            ->when($u->hasRole('Cliente_Supervisor'), fn($qq) =>
                 $qq->whereHas('solicitud', fn($w)=>$w->where('id_cliente', $u->id))
             )
             // filtros

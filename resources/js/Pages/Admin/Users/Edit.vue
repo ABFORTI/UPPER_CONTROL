@@ -8,7 +8,7 @@ const form = useForm({
   email: props.user?.email || '',
   phone: props.user?.phone || '',
   centro_trabajo_id: props.user?.centro_trabajo_id || '',
-  role: props.user?.role || 'supervisor',
+  role: props.user?.role || 'Cliente_Supervisor',
   centros_ids: props.user?.centros_ids || [],
   password: '',
   password_confirmation: ''
