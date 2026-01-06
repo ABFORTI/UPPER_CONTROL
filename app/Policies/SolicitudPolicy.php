@@ -26,7 +26,7 @@ class SolicitudPolicy
     }
 
     public function create(User $u): bool {
-        return $u->hasAnyRole(['admin','Cliente_Supervisor']);
+        return $u->hasAnyRole(['admin','Cliente_Supervisor','Cliente_Gerente']);
     }
 
     // aprobar / rechazar por coordinador o admin del mismo centro
