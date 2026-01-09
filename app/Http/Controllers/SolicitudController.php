@@ -269,6 +269,7 @@ class SolicitudController extends Controller
         $req->validate([
             'id_centrocosto' => ['required','integer','exists:centros_costos,id'],
             'id_marca' => ['nullable','integer','exists:marcas,id'],
+            'id_area' => ['nullable','integer','exists:areas,id'],
         ]);
         $cc = \App\Models\CentroCosto::find($req->id_centrocosto);
         if (!$cc || (int)$cc->id_centrotrabajo !== (int)$centroId) {
@@ -280,6 +281,15 @@ class SolicitudController extends Controller
             if (!$marca || (int)$marca->id_centrotrabajo !== (int)$centroId) {
                 return back()->withErrors(['id_marca' => 'La marca seleccionada no pertenece al centro seleccionado.'])->withInput();
             }
+        }
+
+        $areaId = null;
+        if ($req->filled('id_area')) {
+            $area = \App\Models\Area::find($req->id_area);
+            if (!$area || (int)$area->id_centrotrabajo !== (int)$centroId) {
+                return back()->withErrors(['id_area' => 'El área seleccionada no pertenece al centro seleccionado.'])->withInput();
+            }
+            $areaId = (int)$area->id;
         }
 
         // Usar un pequeño retry para evitar colisiones de folio bajo concurrencia
@@ -306,7 +316,7 @@ class SolicitudController extends Controller
                         'descripcion'      => $req->descripcion,
                         'id_centrocosto'   => (int)$req->id_centrocosto,
                         'id_marca'         => $req->filled('id_marca') ? (int)$req->id_marca : null,
-                        // 'id_area' se asigna al crear la OT por un coordinador
+                        'id_area'          => $areaId,
                         'cantidad'         => (int)$req->cantidad,
                         // Importes diferidos a la finalización de OT
                         'subtotal'         => 0,
@@ -332,7 +342,7 @@ class SolicitudController extends Controller
                         'id_centrotrabajo' => $centroId,
                         'id_servicio'      => $serv->id,
                         'descripcion'      => $req->descripcion,
-                        'id_area'          => $req->id_area,
+                        'id_area'          => $areaId,
                         'id_centrocosto'   => (int)$req->id_centrocosto,
                         'id_marca'         => $req->filled('id_marca') ? (int)$req->id_marca : null,
                         'cantidad'         => (int)$req->cantidad,

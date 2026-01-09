@@ -25,6 +25,7 @@ const form = useForm({
 id_centrotrabajo: null,
 id_servicio: '',
 descripcion: '',
+id_area: null,
 cantidad: 1,
 // Modo diferido: ya no capturamos por tamaño en la solicitud
 tamanos: { chico:0, mediano:0, grande:0, jumbo:0 },
@@ -159,6 +160,7 @@ notas: form.notas,
 archivos: form.archivos,
 id_centrocosto: form.id_centrocosto,
 id_marca: form.id_marca,
+id_area: form.id_area,
 }
 if (usaTamanos.value) payload.tamanos = {
   // Ya no se envían tamaños; sólo total de piezas
@@ -342,7 +344,31 @@ function handleFiles(e) {
                 </div>
               </div>
 
-              <!-- Área removed: selection moved to OT creation by coordinator -->
+              <!-- Área (Opcional): el cliente puede pre-seleccionarla -->
+              <div class="form-group">
+                <label class="block text-sm font-semibold text-gray-700 mb-2">
+                  <span class="flex items-center gap-2">
+                    <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
+                    </svg>
+                    Área
+                    <span class="text-xs text-gray-500 font-normal">(Opcional)</span>
+                  </span>
+                </label>
+                <select
+                  v-model="form.id_area"
+                  class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none bg-gray-50 hover:bg-white"
+                >
+                  <option :value="null">— Sin seleccionar —</option>
+                  <option v-for="a in filteredAreas" :key="a.id" :value="a.id">{{ a.nombre }}</option>
+                </select>
+                <p v-if="form.errors.id_area" class="text-red-600 text-sm mt-2 flex items-center gap-1">
+                  <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                  </svg>
+                  {{ form.errors.id_area }}
+                </p>
+              </div>
             </div>
           </div>
 

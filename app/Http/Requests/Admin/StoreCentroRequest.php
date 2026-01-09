@@ -9,6 +9,7 @@ class StoreCentroRequest extends FormRequest {
     public function rules(): array {
         return [
             'nombre' => ['required','string','max:120'],
+            'numero_centro' => ['nullable','string','max:20','regex:/^\d+$/','unique:centros_trabajo,numero_centro'],
             'prefijo'=> ['nullable','string','max:10'],
             'direccion'=> ['nullable','string','max:255'],
             'activo' => ['boolean'],

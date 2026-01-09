@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref, watch, watchEffect } from 'vue'
 import { router, Link, usePage } from '@inertiajs/vue3'
+import { route } from 'ziggy-js'
 
 const props = defineProps({
   data: Object,
@@ -74,6 +75,44 @@ function applyFilter(){
   router.get(props.urls.index, params, { preserveState: true, replace: true })
 }
 
+const exportParams = computed(() => {
+  const base = { ...(props.filters || {}) }
+
+  // sincronizar con la UI (lo que el usuario ve actualmente)
+  if (sel.value) base.estatus = sel.value
+  else delete base.estatus
+
+  if (factSel.value) base.facturacion = factSel.value
+  else delete base.facturacion
+
+  if (centroSel.value) base.centro = centroSel.value
+  else delete base.centro
+
+  if (centroCostoSel.value) base.centro_costo = centroCostoSel.value
+  else delete base.centro_costo
+
+  if (yearSel.value) base.year = yearSel.value
+  else delete base.year
+
+  if (weekSel.value) base.week = weekSel.value
+  else delete base.week
+
+  base.format = 'xlsx'
+  return base
+})
+
+const exportUrl = computed(() => {
+  const url = props.urls?.export
+  if (!url) return '#'
+  return route('ordenes.export', exportParams.value)
+})
+
+const exportFacturacionUrl = computed(() => {
+  const url = props.urls?.export_facturacion
+  if (!url) return '#'
+  return route('ordenes.exportFacturacion', exportParams.value)
+})
+
 function factBadgeClass(v){
   const e = String(v || '').toLowerCase()
   if (e === 'pagado') return 'bg-green-100 text-green-700'
@@ -146,6 +185,16 @@ function isoWeekNumber(dateStr){
             <option value="">Periodos</option>
             <option v-for="w in 53" :key="w" :value="w">Periodo {{ w }}</option>
           </select>
+
+          <a :href="exportUrl"
+             class="w-full lg:w-auto inline-flex items-center justify-center px-4 py-2 rounded font-semibold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors">
+            Descargar Excel
+          </a>
+
+          <a :href="exportFacturacionUrl"
+             class="w-full lg:w-auto inline-flex items-center justify-center px-4 py-2 rounded font-semibold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors">
+            Excel facturación
+          </a>
 
           <div class="flex flex-wrap sm:flex-nowrap gap-2 overflow-x-auto lg:overflow-visible w-full py-1 lg:w-auto lg:justify-start">
             <button @click="sel=''; applyFilter()" :class="['flex-shrink-0 px-4 py-2 rounded-full text-sm font-semibold border transition-colors', sel==='' ? 'text-white border-[#1A73E8]' : 'bg-white text-slate-700 border-slate-300']" :style="sel==='' ? 'background-color: #1A73E8' : ''">Todos</button>

@@ -82,6 +82,7 @@ function toggle(id){
             <thead class="bg-gradient-to-r from-gray-50 to-gray-100 text-gray-700 uppercase tracking-wider">
               <tr>
                 <th class="px-4 lg:px-6 py-3 text-left font-bold">Nombre</th>
+                <th class="px-4 lg:px-6 py-3 text-left font-bold">Número</th>
                 <th class="px-4 lg:px-6 py-3 text-left font-bold">Prefijo</th>
                 <th class="px-4 lg:px-6 py-3 text-left font-bold">Dirección</th>
                 <th class="px-4 lg:px-6 py-3 text-center font-bold">Estado</th>
@@ -92,6 +93,11 @@ function toggle(id){
               <tr v-for="c in data.data" :key="c.id" class="hover:bg-indigo-50 transition-colors duration-150">
                 <td class="px-4 lg:px-6 py-3 align-top">
                   <div class="font-semibold text-gray-900">{{ c.nombre }}</div>
+                </td>
+                <td class="px-4 lg:px-6 py-3">
+                  <span class="inline-flex px-3 py-1 bg-slate-100 text-slate-700 rounded-full font-medium">
+                    {{ c.numero_centro || '—' }}
+                  </span>
                 </td>
                 <td class="px-4 lg:px-6 py-3">
                   <span class="inline-flex px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full font-medium">
@@ -139,7 +145,7 @@ function toggle(id){
                 </td>
               </tr>
               <tr v-if="!data.data || data.data.length === 0">
-                <td colspan="5" class="px-6 py-12 text-center text-gray-500">
+                <td colspan="6" class="px-6 py-12 text-center text-gray-500">
                   <svg class="w-16 h-16 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/>
                   </svg>
@@ -156,6 +162,10 @@ function toggle(id){
               <div>
                 <div class="text-xs uppercase tracking-wide text-gray-500">Centro</div>
                 <div class="text-lg font-semibold text-gray-900">{{ c.nombre }}</div>
+              </div>
+              <div class="flex flex-wrap items-center gap-2 text-sm text-gray-600">
+                <span class="font-semibold text-gray-700">Número:</span>
+                <span class="inline-flex px-3 py-1 bg-slate-100 text-slate-700 rounded-full font-medium">{{ c.numero_centro || '—' }}</span>
               </div>
               <div class="flex flex-wrap items-center gap-2 text-sm text-gray-600">
                 <span class="font-semibold text-gray-700">Prefijo:</span>

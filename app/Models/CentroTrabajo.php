@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 class CentroTrabajo extends Model
 {
     protected $table = 'centros_trabajo';
-    protected $fillable = ['nombre','prefijo','direccion','activo'];
+    protected $fillable = ['nombre','numero_centro','prefijo','direccion','activo'];
 
     public function users(){ return $this->hasMany(User::class, 'centro_trabajo_id'); }
 

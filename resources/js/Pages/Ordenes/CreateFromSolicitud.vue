@@ -20,7 +20,7 @@ const separarItems = ref(false)
 
 const form = useForm({
   team_leader_id: null,
-  id_area: null,
+  id_area: props.solicitud?.id_area ?? null,
   separar_items: false,
   items: props.prefill.length > 0 
     ? props.prefill.map(i => ({ 
@@ -30,6 +30,8 @@ const form = useForm({
       }))
     : [{ descripcion: '', cantidad: 1, tamano: null }]
 })
+
+const areaBloqueada = computed(() => !!props.solicitud?.id_area)
 
 // Contador en tiempo real para servicios SIN tamaños
 const sumaActual = computed(() => {
@@ -195,10 +197,11 @@ function submit() {
                 <!-- Área: coordinador seleccionará el área para la OT -->
                 <div class="mb-4">
                   <label class="block text-sm font-semibold text-gray-700 mb-2 dark:text-slate-200">Área</label>
-                  <select v-model="form.id_area" class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-100">
+                  <select v-model="form.id_area" :disabled="areaBloqueada" class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-100 disabled:opacity-60 disabled:cursor-not-allowed">
                     <option :value="null">— Sin seleccionar —</option>
                     <option v-for="a in areas" :key="a.id" :value="a.id">{{ a.nombre }}</option>
                   </select>
+                  <p v-if="areaBloqueada" class="text-xs text-gray-500 mt-2 dark:text-slate-400">Área definida por el cliente (no editable).</p>
                   <p v-if="form.errors.id_area" class="text-red-600 text-sm mt-2">{{ form.errors.id_area }}</p>
                 </div>
                 <label class="block text-sm font-semibold text-gray-700 mb-3 dark:text-slate-200">
