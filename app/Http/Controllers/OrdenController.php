@@ -22,6 +22,9 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use App\Services\Notifier;
 use App\Jobs\GenerateOrdenPdf;
+use App\Exports\OrdenesIndexExport;
+use App\Exports\OrdenesFacturacionExport;
+use Maatwebsite\Excel\Facades\Excel;
 
 class OrdenController extends Controller
 {
@@ -63,7 +66,7 @@ class OrdenController extends Controller
         }
 
         // Cargar relaciones necesarias
-        $solicitud->load(['servicio','centro','tamanos','centroCosto','marca']);
+        $solicitud->load(['servicio','centro','tamanos','centroCosto','marca','area']);
 
         // Modo per-centro: detectar tamaños configurados en el centro de la solicitud
         $usaTamanos = \App\Models\ServicioCentro::where('id_centrotrabajo',$solicitud->id_centrotrabajo)
@@ -120,10 +123,12 @@ class OrdenController extends Controller
                 'cantidad' => (int)$solicitud->cantidad,
                 'id_servicio' => (int)$solicitud->id_servicio,
                 'id_centrotrabajo' => (int)$solicitud->id_centrotrabajo,
+                'id_area' => $solicitud->id_area ? (int)$solicitud->id_area : null,
                 'servicio' => [ 'nombre' => $solicitud->servicio->nombre ?? null ],
                 'centro'   => [ 'nombre' => $solicitud->centro->nombre ?? null ],
                 'centroCosto' => $solicitud->centroCosto ? $solicitud->centroCosto->only(['id','nombre']) : null,
                 'marca'       => $solicitud->marca ? $solicitud->marca->only(['id','nombre']) : null,
+                'area'        => $solicitud->area ? $solicitud->area->only(['id','nombre']) : null,
             ],
             'folio'               => $this->buildFolioOT($solicitud->id_centrotrabajo),
             'teamLeaders'         => $teamLeaders,
@@ -164,6 +169,27 @@ class OrdenController extends Controller
             'items.*.descripcion' => ['nullable','string','max:255'], // IMPORTANTE: Incluir aquí para que Laravel no lo elimine
             'items.*.tamano' => ['nullable','string'],
         ]);
+
+        // Si el cliente ya seleccionó área en la solicitud, el coordinador NO puede cambiarla
+        $requestedAreaId = $data['id_area'] ?? null;
+        if (!empty($solicitud->id_area)) {
+            if (!empty($requestedAreaId) && (int)$requestedAreaId !== (int)$solicitud->id_area) {
+                return back()->withErrors([
+                    'id_area' => 'El área fue seleccionada por el cliente y no se puede cambiar.'
+                ]);
+            }
+            $data['id_area'] = (int)$solicitud->id_area;
+        }
+
+        // Validar pertenencia del área (si existe) al centro de la solicitud
+        if (!empty($data['id_area'])) {
+            $area = \App\Models\Area::find($data['id_area']);
+            if (!$area || (int)$area->id_centrotrabajo !== (int)$solicitud->id_centrotrabajo) {
+                return back()->withErrors([
+                    'id_area' => 'El área seleccionada no pertenece al centro de la solicitud.'
+                ]);
+            }
+        }
 
         $separarItems = (bool)($data['separar_items'] ?? false);
 
@@ -1027,10 +1053,58 @@ class OrdenController extends Controller
                 : \App\Models\CentroCosto::whereIn('id_centrotrabajo', $centrosPermitidos)->select('id','nombre','id_centrotrabajo')->orderBy('nombre')->get(),
             'urls'      => [
                 'index' => route('ordenes.index'),
+                'export' => route('ordenes.export'),
+                'export_facturacion' => route('ordenes.exportFacturacion'),
                 'facturas_batch' => route('facturas.batch'),
                 'facturas_batch_create' => route('facturas.batch.create'),
             ],
         ]);
+    }
+
+    /** Exportar Excel con los mismos filtros del listado */
+    public function export(Request $req)
+    {
+        $filters = $req->only([
+            'id',
+            'estatus',
+            'calidad',
+            'servicio',
+            'centro',
+            'centro_costo',
+            'facturacion',
+            'desde',
+            'hasta',
+            'year',
+            'week',
+        ]);
+
+        $format = $req->get('format', 'xlsx');
+        $file = 'ordenes_trabajo_' . now()->format('Ymd_His') . '.' . $format;
+
+        return Excel::download(new OrdenesIndexExport($filters, $req->user()), $file);
+    }
+
+    /** Exportar Excel de facturación con el mismo filtro del listado (formato por item) */
+    public function exportFacturacion(Request $req)
+    {
+        $filters = $req->only([
+            'id',
+            'estatus',
+            'calidad',
+            'servicio',
+            'centro',
+            'centro_costo',
+            'facturacion',
+            'desde',
+            'hasta',
+            'year',
+            'week',
+        ]);
+
+        $format = $req->get('format', 'xlsx');
+        $file = 'excel_facturacion_' . now()->format('Ymd_His') . '.' . $format;
+
+        return Excel::download(new OrdenesFacturacionExport($filters, $req->user()), $file);
     }
 
     /** Helpers */
