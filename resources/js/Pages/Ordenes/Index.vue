@@ -150,18 +150,20 @@ function isoWeekNumber(dateStr){
 </script>
 
 <template>
-  <div class="max-w-none px-4 py-6 sm:px-6 lg:px-8">
-    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-5">
-      <h1 class="text-3xl font-extrabold tracking-tight uppercase text-slate-900">Órdenes de Trabajo</h1>
-      <div class="mt-3 sm:mt-0 inline-flex flex-col gap-1 rounded-xl border border-slate-200 bg-slate-900/5 px-4 py-3 shadow-sm self-start sm:self-end">
-        <span class="text-[0.7rem] uppercase tracking-wide text-slate-500">Periodo actual</span>
-        <span class="text-xl font-semibold text-slate-900">Periodo {{ currentPeriod }}</span>
-        <span class="text-xs text-slate-500">Año {{ currentYear }}</span>
-      </div>
-    </div>
-
+  <div class="max-w-none px-1 py-3 sm:px-2 lg:px-3">
     <div class="rounded-xl border bg-white shadow-sm overflow-hidden">
-      <div class="px-4 py-4 sm:px-6 lg:px-8 space-y-4 lg:space-y-0 lg:flex lg:flex-wrap lg:items-center lg:justify-start lg:gap-4">
+      <div class="px-2 pt-3 pb-2 sm:px-3 lg:px-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight uppercase text-slate-900">Órdenes de Trabajo</h1>
+        <div class="inline-flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-900/5 px-3 py-2 self-start sm:self-end">
+          <div class="leading-tight">
+            <div class="text-[0.65rem] uppercase tracking-wide text-slate-500">Periodo actual</div>
+            <div class="text-lg font-semibold text-slate-900">Periodo {{ currentPeriod }}</div>
+          </div>
+          <div class="text-xs text-slate-500">Año {{ currentYear }}</div>
+        </div>
+      </div>
+
+      <div class="px-2 py-2 sm:px-3 lg:px-4 space-y-3 lg:space-y-0 lg:flex lg:flex-wrap lg:items-center lg:justify-start lg:gap-4">
         <div class="flex flex-col sm:flex-row sm:items-center gap-2 w-full lg:w-auto lg:justify-start">
           <button v-if="canFacturar && anySelected" @click="openBatch" class="w-full sm:w-auto px-4 py-2 rounded text-white font-semibold" style="background:#1A73E8">Registrar factura</button>
         </div>
@@ -211,32 +213,32 @@ function isoWeekNumber(dateStr){
         </div>
       </div>
 
-      <div v-if="isPeriod" class="px-4 pb-4 sm:px-6 lg:px-8">
+      <div v-if="isPeriod" class="px-2 pb-3 sm:px-3 lg:px-4">
         <div class="rounded-lg shadow-sm border border-slate-200">
           <div class="overflow-x-auto">
             <div class="max-h-[60vh] overflow-y-auto overscroll-contain">
-              <table class="w-full text-[0.7rem] md:text-sm xl:text-xs 2xl:text-sm table-auto">
+              <table class="w-full text-[0.7rem] md:text-xs 2xl:text-sm table-auto">
                 <thead class="bg-slate-800 text-white uppercase text-xs">
                   <tr>
-                    <th v-if="canFacturar" class="px-1.5 sm:px-2 py-2 text-center align-top"></th>
-                    <th class="px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal 2xl:whitespace-nowrap">ID</th>
-                    <th class="px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal 2xl:whitespace-nowrap">Producto</th>
-                    <th class="px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal 2xl:whitespace-nowrap">Servicio</th>
-                    <th class="px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal 2xl:whitespace-nowrap">Centro</th>
-                    <th class="px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal 2xl:whitespace-nowrap">Área</th>
-                    <th class="px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal 2xl:whitespace-nowrap">Estatus</th>
-                    <th class="px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal 2xl:whitespace-nowrap">Centro de costo</th>
-                    <th class="px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal 2xl:whitespace-nowrap">Marca</th>
-                    <th class="px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal 2xl:whitespace-nowrap">Facturación</th>
-                    <th class="px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal 2xl:whitespace-nowrap">TL</th>
-                    <th class="px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal 2xl:whitespace-nowrap">Periodo</th>
-                    <th class="px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal 2xl:whitespace-nowrap">Fecha</th>
-                    <th class="px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal 2xl:whitespace-nowrap">Acciones</th>
+                    <th v-if="canFacturar" class="w-10 px-1 sm:px-1.5 py-2 text-center align-top"></th>
+                    <th class="w-16 px-1 sm:px-1.5 py-2 text-center align-top whitespace-nowrap">ID</th>
+                    <th class="px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal">Producto</th>
+                    <th class="px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal">Servicio</th>
+                    <th class="hidden xl:table-cell px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal">Centro</th>
+                    <th class="hidden xl:table-cell px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal">Área</th>
+                    <th class="px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal">Estatus</th>
+                    <th class="hidden 2xl:table-cell px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal">Centro de costo</th>
+                    <th class="hidden 2xl:table-cell px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal">Marca</th>
+                    <th class="hidden xl:table-cell px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal">Facturación</th>
+                    <th class="hidden xl:table-cell px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal">TL</th>
+                    <th class="hidden 2xl:table-cell w-16 px-1.5 sm:px-2 py-2 text-center align-top whitespace-nowrap">Periodo</th>
+                    <th class="w-28 px-1.5 sm:px-2 py-2 text-center align-top whitespace-nowrap">Fecha</th>
+                    <th class="w-36 px-1.5 sm:px-2 py-2 text-center align-top whitespace-nowrap">Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr v-for="o in rows" :key="o.id" class="border-t even:bg-slate-50 hover:bg-slate-100/60">
-                    <td v-if="canFacturar" class="px-1.5 sm:px-2 py-3 text-center align-middle">
+                    <td v-if="canFacturar" class="w-10 px-1 sm:px-1.5 py-3 text-center align-middle">
                       <input
                         type="checkbox"
                         :disabled="!isSelectable(o)"
@@ -249,12 +251,12 @@ function isoWeekNumber(dateStr){
                         :value="Number(o.id)"
                       />
                     </td>
-                    <td class="px-1.5 sm:px-2 py-3 leading-snug text-center font-mono whitespace-normal break-words max-w-[5.5rem] 2xl:max-w-none 2xl:whitespace-nowrap">#{{ o.id }}</td>
-                    <td class="px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words max-w-[9rem] 2xl:max-w-none 2xl:whitespace-nowrap">{{ o.producto || '-' }}</td>
-                    <td class="px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words max-w-[10rem] 2xl:max-w-none 2xl:whitespace-nowrap">{{ o.servicio?.nombre || '-' }}</td>
-                    <td class="px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words max-w-[9rem] 2xl:max-w-none 2xl:whitespace-nowrap">{{ o.centro?.nombre || '-' }}</td>
-                    <td class="px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words max-w-[9rem] 2xl:max-w-none 2xl:whitespace-nowrap">{{ o.area?.nombre || '-' }}</td>
-                    <td class="px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words max-w-[9rem] 2xl:max-w-none 2xl:whitespace-nowrap">
+                    <td class="w-16 px-1 sm:px-1.5 py-3 leading-snug text-center font-mono whitespace-nowrap">#{{ o.id }}</td>
+                    <td class="px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words">{{ o.producto || '-' }}</td>
+                    <td class="px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words">{{ o.servicio?.nombre || '-' }}</td>
+                    <td class="hidden xl:table-cell px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words">{{ o.centro?.nombre || '-' }}</td>
+                    <td class="hidden xl:table-cell px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words">{{ o.area?.nombre || '-' }}</td>
+                    <td class="px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words">
                       <span class="px-2.5 py-1 rounded-full text-[0.6rem] font-semibold uppercase tracking-wide"
                             :class="{
                               'bg-slate-100 text-slate-700 border border-slate-300': o.estatus==='generada',
@@ -264,15 +266,15 @@ function isoWeekNumber(dateStr){
                               'bg-indigo-100 text-indigo-700 border border-indigo-300': o.estatus==='autorizada_cliente'
                             }">{{ o.estatus }}</span>
                     </td>
-                    <td class="px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words max-w-[9rem] 2xl:max-w-none 2xl:whitespace-nowrap">{{ o.centro_costo?.nombre || '-' }}</td>
-                    <td class="px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words max-w-[8rem] 2xl:max-w-none 2xl:whitespace-nowrap">{{ o.marca?.nombre || '-' }}</td>
-                    <td class="px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words max-w-[8rem] 2xl:max-w-none 2xl:whitespace-nowrap">
+                    <td class="hidden 2xl:table-cell px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words">{{ o.centro_costo?.nombre || '-' }}</td>
+                    <td class="hidden 2xl:table-cell px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words">{{ o.marca?.nombre || '-' }}</td>
+                    <td class="hidden xl:table-cell px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words">
                       <span :class="['px-2.5 py-1 rounded-full text-[0.6rem] font-semibold uppercase tracking-wide', factBadgeClass(o.facturacion)]">{{ o.facturacion }}</span>
                     </td>
-                    <td class="px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words max-w-[9rem] 2xl:max-w-none 2xl:whitespace-nowrap">{{ o.team_leader?.name || '—' }}</td>
-                    <td class="px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words max-w-[7rem] 2xl:max-w-none 2xl:whitespace-nowrap">{{ isoWeekNumber(o.created_at_raw || o.fecha_iso || o.fecha) || '—' }}</td>
-                    <td class="px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words max-w-[8rem] 2xl:max-w-none 2xl:whitespace-nowrap">{{ o.fecha }}</td>
-                    <td class="px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words max-w-[11rem] 2xl:max-w-none 2xl:whitespace-nowrap">
+                    <td class="hidden xl:table-cell px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words">{{ o.team_leader?.name || '—' }}</td>
+                    <td class="hidden 2xl:table-cell w-16 px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-nowrap">{{ isoWeekNumber(o.created_at_raw || o.fecha_iso || o.fecha) || '—' }}</td>
+                    <td class="w-28 px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-nowrap">{{ o.fecha }}</td>
+                    <td class="w-36 px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words">
                       <div class="flex flex-wrap items-center justify-center gap-2 xl:flex-col xl:items-center xl:gap-1 2xl:flex-row">
                         <a :href="o.urls.show" class="inline-flex items-center gap-1.5 xl:gap-1 px-3 xl:px-2 py-1.5 xl:py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs xl:text-[0.6rem] font-medium rounded-lg transition-colors">
                           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -304,31 +306,31 @@ function isoWeekNumber(dateStr){
       </div>
 
       <div v-else>
-        <div class="px-4 pb-4 sm:px-6 lg:px-8 hidden md:block">
+        <div class="px-2 pb-3 sm:px-3 lg:px-4 hidden md:block">
           <div class="rounded-lg shadow-sm border border-slate-200">
             <div class="overflow-x-auto">
-              <table class="w-full text-[0.7rem] md:text-sm xl:text-xs 2xl:text-sm table-auto">
+              <table class="w-full text-[0.7rem] md:text-xs 2xl:text-sm table-auto">
                 <thead class="bg-slate-800 text-white uppercase text-xs">
                   <tr>
-                    <th v-if="canFacturar" class="px-1.5 sm:px-2 py-2 text-center align-top"></th>
-                    <th class="px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal 2xl:whitespace-nowrap">ID</th>
-                    <th class="px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal 2xl:whitespace-nowrap">Producto</th>
-                    <th class="px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal 2xl:whitespace-nowrap">Servicio</th>
-                    <th class="px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal 2xl:whitespace-nowrap">Centro</th>
-                    <th class="px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal 2xl:whitespace-nowrap">Área</th>
-                    <th class="px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal 2xl:whitespace-nowrap">Estatus</th>
-                    <th class="px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal 2xl:whitespace-nowrap">Centro de costo</th>
-                    <th class="px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal 2xl:whitespace-nowrap">Marca</th>
-                    <th class="px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal 2xl:whitespace-nowrap">Facturación</th>
-                    <th class="px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal 2xl:whitespace-nowrap">TL</th>
-                    <th class="px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal 2xl:whitespace-nowrap">Periodo</th>
-                    <th class="px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal 2xl:whitespace-nowrap">Fecha</th>
-                    <th class="px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal 2xl:whitespace-nowrap">Acciones</th>
+                    <th v-if="canFacturar" class="w-10 px-1 sm:px-1.5 py-2 text-center align-top"></th>
+                    <th class="w-16 px-1 sm:px-1.5 py-2 text-center align-top whitespace-nowrap">ID</th>
+                    <th class="px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal">Producto</th>
+                    <th class="px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal">Servicio</th>
+                    <th class="hidden xl:table-cell px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal">Centro</th>
+                    <th class="hidden xl:table-cell px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal">Área</th>
+                    <th class="px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal">Estatus</th>
+                    <th class="hidden 2xl:table-cell px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal">Centro de costo</th>
+                    <th class="hidden 2xl:table-cell px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal">Marca</th>
+                    <th class="hidden xl:table-cell px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal">Facturación</th>
+                    <th class="hidden xl:table-cell px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal">TL</th>
+                    <th class="hidden 2xl:table-cell w-16 px-1.5 sm:px-2 py-2 text-center align-top whitespace-nowrap">Periodo</th>
+                    <th class="w-28 px-1.5 sm:px-2 py-2 text-center align-top whitespace-nowrap">Fecha</th>
+                    <th class="w-36 px-1.5 sm:px-2 py-2 text-center align-top whitespace-nowrap">Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr v-for="o in rows" :key="o.id" class="border-t even:bg-slate-50 hover:bg-slate-100/60">
-                    <td v-if="canFacturar" class="px-1.5 sm:px-2 py-3 text-center align-middle">
+                    <td v-if="canFacturar" class="w-10 px-1 sm:px-1.5 py-3 text-center align-middle">
                       <input
                         type="checkbox"
                         :disabled="!isSelectable(o)"
@@ -341,12 +343,12 @@ function isoWeekNumber(dateStr){
                         :value="Number(o.id)"
                       />
                     </td>
-                    <td class="px-1.5 sm:px-2 py-3 leading-snug text-center font-mono whitespace-normal break-words max-w-[5.5rem] 2xl:max-w-none 2xl:whitespace-nowrap">#{{ o.id }}</td>
-                    <td class="px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words max-w-[9rem] 2xl:max-w-none 2xl:whitespace-nowrap">{{ o.producto || '-' }}</td>
-                    <td class="px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words max-w-[10rem] 2xl:max-w-none 2xl:whitespace-nowrap">{{ o.servicio?.nombre || '-' }}</td>
-                    <td class="px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words max-w-[9rem] 2xl:max-w-none 2xl:whitespace-nowrap">{{ o.centro?.nombre || '-' }}</td>
-                    <td class="px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words max-w-[9rem] 2xl:max-w-none 2xl:whitespace-nowrap">{{ o.area?.nombre || '-' }}</td>
-                    <td class="px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words max-w-[9rem] 2xl:max-w-none 2xl:whitespace-nowrap">
+                    <td class="w-16 px-1 sm:px-1.5 py-3 leading-snug text-center font-mono whitespace-nowrap">#{{ o.id }}</td>
+                    <td class="px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words">{{ o.producto || '-' }}</td>
+                    <td class="px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words">{{ o.servicio?.nombre || '-' }}</td>
+                    <td class="hidden xl:table-cell px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words">{{ o.centro?.nombre || '-' }}</td>
+                    <td class="hidden xl:table-cell px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words">{{ o.area?.nombre || '-' }}</td>
+                    <td class="px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words">
                       <span class="px-2.5 py-1 rounded-full text-[0.6rem] font-semibold uppercase tracking-wide"
                             :class="{
                               'bg-slate-100 text-slate-700 border border-slate-300': o.estatus==='generada',
@@ -356,15 +358,15 @@ function isoWeekNumber(dateStr){
                               'bg-indigo-100 text-indigo-700 border border-indigo-300': o.estatus==='autorizada_cliente'
                             }">{{ o.estatus }}</span>
                     </td>
-                    <td class="px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words max-w-[9rem] 2xl:max-w-none 2xl:whitespace-nowrap">{{ o.centro_costo?.nombre || '-' }}</td>
-                    <td class="px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words max-w-[8rem] 2xl:max-w-none 2xl:whitespace-nowrap">{{ o.marca?.nombre || '-' }}</td>
-                    <td class="px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words max-w-[8rem] 2xl:max-w-none 2xl:whitespace-nowrap">
+                    <td class="hidden 2xl:table-cell px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words">{{ o.centro_costo?.nombre || '-' }}</td>
+                    <td class="hidden 2xl:table-cell px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words">{{ o.marca?.nombre || '-' }}</td>
+                    <td class="hidden xl:table-cell px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words">
                       <span :class="['px-2.5 py-1 rounded-full text-[0.6rem] font-semibold uppercase tracking-wide', factBadgeClass(o.facturacion)]">{{ o.facturacion }}</span>
                     </td>
-                    <td class="px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words max-w-[9rem] 2xl:max-w-none 2xl:whitespace-nowrap">{{ o.team_leader?.name || '—' }}</td>
-                    <td class="px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words max-w-[7rem] 2xl:max-w-none 2xl:whitespace-nowrap">{{ isoWeekNumber(o.created_at_raw || o.fecha_iso || o.fecha) || '—' }}</td>
-                    <td class="px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words max-w-[8rem] 2xl:max-w-none 2xl:whitespace-nowrap">{{ o.fecha }}</td>
-                    <td class="px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words max-w-[11rem] 2xl:max-w-none 2xl:whitespace-nowrap">
+                    <td class="hidden xl:table-cell px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words">{{ o.team_leader?.name || '—' }}</td>
+                    <td class="hidden 2xl:table-cell w-16 px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-nowrap">{{ isoWeekNumber(o.created_at_raw || o.fecha_iso || o.fecha) || '—' }}</td>
+                    <td class="w-28 px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-nowrap">{{ o.fecha }}</td>
+                    <td class="w-36 px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words">
                       <div class="flex flex-wrap items-center justify-center gap-2 xl:flex-col xl:items-center xl:gap-1 2xl:flex-row">
                         <a :href="o.urls.show" class="inline-flex items-center gap-1.5 xl:gap-1 px-3 xl:px-2 py-1.5 xl:py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs xl:text-[0.6rem] font-medium rounded-lg transition-colors">
                           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -394,7 +396,7 @@ function isoWeekNumber(dateStr){
           </div>
         </div>
 
-        <div class="md:hidden px-4 pb-4 sm:px-6 lg:px-8">
+        <div class="md:hidden px-2 pb-3 sm:px-3 lg:px-4">
           <div class="space-y-4">
             <div v-for="o in rows" :key="o.id" class="border border-slate-200 rounded-xl p-4 shadow-sm">
               <div class="flex items-start justify-between gap-3">

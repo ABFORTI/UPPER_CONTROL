@@ -76,8 +76,24 @@ class OrdenPolicy
     // app/Policies/OrdenPolicy.php
     public function reportarAvance(User $u, Orden $o): bool
     {
-        // Comparación estricta por id pero casteando para evitar mismatch de tipos en prod
-        return $u->hasRole('admin') || (int)$o->team_leader_id === (int)$u->id;
+        if ($u->hasRole('admin')) return true;
+
+        // Team leader: sólo si está asignado a la OT
+        if ($u->hasRole('team_leader')) {
+            return (int)$o->team_leader_id === (int)$u->id;
+        }
+
+        // Coordinador: sólo si tiene acceso al centro (principal + pivots)
+        if ($u->hasRole('coordinador')) {
+            $ids = $u->centros()->pluck('centros_trabajo.id')->map(fn($v)=>(int)$v)->all();
+            $primary = (int)($u->centro_trabajo_id ?? 0);
+            if ($primary) $ids[] = $primary;
+            $ids = array_values(array_unique($ids));
+            return in_array((int)$o->id_centrotrabajo, $ids, true);
+        }
+
+        // Resto: no puede modificar producción
+        return false;
     }
     // ya tenías:
     public function createFromSolicitud(User $u, int $centroId): bool

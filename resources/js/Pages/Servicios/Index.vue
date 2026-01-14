@@ -111,11 +111,21 @@ function removeRow(r){
           </div>
           <div class="bg-white bg-opacity-20 backdrop-blur-sm rounded-xl p-4 border-2 border-white border-opacity-30">
             <label class="block text-sm font-semibold text-white mb-2">Centro de trabajo</label>
-            <select v-model.number="selCentro" 
-                    @change="changeCentro" 
-                    class="px-4 py-2.5 rounded-lg border-2 border-emerald-200 min-w-[14rem] bg-white font-semibold text-gray-700 focus:ring-4 focus:ring-emerald-200 transition-all duration-200">
-              <option v-for="c in centros" :key="c.id" :value="c.id">{{ c.nombre }}</option>
-            </select>
+            <div class="flex flex-col sm:flex-row sm:items-center gap-3">
+              <select v-model.number="selCentro" 
+                      @change="changeCentro" 
+                      class="px-4 py-2.5 rounded-lg border-2 border-emerald-200 min-w-[14rem] bg-white font-semibold text-gray-700 focus:ring-4 focus:ring-emerald-200 transition-all duration-200">
+                <option v-for="c in centros" :key="c.id" :value="c.id">{{ c.nombre }}</option>
+              </select>
+
+              <button @click="openCreateModal"
+                      class="px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 font-bold text-white hover:shadow-xl transition-all duration-200 transform hover:scale-105 flex items-center justify-center gap-2">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+                </svg>
+                Agregar servicio
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -127,17 +137,6 @@ function removeRow(r){
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
         </svg>
         <span class="font-semibold">{{ flashOk }}</span>
-      </div>
-
-      <!-- Botón Agregar servicio -->
-      <div class="mb-6 flex justify-center sm:justify-end">
-        <button @click="openCreateModal"
-                class="px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 font-bold text-white hover:shadow-xl transition-all duration-200 transform hover:scale-105 flex items-center gap-2">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
-          </svg>
-          Agregar servicio
-        </button>
       </div>
 
       <!-- Estado vacío -->

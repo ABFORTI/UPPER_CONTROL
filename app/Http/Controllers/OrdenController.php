@@ -7,6 +7,7 @@ namespace App\Http\Controllers;
 use App\Models\Solicitud;
 use App\Models\Orden;
 use App\Models\OrdenItem;
+use App\Models\OrdenItemProduccionSegmento;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -28,6 +29,85 @@ use Maatwebsite\Excel\Facades\Excel;
 
 class OrdenController extends Controller
 {
+
+    private function ordenBloqueadaParaEdicionProduccion(Orden $orden): bool
+    {
+        if (in_array((string)$orden->estatus, ['facturada'], true)) return true;
+        if ($orden->factura()->exists()) return true;
+        if ($orden->facturas()->exists()) return true;
+        return false;
+    }
+
+    private function ordenBloqueadaParaEdicionPrecios(Orden $orden): bool
+    {
+        if (in_array((string)$orden->estatus, ['autorizada_cliente','facturada'], true)) return true;
+        if ($orden->factura()->exists()) return true;
+        if ($orden->facturas()->exists()) return true;
+        return false;
+    }
+
+    /** Actualizar precio de un segmento (solo EXTRA/FIN_DE_SEMANA) */
+    public function updateSegmentoProduccion(Request $req, Orden $orden, OrdenItemProduccionSegmento $segmento)
+    {
+        $this->authorize('reportarAvance', $orden);
+        $this->authorizeFromCentro($orden->id_centrotrabajo, $orden);
+
+        if ($this->ordenBloqueadaParaEdicionPrecios($orden)) {
+            return back()->withErrors(['orden' => 'La OT está autorizada/facturada; ya no se permite editar precios.']);
+        }
+
+        if ((int)$segmento->id_orden !== (int)$orden->id) {
+            return back()->withErrors(['segmento' => 'El segmento no pertenece a esta OT.']);
+        }
+
+        if (!in_array((string)$segmento->tipo_tarifa, ['EXTRA','FIN_DE_SEMANA'], true)) {
+            return back()->withErrors(['segmento' => 'Solo se puede editar el precio de segmentos EXTRA o FIN_DE_SEMANA.']);
+        }
+
+        $data = $req->validate([
+            'precio_unitario' => ['required','numeric','min:0.0001'],
+            'nota' => ['nullable','string','max:500'],
+        ]);
+
+        DB::transaction(function () use ($orden, $segmento, $data) {
+            /** @var \App\Models\OrdenItemProduccionSegmento $seg */
+            $seg = OrdenItemProduccionSegmento::where('id', $segmento->id)->lockForUpdate()->firstOrFail();
+            $seg->precio_unitario = (float)$data['precio_unitario'];
+            $seg->subtotal = round(((float)$seg->precio_unitario) * (int)$seg->cantidad, 2);
+            if (array_key_exists('nota', $data)) {
+                $seg->nota = $data['nota'] ?: null;
+            }
+            $seg->save();
+
+            $item = OrdenItem::where('id', $seg->id_item)
+                ->where('id_orden', $orden->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $segmentos = OrdenItemProduccionSegmento::where('id_orden', $orden->id)
+                ->where('id_item', $item->id)
+                ->lockForUpdate()
+                ->get();
+
+            $qtyTotal = (int)$segmentos->sum('cantidad');
+            $subTotal = (float)$segmentos->sum('subtotal');
+            $item->cantidad_real = $qtyTotal;
+            $item->subtotal = $subTotal;
+            $item->precio_unitario = $qtyTotal > 0 ? ($subTotal / $qtyTotal) : (float)($item->precio_unitario ?? 0);
+            $item->save();
+
+            // Recalcular totales de la OT con base en subtotales de items
+            $sumSubtotales = (float)$orden->items()->selectRaw('COALESCE(SUM(subtotal),0) as t')->value('t');
+            $orden->total_real = $sumSubtotales;
+            $orden->subtotal = $sumSubtotales;
+            $orden->iva = $orden->subtotal * 0.16;
+            $orden->total = $orden->subtotal + $orden->iva;
+            $orden->save();
+        });
+
+        return back()->with('ok', 'Segmento actualizado');
+    }
+
     // PDF OT
     public function pdf(\App\Models\Orden $orden)
     {
@@ -335,6 +415,10 @@ class OrdenController extends Controller
         $this->authorize('reportarAvance', $orden);
         $this->authorizeFromCentro($orden->id_centrotrabajo, $orden);
 
+        if ($this->ordenBloqueadaParaEdicionProduccion($orden)) {
+            return back()->withErrors(['orden' => 'La OT está facturada o bloqueada; ya no se permite registrar producción.']);
+        }
+
         // Log de entrada para diagnóstico en prod (no contiene archivos)
     Log::info('RegistrarAvance: payload recibido', [
             'orden_id' => $orden->id,
@@ -347,7 +431,25 @@ class OrdenController extends Controller
             'items.*.id_item'       => ['required','integer','exists:orden_items,id'],
             'items.*.cantidad'      => ['required','integer','min:1'],
             'comentario'            => ['nullable','string','max:500'],
+            'tarifa_tipo'           => ['nullable','in:NORMAL,EXTRA,FIN_DE_SEMANA'],
+            'precio_unitario_manual'=> ['nullable','numeric','min:0.0001'],
         ]);
+
+        $tipoTarifa = (string)($data['tarifa_tipo'] ?? 'NORMAL');
+        $precioManual = array_key_exists('precio_unitario_manual', $data)
+            ? (float)($data['precio_unitario_manual'] ?? 0)
+            : null;
+        if ($tipoTarifa !== 'NORMAL' && (!$precioManual || $precioManual <= 0)) {
+            return back()->withErrors([
+                'precio_unitario_manual' => 'Captura un precio unitario válido para EXTRA / FIN_DE_SEMANA.'
+            ]);
+        }
+
+        $comentarioFinal = $req->comentario;
+        if ($tipoTarifa !== 'NORMAL') {
+            $tag = '[TARIFA '.str_replace('_',' ', $tipoTarifa).': $'.number_format((float)$precioManual, 4, '.', '').']';
+            $comentarioFinal = trim($tag.' '.(string)($comentarioFinal ?? ''));
+        }
 
         // Validación adicional: todos los items deben pertenecer a la misma OT
         $ids = collect($data['items'])->pluck('id_item')->map(fn($v)=>(int)$v)->all();
@@ -363,34 +465,94 @@ class OrdenController extends Controller
 
         $justCompleted = false;
         try {
-        DB::transaction(function () use ($orden, $data, $req, &$justCompleted) {
+        DB::transaction(function () use ($orden, $data, $req, &$justCompleted, $tipoTarifa, $precioManual, $comentarioFinal) {
             $pricing = app(\App\Domain\Servicios\PricingService::class);
+            $cantAplicada = [];
             foreach ($data['items'] as $i) {
                 $item = \App\Models\OrdenItem::where('id', $i['id_item'])
                     ->where('id_orden', $orden->id)
                     ->lockForUpdate()
                     ->firstOrFail();
 
-                $nuevo = (int)$item->cantidad_real + (int)$i['cantidad'];
-                if ($nuevo > (int)$item->cantidad_planeada) {
-                    $nuevo = (int)$item->cantidad_planeada;
+                // Cargar/asegurar segmentos existentes bajo lock
+                $segQ = OrdenItemProduccionSegmento::where('id_orden', $orden->id)
+                    ->where('id_item', $item->id);
+                $segmentos = $segQ->lockForUpdate()->get();
+
+                // Backfill: si ya hay producción legacy pero aún no hay segmentos, crear un segmento NORMAL inicial
+                if ($segmentos->isEmpty() && (int)($item->cantidad_real ?? 0) > 0) {
+                    $qtyHist = (int)$item->cantidad_real;
+                    $puHist = (float)$item->precio_unitario;
+                    if ($puHist <= 0) {
+                        $puHist = (float)$pricing->precioUnitario($orden->id_centrotrabajo, $orden->id_servicio, $item->tamano);
+                    }
+                    if ($puHist <= 0) {
+                        $baseQty = $qtyHist > 0 ? $qtyHist : max(1, (int)$item->cantidad_planeada);
+                        $puHist = (float)$item->subtotal / max(1, $baseQty);
+                    }
+                    if ($puHist > 0 && $qtyHist > 0) {
+                        OrdenItemProduccionSegmento::create([
+                            'id_orden' => $orden->id,
+                            'id_item' => $item->id,
+                            'id_usuario' => Auth::id(),
+                            'tipo_tarifa' => 'NORMAL',
+                            'cantidad' => $qtyHist,
+                            'precio_unitario' => $puHist,
+                            'subtotal' => round($puHist * $qtyHist, 2),
+                            'nota' => 'Backfill automático (producción previa)',
+                        ]);
+                        $segmentos = $segQ->lockForUpdate()->get();
+                    }
                 }
 
-                // Determinar un PU efectivo robusto
-                $puEfectivo = (float)$item->precio_unitario;
-                if ($puEfectivo <= 0) {
-                    // Intentar resolver desde PricingService (según centro, servicio y tamaño)
-                    $puEfectivo = (float)$pricing->precioUnitario($orden->id_centrotrabajo, $orden->id_servicio, $item->tamano);
+                $qtySeg = (int)$segmentos->sum('cantidad');
+                $subSeg = (float)$segmentos->sum('subtotal');
+                $remaining = max(0, (int)$item->cantidad_planeada - $qtySeg);
+                $reqQty = (int)($i['cantidad'] ?? 0);
+                $addQty = min($reqQty, $remaining);
+                if ($addQty <= 0) {
+                    $cantAplicada[(int)$item->id] = 0;
+                    continue;
                 }
-                if ($puEfectivo <= 0) {
-                    // Último recurso: derivar del subtotal actual y mejor base de cantidad
-                    $baseQty = ((int)$item->cantidad_real > 0) ? (int)$item->cantidad_real : max(1, (int)$item->cantidad_planeada);
-                    $puEfectivo = (float)$item->subtotal / max(1, $baseQty);
+                $cantAplicada[(int)$item->id] = $addQty;
+
+                // PU del segmento según tarifa
+                $puSeg = 0.0;
+                if ($tipoTarifa === 'NORMAL') {
+                    $puSeg = (float)$pricing->precioUnitario($orden->id_centrotrabajo, $orden->id_servicio, $item->tamano);
+                    if ($puSeg <= 0) {
+                        // fallback robusto
+                        $puSeg = (float)$item->precio_unitario;
+                    }
+                    if ($puSeg <= 0) {
+                        $baseQty = $qtySeg > 0 ? $qtySeg : max(1, (int)$item->cantidad_planeada);
+                        $puSeg = (float)$item->subtotal / max(1, $baseQty);
+                    }
+                } else {
+                    $puSeg = (float)$precioManual;
+                }
+                if ($puSeg <= 0) {
+                    throw new \RuntimeException('No se pudo determinar un precio unitario para el segmento.');
                 }
 
-                $item->precio_unitario = $item->precio_unitario > 0 ? $item->precio_unitario : $puEfectivo;
-                $item->cantidad_real = $nuevo;
-                $item->subtotal = $puEfectivo * $nuevo;
+                $subSegNew = round($puSeg * $addQty, 2);
+                OrdenItemProduccionSegmento::create([
+                    'id_orden' => $orden->id,
+                    'id_item' => $item->id,
+                    'id_usuario' => Auth::id(),
+                    'tipo_tarifa' => $tipoTarifa,
+                    'cantidad' => $addQty,
+                    'precio_unitario' => $puSeg,
+                    'subtotal' => $subSegNew,
+                    'nota' => $comentarioFinal ?: null,
+                ]);
+
+                // Actualizar agregados del item (cantidad_real, subtotal, precio_unitario promedio)
+                $qtyTotal = $qtySeg + $addQty;
+                $subTotal = $subSeg + $subSegNew;
+                $item->cantidad_real = $qtyTotal;
+                $item->subtotal = $subTotal;
+                $item->precio_unitario = $qtyTotal > 0 ? ($subTotal / $qtyTotal) : (float)($item->precio_unitario ?? 0);
                 $item->save();
             }
 
@@ -464,13 +626,14 @@ class OrdenController extends Controller
             }
             
             foreach ($data['items'] as $d) {
-                if ((int)$d['cantidad'] > 0) {
+                $aplicada = (int)($cantAplicada[(int)$d['id_item']] ?? 0);
+                if ($aplicada > 0) {
                     \App\Models\Avance::create([
                         'id_orden' => $orden->id,
                         'id_item' => $d['id_item'],
                         'id_usuario' => Auth::id(),
-                        'cantidad' => (int)$d['cantidad'],
-                        'comentario' => $req->comentario ?? null,
+                        'cantidad' => $aplicada,
+                        'comentario' => $comentarioFinal ?: null,
                         'es_corregido' => $isCorregido,
                     ]);
                 }
@@ -509,6 +672,10 @@ class OrdenController extends Controller
         $this->authorize('reportarAvance', $orden);
         $this->authorizeFromCentro($orden->id_centrotrabajo, $orden);
 
+        if ($this->ordenBloqueadaParaEdicionProduccion($orden)) {
+            return back()->withErrors(['orden' => 'La OT está facturada o bloqueada; ya no se permite editar producción.']);
+        }
+
         $data = $req->validate([
             'items'                   => ['required','array','min:1'],
             'items.*.id_item'         => ['required','integer','exists:orden_items,id'],
@@ -534,11 +701,19 @@ class OrdenController extends Controller
                 }
 
                 if ($falt > 0) {
-                    // Calcular PU confiable: usar precio_unitario si existe, de lo contrario derivarlo del subtotal actual
-                    $baseQty = ((int)$item->cantidad_real > 0) ? (int)$item->cantidad_real : max(1, (int)$item->cantidad_planeada);
+                    // Si hay segmentos, NO recalcular subtotal por PU; el subtotal debe venir de la suma de segmentos
+                    $segmentos = OrdenItemProduccionSegmento::where('id_orden', $orden->id)
+                        ->where('id_item', $item->id)
+                        ->lockForUpdate()
+                        ->get();
+
+                    $tieneSegmentos = $segmentos->isNotEmpty();
                     $puEfectivo = (float)$item->precio_unitario;
-                    if ($puEfectivo <= 0) {
-                        $puEfectivo = (float)$item->subtotal / max(1, $baseQty);
+                    if (!$tieneSegmentos) {
+                        $baseQty = ((int)$item->cantidad_real > 0) ? (int)$item->cantidad_real : max(1, (int)$item->cantidad_planeada);
+                        if ($puEfectivo <= 0) {
+                            $puEfectivo = (float)$item->subtotal / max(1, $baseQty);
+                        }
                     }
 
                     // Acumular registro de faltantes y ajustar plan
@@ -551,10 +726,18 @@ class OrdenController extends Controller
                     $item->faltantes = (int)($item->faltantes ?? 0) + (int)$falt;
                     $item->cantidad_planeada = $nuevoPlan;
                     // Asegurar PU y subtotal coherentes con lo REAL producido
-                    if ($item->precio_unitario <= 0 && $puEfectivo > 0) {
-                        $item->precio_unitario = $puEfectivo;
+                    if ($tieneSegmentos) {
+                        $qtySeg = (int)$segmentos->sum('cantidad');
+                        $subSeg = (float)$segmentos->sum('subtotal');
+                        $item->cantidad_real = $qtySeg;
+                        $item->subtotal = $subSeg;
+                        $item->precio_unitario = $qtySeg > 0 ? ($subSeg / $qtySeg) : (float)($item->precio_unitario ?? 0);
+                    } else {
+                        if ($item->precio_unitario <= 0 && $puEfectivo > 0) {
+                            $item->precio_unitario = $puEfectivo;
+                        }
+                        $item->subtotal = $puEfectivo * (int)$item->cantidad_real;
                     }
-                    $item->subtotal = $puEfectivo * (int)$item->cantidad_real;
                     $item->save();
 
                     $resumen[] = [
@@ -624,6 +807,7 @@ class OrdenController extends Controller
         $orden->load([
             'solicitud.archivos','solicitud.centroCosto','solicitud.marca','solicitud.tamanos',
             'servicio','centro','area','items','teamLeader',
+            'items.segmentosProduccion' => fn($q) => $q->with('usuario')->orderBy('created_at'),
             'avances' => fn($q) => $q->with(['usuario', 'item'])->orderByDesc('created_at'),
             'evidencias' => fn($q)=>$q->with('usuario')->orderByDesc('id'),
         ]);
@@ -640,7 +824,7 @@ class OrdenController extends Controller
         $canReportar = Gate::allows('reportarAvance', $orden);
         // Diagnóstico adicional: si es Team Leader y no puede reportar, registrar contexto
         if (!$canReportar && $authUser && $authUser->hasRole('team_leader')) {
-            \Log::info('TL sin permiso reportarAvance', [
+            Log::info('TL sin permiso reportarAvance', [
                 'orden_id' => $orden->id,
                 'orden_team_leader_id' => (int)$orden->team_leader_id,
                 'user_id' => (int)$authUser->id,
@@ -695,18 +879,32 @@ class OrdenController extends Controller
         $ivaRate = 0.16;
         $lines = [];
         $sub = 0.0;
+        $usaSegmentos = false;
         foreach ($orden->items as $it) {
             $qty = ($it->cantidad_real ?? 0) > 0 ? (int)$it->cantidad_real : (int)$it->cantidad_planeada;
-            $lineSub = (float)$it->precio_unitario * $qty;
+            $tieneSeg = ($it->segmentosProduccion ?? null) && $it->segmentosProduccion->count() > 0;
+            $lineSub = ($tieneSeg && (int)($it->cantidad_real ?? 0) > 0)
+                ? (float)($it->subtotal ?? 0)
+                : ((float)$it->precio_unitario * $qty);
+            if ($tieneSeg) { $usaSegmentos = true; }
             $sub += $lineSub;
             $lines[] = [
                 'label'    => $it->tamano ? ('Tamaño: '.ucfirst($it->tamano)) : ($it->descripcion ?: 'Item'),
                 'cantidad' => $qty,
-                'pu'       => (float)$it->precio_unitario,
+                'pu'       => ($tieneSeg && $qty > 0 && (int)($it->cantidad_real ?? 0) > 0)
+                    ? (float)($lineSub / max(1, $qty))
+                    : (float)$it->precio_unitario,
                 'subtotal' => $lineSub,
             ];
         }
-        $cot = ['lines'=>$lines, 'subtotal'=>$sub, 'iva_rate'=>$ivaRate, 'iva'=>$sub*$ivaRate, 'total'=>$sub*(1+$ivaRate)];
+        $cot = [
+            'lines' => $lines,
+            'subtotal' => $sub,
+            'iva_rate' => $ivaRate,
+            'iva' => $sub * $ivaRate,
+            'total' => $sub * (1 + $ivaRate),
+            'calc_mode' => $usaSegmentos ? 'SEGMENTOS' : 'FIJO',
+        ];
 
         // Precios unitarios por tamaño para vista de desglose (flujo diferido)
         $preciosTamaño = null;
@@ -753,6 +951,7 @@ class OrdenController extends Controller
                 'asignar_tl'        => route('ordenes.asignarTL', $orden),
                 'avances_store'     => route('ordenes.avances.store', $orden),
                 'faltantes_store'   => route('ordenes.faltantes.store', $orden),
+                'segmentos_update'  => route('ordenes.segmentos.update', ['orden' => $orden->id, 'segmento' => 0]),
                 'calidad_page'      => route('calidad.show', $orden),
                 'calidad_validar'   => route('calidad.validar', $orden),
                 'calidad_rechazar'  => route('calidad.rechazar', $orden),
@@ -1125,7 +1324,7 @@ class OrdenController extends Controller
             if (in_array((int)$centroId, array_map('intval', $ids), true)) {
                 // Si es TL además, validar que la OT sea suya
                 if ($orden && $u->hasRole('team_leader') && (int)$orden->team_leader_id !== (int)$u->id) {
-                    \Log::warning('authorizeFromCentro DENY (TL no coincide)', [
+                    Log::warning('authorizeFromCentro DENY (TL no coincide)', [
                         'user_id' => $u->id,
                         'roles' => $u->roles->pluck('name')->all(),
                         'orden_id' => optional($orden)->id,
@@ -1135,7 +1334,7 @@ class OrdenController extends Controller
                 }
                 return;
             }
-            \Log::warning('authorizeFromCentro DENY (centro no permitido para calidad/coordinador)', [
+            Log::warning('authorizeFromCentro DENY (centro no permitido para calidad/coordinador)', [
                 'user_id' => $u->id,
                 'roles' => $u->roles->pluck('name')->all(),
                 'centro_solicitado' => (int)$centroId,
@@ -1146,7 +1345,7 @@ class OrdenController extends Controller
 
         // Team Leader u otros: requerir mismo centro principal
         if ((int)$u->centro_trabajo_id !== (int)$centroId) {
-            \Log::warning('authorizeFromCentro DENY (centro principal no coincide)', [
+            Log::warning('authorizeFromCentro DENY (centro principal no coincide)', [
                 'user_id' => $u->id,
                 'roles' => $u->roles->pluck('name')->all(),
                 'user_centro' => (int)($u->centro_trabajo_id ?? 0),
@@ -1155,7 +1354,7 @@ class OrdenController extends Controller
             abort(403);
         }
         if ($orden && $u->hasRole('team_leader') && (int)$orden->team_leader_id !== (int)$u->id) {
-            \Log::warning('authorizeFromCentro DENY (TL distinto a la OT)', [
+            Log::warning('authorizeFromCentro DENY (TL distinto a la OT)', [
                 'user_id' => $u->id,
                 'orden_id' => $orden->id,
                 'orden_tl' => (int)$orden->team_leader_id,

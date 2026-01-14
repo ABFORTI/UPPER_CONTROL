@@ -20,6 +20,9 @@ class Orden extends Model {
     public function servicio(){ return $this->belongsTo(ServicioEmpresa::class,'id_servicio'); }
     public function area(){ return $this->belongsTo(Area::class,'id_area'); }
     public function items(){ return $this->hasMany(OrdenItem::class,'id_orden'); }
+    public function segmentosProduccion(){
+        return $this->hasMany(\App\Models\OrdenItemProduccionSegmento::class,'id_orden');
+    }
     public function avances(){ return $this->hasMany(Avance::class,'id_orden'); }
     public function teamLeader(){ return $this->belongsTo(User::class,'team_leader_id'); }
     public function evidencias(){ return $this->hasMany(\App\Models\Evidencia::class,'id_orden'); }

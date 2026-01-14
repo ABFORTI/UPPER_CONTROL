@@ -95,7 +95,9 @@ function asignarTL () { tlForm.patch(props.urls.asignar_tl, { preserveScroll: tr
 // ----- Registrar avances -----
 const avForm = useForm({
   items: items.value.map(i => ({ id_item: i.id, cantidad: '' })), // iniciar vacío para evitar el '0'
-  comentario: ''
+  comentario: '',
+  tarifa_tipo: 'NORMAL',
+  precio_unitario_manual: ''
 })
 // Faltantes
 const faltForm = useForm({
@@ -115,12 +117,16 @@ const hasFaltantes = computed(() => {
 const restante = (it) => Math.max(0, (it?.cantidad_planeada ?? 0) - (it?.cantidad_real ?? 0))
 const hasAvance = computed(() => {
   try {
-    return (avForm.items || []).some((x, idx) => {
+    const okQty = (avForm.items || []).some((x, idx) => {
       const it = items.value[idx]
       const max = restante(it)
       const val = Number(x?.cantidad || 0)
       return val > 0 && val <= max
     })
+    if (!okQty) return false
+    if ((avForm.tarifa_tipo || 'NORMAL') === 'NORMAL') return true
+    const pu = Number(avForm.precio_unitario_manual || 0)
+    return pu > 0
   } catch { return false }
 })
 function registrarAvance () {
@@ -137,18 +143,54 @@ function registrarAvance () {
     avForm.setError('items', 'Ingresa al menos una cantidad mayor a 0 para registrar avance.')
     return
   }
+
+  if ((avForm.tarifa_tipo || 'NORMAL') !== 'NORMAL') {
+    const pu = Number(avForm.precio_unitario_manual || 0)
+    if (!(pu > 0)) {
+      avForm.setError('precio_unitario_manual', 'Captura un precio unitario válido para EXTRA / FIN_DE_SEMANA.')
+      return
+    }
+  }
   avForm.post(props.urls.avances_store, {
     preserveScroll: true,
     // Al completar, recargar la data desde el servidor para reflejar cantidades reales actualizadas
     onSuccess: () => {
       // resetear inputs
       avForm.reset('comentario')
+      avForm.tarifa_tipo = 'NORMAL'
+      avForm.precio_unitario_manual = ''
       avForm.items = (items.value || []).map(i => ({ id_item: i.id, cantidad: '' }))
       avForm.clearErrors('items')
       // recargar únicamente props necesarias para performance
   // También recargar 'unidades' para que el panel de desglose use el TOTAL vigente
   router.reload({ only: ['orden','cotizacion','unidades'], preserveScroll: true })
     },
+  })
+}
+
+// ----- Segmentos de producción -----
+const canEditSegmentPrices = computed(() =>
+  !!props.can?.reportarAvance && !['autorizada_cliente','facturada'].includes(String(props.orden?.estatus || ''))
+)
+const segPriceDraft = ref({}) // { [id]: number|string }
+const segNotaDraft = ref({})
+function segsOf(it) { return it?.segmentos_produccion || [] }
+const itemsConSegs = computed(() => (items.value || []).filter(it => (segsOf(it) || []).length > 0))
+function segLabel(tipo) {
+  if (!tipo) return '—'
+  return String(tipo).replace(/_/g, ' ')
+}
+function updateSegmento(seg) {
+  const baseUrl = props.urls?.segmentos_update
+  if (!baseUrl || !seg?.id) return
+  const url = baseUrl.replace(/\/0$/, '/' + seg.id)
+  const precio = Number(segPriceDraft.value?.[seg.id] ?? seg?.precio_unitario ?? 0)
+  const nota = (segNotaDraft.value?.[seg.id] ?? seg?.nota ?? '')
+  router.patch(url, { precio_unitario: precio, nota }, {
+    preserveScroll: true,
+    onSuccess: () => {
+      router.reload({ only: ['orden','cotizacion'], preserveScroll: true })
+    }
   })
 }
 
@@ -221,6 +263,10 @@ const faltanCalc = computed(() => Math.max(0, faltanRaw.value))
 
 // Precios por tamaño y previsualización de totales
 const ivaRate = computed(() => Number(props.cotizacion?.iva_rate ?? 0.16))
+const cotSubtotal = computed(() => Number(props.cotizacion?.subtotal ?? 0))
+const cotIva = computed(() => Number(props.cotizacion?.iva ?? (cotSubtotal.value * ivaRate.value)))
+const cotTotal = computed(() => Number(props.cotizacion?.total ?? (cotSubtotal.value + cotIva.value)))
+const cotCalcMode = computed(() => String(props.cotizacion?.calc_mode || 'FIJO'))
 const precios = computed(() => props.precios_tamano || {})
 const subPrev = computed(() => {
   const p = precios.value || {}
@@ -254,23 +300,23 @@ function definirTamanos() {
       
       <!-- Header Card -->
       <div class="bg-white rounded-2xl shadow-xl border-2 border-indigo-100 overflow-hidden dark:bg-slate-900/85 dark:border-slate-800 dark:shadow-[0_20px_45px_rgba(0,0,0,0.55)]">
-  <div class="bg-[#1E1C8F] px-5 sm:px-8 py-6 dark:bg-gradient-to-r dark:from-[#1E1C8F] dark:to-indigo-600">
-          <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+  <div class="bg-[#1E1C8F] px-4 sm:px-6 py-3 dark:bg-gradient-to-r dark:from-[#1E1C8F] dark:to-indigo-600">
+          <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
             <div class="flex items-start sm:items-center gap-4">
-              <div class="bg-white bg-opacity-20 p-4 rounded-xl backdrop-blur-sm">
-                <svg class="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div class="bg-white bg-opacity-20 p-3 rounded-xl backdrop-blur-sm">
+                <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                 </svg>
               </div>
               <div>
-                <h1 class="text-4xl font-bold text-white">OT #{{ orden?.id }}</h1>
-                <p class="text-indigo-100 text-lg mt-1">{{ orden?.servicio?.nombre }}</p>
+                <h1 class="text-2xl sm:text-3xl font-bold text-white leading-tight">OT #{{ orden?.id }}</h1>
+                <p class="text-indigo-100 text-sm sm:text-base mt-0.5">{{ orden?.servicio?.nombre }}</p>
               </div>
             </div>
             
             <!-- Status Badges -->
             <div class="flex flex-wrap gap-3 w-full lg:w-auto justify-start lg:justify-end">
-              <span class="px-4 py-2 rounded-xl font-semibold text-sm backdrop-blur-sm border-2"
+              <span class="px-3 py-1.5 rounded-lg font-semibold text-xs backdrop-blur-sm border-2"
                     :class="{
                       'bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-800/70 dark:text-slate-200 dark:border-slate-700': orden?.estatus === 'generada',
                       'bg-violet-100 text-violet-800 border-violet-300 dark:bg-violet-500/20 dark:text-violet-200 dark:border-violet-500/40': orden?.estatus === 'nueva',
@@ -284,27 +330,27 @@ function definirTamanos() {
                       'bg-red-600 text-white border-red-700 dark:bg-red-600 dark:text-red-50 dark:border-red-700': orden?.estatus === 'cancelada',
                       'bg-gray-200 text-gray-800 border-gray-300 dark:bg-slate-700/80 dark:text-slate-200 dark:border-slate-600': orden?.estatus === 'pendiente'
                     }">
-                <svg class="w-4 h-4 inline-block mr-1" fill="currentColor" viewBox="0 0 20 20">
+                <svg class="w-3.5 h-3.5 inline-block mr-1" fill="currentColor" viewBox="0 0 20 20">
                   <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/>
                 </svg>
                 {{ orden?.estatus?.replace(/_/g, ' ').toUpperCase() }}
               </span>
               
-              <span class="px-4 py-2 rounded-xl font-semibold text-sm backdrop-blur-sm border-2"
+              <span class="px-3 py-1.5 rounded-lg font-semibold text-xs backdrop-blur-sm border-2"
                     :class="{
                       'bg-orange-500 text-white border-orange-600 dark:bg-orange-500 dark:border-orange-600': orden?.calidad_resultado === 'pendiente',
                       'bg-emerald-600 text-white border-emerald-700 dark:bg-emerald-600 dark:border-emerald-700': orden?.calidad_resultado === 'validado',
                       'bg-red-600 text-white border-red-700 dark:bg-red-600 dark:border-red-700': orden?.calidad_resultado === 'rechazado'
                     }">
-                <svg class="w-4 h-4 inline-block mr-1" fill="currentColor" viewBox="0 0 20 20">
+                <svg class="w-3.5 h-3.5 inline-block mr-1" fill="currentColor" viewBox="0 0 20 20">
                   <path fill-rule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
                 </svg>
                 Calidad: {{ orden?.calidad_resultado?.toUpperCase() }}
               </span>
 
               <a :href="urls.pdf" target="_blank"
-                 class="px-4 py-2 rounded-xl bg-white bg-opacity-20 hover:bg-opacity-30 text-white font-semibold text-sm backdrop-blur-sm border-2 border-white border-opacity-30 hover:border-opacity-50 transition-all duration-200 flex items-center gap-2">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                 class="px-3 py-1.5 rounded-lg bg-white bg-opacity-20 hover:bg-opacity-30 text-white font-semibold text-xs backdrop-blur-sm border-2 border-white border-opacity-30 hover:border-opacity-50 transition-all duration-200 flex items-center gap-1.5">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/>
                 </svg>
                 PDF
@@ -314,34 +360,34 @@ function definirTamanos() {
         </div>
         
         <!-- Info Bar -->
-        <div class="bg-gradient-to-r from-indigo-50 to-[#eef2ff] px-5 sm:px-8 py-4 border-b border-indigo-100 dark:bg-gradient-to-r dark:from-slate-900/80 dark:via-slate-900/60 dark:to-slate-900/40 dark:border-slate-800">
-          <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 text-sm">
-            <div class="flex items-center gap-2">
-              <svg class="w-5 h-5 text-indigo-600 dark:text-indigo-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div class="bg-gradient-to-r from-indigo-50 to-[#eef2ff] px-4 sm:px-6 py-2.5 border-b border-indigo-100 dark:bg-gradient-to-r dark:from-slate-900/80 dark:via-slate-900/60 dark:to-slate-900/40 dark:border-slate-800">
+          <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 text-xs">
+            <div class="flex items-center gap-1.5">
+              <svg class="w-4 h-4 text-indigo-600 dark:text-indigo-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
               </svg>
               <span class="text-gray-700 dark:text-slate-200"><strong>Centro:</strong> {{ orden?.centro?.nombre }}</span>
             </div>
-            <div v-if="orden?.solicitud?.centro_costo || orden?.solicitud?.centroCosto" class="flex items-center gap-2">
-              <svg class="w-5 h-5 text-indigo-600 dark:text-indigo-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div v-if="orden?.solicitud?.centro_costo || orden?.solicitud?.centroCosto" class="flex items-center gap-1.5">
+              <svg class="w-4 h-4 text-indigo-600 dark:text-indigo-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l9-9h5l3 3v5l-9 9-8-8zM16 6h.01"/>
               </svg>
               <span class="text-gray-700 dark:text-slate-200"><strong>Centro de costos:</strong> {{ (orden?.solicitud?.centroCosto?.nombre) || (orden?.solicitud?.centro_costo?.nombre) || '—' }}</span>
             </div>
-            <div class="flex items-center gap-2">
-              <svg class="w-5 h-5 text-indigo-600 dark:text-indigo-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div class="flex items-center gap-1.5">
+              <svg class="w-4 h-4 text-indigo-600 dark:text-indigo-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l9-9h5l3 3v5l-9 9-8-8zM16 6h.01"/>
               </svg>
               <span class="text-gray-700 dark:text-slate-200"><strong>Marca:</strong> {{ (orden?.solicitud?.marca?.nombre) || '—' }}</span>
             </div>
-            <div class="flex items-center gap-2">
-              <svg class="w-5 h-5 text-[#1E1C8F] dark:text-indigo-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div class="flex items-center gap-1.5">
+              <svg class="w-4 h-4 text-[#1E1C8F] dark:text-indigo-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
               </svg>
               <span class="text-gray-700 dark:text-slate-200"><strong>Team Leader:</strong> {{ orden?.team_leader?.name ?? 'No asignado' }}</span>
             </div>
-            <div v-if="orden?.area" class="flex items-center gap-2">
-              <svg class="w-5 h-5 text-[#1E1C8F] dark:text-indigo-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div v-if="orden?.area" class="flex items-center gap-1.5">
+              <svg class="w-4 h-4 text-[#1E1C8F] dark:text-indigo-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/>
               </svg>
               <span class="text-gray-700 dark:text-slate-200"><strong>Área:</strong> {{ orden.area.nombre }}</span>
@@ -358,9 +404,9 @@ function definirTamanos() {
           
           <!-- Asignar Team Leader (Admin/Coordinador) -->
           <div v-if="can?.asignar_tl" class="bg-white rounded-2xl shadow-lg border-2 border-blue-100 overflow-hidden dark:bg-slate-900/80 dark:border-blue-500/30">
-            <div class="bg-gradient-to-r from-blue-600 to-cyan-600 px-6 py-4 dark:from-blue-500 dark:to-cyan-500">
-              <h2 class="text-xl font-bold text-white flex items-center gap-2">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div class="bg-gradient-to-r from-blue-600 to-cyan-600 px-4 py-2 dark:from-blue-500 dark:to-cyan-500">
+              <h2 class="text-base font-bold text-white flex items-center gap-1.5 leading-tight">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
                 </svg>
                 Asignar Team Leader
@@ -396,9 +442,9 @@ function definirTamanos() {
 
           <!-- Ítems de la OT -->
           <div class="bg-white rounded-2xl shadow-lg border-2 border-emerald-100 overflow-hidden dark:bg-slate-900/80 dark:border-emerald-500/30">
-            <div class="bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-4 dark:from-emerald-500 dark:to-teal-500">
-              <h2 class="text-xl font-bold text-white flex items-center gap-2">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div class="bg-gradient-to-r from-emerald-600 to-teal-600 px-4 py-2 dark:from-emerald-500 dark:to-teal-500">
+              <h2 class="text-base font-bold text-white flex items-center gap-1.5 leading-tight">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
                 </svg>
                 Ítems de la Orden
@@ -592,15 +638,42 @@ function definirTamanos() {
 
           <!-- Registrar Avance -->
           <div v-if="can?.reportarAvance" class="bg-white rounded-2xl shadow-lg border-2 border-blue-100 overflow-hidden dark:bg-slate-900/80 dark:border-blue-500/30">
-            <div class="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-4 dark:from-blue-500 dark:to-indigo-500">
-              <h3 class="text-lg font-bold text-white flex items-center gap-2">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div class="bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-2 dark:from-blue-500 dark:to-indigo-500">
+              <h3 class="text-base font-bold text-white flex items-center gap-1.5 leading-tight">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
                 </svg>
                 Registrar Avance
               </h3>
             </div>
             <div class="p-6 space-y-4">
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2 dark:text-slate-200">Tarifa</label>
+                  <select v-model="avForm.tarifa_tipo"
+                          class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-400 transition-all duration-200 bg-white text-gray-800 font-medium dark:bg-slate-900/60 dark:border-slate-700 dark:text-slate-100">
+                    <option value="NORMAL">NORMAL (precio del servicio)</option>
+                    <option value="EXTRA">EXTRA (precio manual)</option>
+                    <option value="FIN_DE_SEMANA">FIN DE SEMANA (precio manual)</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2 dark:text-slate-200">Precio unitario (si aplica)</label>
+                  <input type="number" min="0" step="0.0001" inputmode="decimal"
+                         :disabled="(avForm.tarifa_tipo || 'NORMAL') === 'NORMAL'"
+                         v-model="avForm.precio_unitario_manual"
+                         @input="avForm.clearErrors('precio_unitario_manual')"
+                         placeholder="Ej: 12.50"
+                         class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-400 transition-all duration-200 dark:bg-slate-900/60 dark:border-slate-700 dark:text-slate-100 dark:placeholder-slate-400 disabled:opacity-60" />
+                  <p v-if="avForm.errors.precio_unitario_manual" class="mt-2 text-sm text-red-600 flex items-center gap-1">
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                    </svg>
+                    {{ avForm.errors.precio_unitario_manual }}
+                  </p>
+                </div>
+              </div>
+
               <div>
                 <label class="block text-sm font-semibold text-gray-700 mb-2 dark:text-slate-200">Comentario (opcional)</label>
                 <textarea v-model="avForm.comentario" rows="3"
@@ -648,11 +721,78 @@ function definirTamanos() {
             </div>
           </div>
 
+          <!-- Segmentos de Producción -->
+          <div v-if="itemsConSegs.length > 0" class="bg-white rounded-2xl shadow-lg border-2 border-fuchsia-100 overflow-hidden dark:bg-slate-900/80 dark:border-fuchsia-500/40">
+            <div class="bg-gradient-to-r from-fuchsia-600 to-purple-600 px-4 py-2 dark:from-fuchsia-500 dark:to-purple-500">
+              <h3 class="text-base font-bold text-white flex items-center gap-1.5 leading-tight">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/>
+                </svg>
+                Segmentos de Producción
+              </h3>
+            </div>
+            <div class="p-5 space-y-5">
+              <div v-for="it in itemsConSegs" :key="'seg-'+it.id" class="border-2 border-fuchsia-100 rounded-2xl overflow-hidden dark:border-fuchsia-500/30">
+                <div class="px-4 py-3 bg-gradient-to-r from-fuchsia-50 to-purple-50 dark:from-fuchsia-500/10 dark:to-purple-500/10">
+                  <div class="font-bold text-gray-800 dark:text-slate-100">
+                    Ítem #{{ it.id }} — {{ it.tamano || it.descripcion || 'Sin descripción' }}
+                  </div>
+                  <div class="text-xs text-gray-600 dark:text-slate-400">
+                    Planeado: {{ it.cantidad_planeada }} · Producido (segmentos): {{ (segsOf(it) || []).reduce((a,s)=>a+Number(s.cantidad||0),0) }}
+                  </div>
+                </div>
+                <div class="overflow-x-auto">
+                  <table class="min-w-full text-sm">
+                    <thead class="bg-white dark:bg-slate-900/60">
+                      <tr>
+                        <th class="px-4 py-3 text-left font-bold text-gray-700 dark:text-slate-200">Tipo</th>
+                        <th class="px-4 py-3 text-center font-bold text-gray-700 dark:text-slate-200">Cantidad</th>
+                        <th class="px-4 py-3 text-right font-bold text-gray-700 dark:text-slate-200">PU</th>
+                        <th class="px-4 py-3 text-right font-bold text-gray-700 dark:text-slate-200">Subtotal</th>
+                        <th class="px-4 py-3 text-left font-bold text-gray-700 dark:text-slate-200">Usuario</th>
+                        <th class="px-4 py-3 text-left font-bold text-gray-700 dark:text-slate-200">Fecha</th>
+                        <th v-if="canEditSegmentPrices" class="px-4 py-3 text-left font-bold text-gray-700 dark:text-slate-200">Editar</th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100 dark:divide-slate-800/80">
+                      <tr v-for="seg in segsOf(it)" :key="seg.id" class="hover:bg-fuchsia-50/50 dark:hover:bg-fuchsia-500/10">
+                        <td class="px-4 py-3 font-semibold text-gray-800 dark:text-slate-100">{{ segLabel(seg.tipo_tarifa) }}</td>
+                        <td class="px-4 py-3 text-center text-gray-700 dark:text-slate-200">{{ seg.cantidad }}</td>
+                        <td class="px-4 py-3 text-right text-gray-700 dark:text-slate-200">{{ Number(seg.precio_unitario || 0).toFixed(4) }}</td>
+                        <td class="px-4 py-3 text-right font-bold text-gray-800 dark:text-slate-100">{{ Number(seg.subtotal || 0).toFixed(2) }}</td>
+                        <td class="px-4 py-3 text-gray-700 dark:text-slate-200">{{ seg.usuario?.name || '—' }}</td>
+                        <td class="px-4 py-3 text-gray-600 dark:text-slate-400">{{ fmtDate(seg.created_at) }}</td>
+                        <td v-if="canEditSegmentPrices" class="px-4 py-3">
+                          <div v-if="canEditSegmentPrices && (seg.tipo_tarifa === 'EXTRA' || seg.tipo_tarifa === 'FIN_DE_SEMANA')" class="flex flex-col gap-2">
+                            <input type="number" min="0" step="0.0001" inputmode="decimal"
+                                   :value="(segPriceDraft[seg.id] ?? seg.precio_unitario)"
+                                   @input="(e)=>{ segPriceDraft[seg.id]=e.target.value }"
+                                   class="w-40 px-3 py-2 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-fuchsia-300 focus:border-fuchsia-400 text-right font-semibold dark:bg-slate-900/60 dark:border-slate-700 dark:text-slate-100" />
+                            <input type="text" maxlength="500"
+                                   :value="(segNotaDraft[seg.id] ?? seg.nota ?? '')"
+                                   @input="(e)=>{ segNotaDraft[seg.id]=e.target.value }"
+                                   placeholder="Nota (opcional)"
+                                   class="w-64 px-3 py-2 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-fuchsia-300 focus:border-fuchsia-400 dark:bg-slate-900/60 dark:border-slate-700 dark:text-slate-100" />
+                            <button @click="updateSegmento(seg)"
+                                    class="w-40 px-4 py-2 bg-gradient-to-r from-fuchsia-600 to-purple-600 text-white font-bold rounded-lg shadow hover:shadow-md transition-all duration-200 dark:from-fuchsia-500 dark:to-purple-500">
+                              Guardar
+                            </button>
+                          </div>
+                          <div v-else class="text-xs text-gray-500 dark:text-slate-500">—</div>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- Subir Evidencias -->
           <div v-if="can?.reportarAvance" class="bg-white rounded-2xl shadow-lg border-2 border-orange-100 overflow-hidden dark:bg-slate-900/80 dark:border-orange-500/40">
-            <div class="bg-gradient-to-r from-orange-600 to-amber-600 px-6 py-4 dark:from-orange-500 dark:to-amber-500">
-              <h3 class="text-lg font-bold text-white flex items-center gap-2">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div class="bg-gradient-to-r from-orange-600 to-amber-600 px-4 py-2 dark:from-orange-500 dark:to-amber-500">
+              <h3 class="text-base font-bold text-white flex items-center gap-1.5 leading-tight">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
                 </svg>
                 Subir Evidencias
@@ -705,9 +845,9 @@ function definirTamanos() {
 
           <!-- Archivos de la Solicitud -->
           <div v-if="orden?.solicitud?.archivos?.length" class="bg-white rounded-2xl shadow-lg border-2 border-orange-100 overflow-hidden dark:bg-slate-900/80 dark:border-orange-500/40">
-            <div class="bg-gradient-to-r from-orange-600 to-amber-600 px-6 py-4 dark:from-orange-500 dark:to-amber-500">
-              <h3 class="text-lg font-bold text-white flex items-center gap-2">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div class="bg-gradient-to-r from-orange-600 to-amber-600 px-4 py-2 dark:from-orange-500 dark:to-amber-500">
+              <h3 class="text-base font-bold text-white flex items-center gap-1.5 leading-tight">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/>
                 </svg>
                 Archivos de la Solicitud
@@ -756,9 +896,9 @@ function definirTamanos() {
 
           <!-- Galería de Evidencias -->
           <div class="bg-white rounded-2xl shadow-lg border-2 border-indigo-100 overflow-hidden dark:bg-slate-900/80 dark:border-indigo-500/40">
-            <div class="bg-gradient-to-r from-indigo-600 to-[#1E1C8F] px-6 py-4 dark:from-indigo-500 dark:to-[#1E1C8F]">
-              <h3 class="text-lg font-bold text-white flex items-center gap-2">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div class="bg-gradient-to-r from-indigo-600 to-[#1E1C8F] px-4 py-2 dark:from-indigo-500 dark:to-[#1E1C8F]">
+              <h3 class="text-base font-bold text-white flex items-center gap-1.5 leading-tight">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
                 </svg>
                 Galería de Evidencias
@@ -831,10 +971,10 @@ function definirTamanos() {
 
           <!-- Historial de Avances -->
           <div class="bg-white rounded-2xl shadow-lg border-2 border-cyan-100 overflow-hidden dark:bg-slate-900/80 dark:border-cyan-500/40">
-            <div class="bg-gradient-to-r from-cyan-600 to-blue-600 px-6 py-4 dark:from-cyan-500 dark:to-blue-500">
+            <div class="bg-gradient-to-r from-cyan-600 to-blue-600 px-4 py-2 dark:from-cyan-500 dark:to-blue-500">
               <div class="flex items-center justify-between">
-                <h3 class="text-lg font-bold text-white flex items-center gap-2">
-                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <h3 class="text-base font-bold text-white flex items-center gap-1.5 leading-tight">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
                   </svg>
                   Historial de Avances
@@ -950,6 +1090,46 @@ function definirTamanos() {
 
         <!-- Right Column: Acciones -->
         <div class="lg:col-span-1 space-y-6">
+
+          <!-- Totales / Cotización -->
+          <div class="bg-white rounded-2xl shadow-lg border-2 border-emerald-100 overflow-hidden dark:bg-slate-900/80 dark:border-emerald-500/40">
+            <div class="bg-gradient-to-r from-emerald-600 to-teal-600 px-4 py-2 dark:from-emerald-500 dark:to-teal-500">
+              <div class="flex items-center justify-between gap-3">
+                <h3 class="text-base font-bold text-white flex items-center gap-1.5 leading-tight">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-10V6m0 12v-2m9-4a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                  </svg>
+                  Totales
+                </h3>
+                <span v-if="cotCalcMode === 'SEGMENTOS'" class="px-2.5 py-1 bg-white/20 border border-white/30 rounded-full text-white text-xs font-bold">
+                  Calculado por segmentos
+                </span>
+                <span v-else class="px-2.5 py-1 bg-white/20 border border-white/30 rounded-full text-white text-xs font-bold">
+                  Precio fijo
+                </span>
+              </div>
+            </div>
+            <div class="p-5 space-y-3">
+              <div class="grid grid-cols-2 gap-3">
+                <div class="bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-xl p-3 border-2 border-indigo-200 dark:from-indigo-500/10 dark:to-indigo-500/5 dark:border-indigo-500/40">
+                  <div class="text-[11px] font-semibold text-indigo-700 uppercase dark:text-indigo-200">Subtotal</div>
+                  <div class="text-lg font-bold text-indigo-900 dark:text-indigo-100">${{ cotSubtotal.toFixed(2) }}</div>
+                </div>
+                <div class="bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl p-3 border-2 border-amber-200 dark:from-amber-500/10 dark:to-orange-500/10 dark:border-amber-500/40">
+                  <div class="text-[11px] font-semibold text-amber-800 uppercase dark:text-amber-200">IVA {{ (ivaRate*100).toFixed(0) }}%</div>
+                  <div class="text-lg font-bold text-amber-900 dark:text-amber-100">${{ cotIva.toFixed(2) }}</div>
+                </div>
+              </div>
+              <div class="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl p-3 border-2 border-emerald-200 dark:from-emerald-500/10 dark:to-teal-500/10 dark:border-emerald-500/40">
+                <div class="text-[11px] font-semibold text-emerald-700 uppercase dark:text-emerald-200">Total</div>
+                <div class="text-2xl font-extrabold text-emerald-900 dark:text-emerald-100">${{ cotTotal.toFixed(2) }}</div>
+              </div>
+              <div v-if="cotCalcMode === 'SEGMENTOS'" class="text-xs text-gray-600 bg-emerald-50 border-2 border-emerald-200 rounded-xl p-3 dark:text-emerald-200 dark:bg-emerald-500/10 dark:border-emerald-500/40">
+                El total refleja la suma de subtotales por tarifa (NORMAL/EXTRA/FIN DE SEMANA) capturados en Producción.
+              </div>
+            </div>
+          </div>
+
           <!-- Panel: Desglose por Tamaños (pendiente) -->
           <div v-if="orden?.servicio?.usa_tamanos && (!orden?.solicitud?.tamanos || orden?.solicitud?.tamanos.length === 0)"
             class="bg-white rounded-2xl shadow-lg border-2 border-blue-100 overflow-hidden lg:sticky lg:top-6 dark:bg-slate-900/80 dark:border-blue-500/40">
@@ -1021,9 +1201,9 @@ function definirTamanos() {
           
           <!-- Acciones de Calidad/Cliente/Facturación -->
           <div class="bg-white rounded-2xl shadow-lg border-2 border-indigo-100 overflow-hidden lg:sticky lg:top-6 dark:bg-slate-900/80 dark:border-indigo-500/40">
-            <div class="bg-gradient-to-r from-indigo-600 to-[#1E1C8F] px-6 py-4 dark:from-indigo-500 dark:to-[#1E1C8F]">
-              <h3 class="text-lg font-bold text-white flex items-center gap-2">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div class="bg-gradient-to-r from-indigo-600 to-[#1E1C8F] px-4 py-2 dark:from-indigo-500 dark:to-[#1E1C8F]">
+              <h3 class="text-base font-bold text-white flex items-center gap-1.5 leading-tight">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
                 </svg>
                 Acciones Disponibles
