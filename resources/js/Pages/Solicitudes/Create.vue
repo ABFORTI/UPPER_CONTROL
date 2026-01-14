@@ -183,19 +183,19 @@ function handleFiles(e) {
 </script>
 
 <template>
-  <div class="min-h-screen bg-gradient-to-br from-slate-50 via-upper-50 to-upper-100 p-4 md:p-8">
+  <div class="min-h-screen bg-gradient-to-br from-slate-50 via-upper-50 to-upper-100 px-4 pt-2 pb-3 md:px-8 md:pt-3 md:pb-4">
     <div class="max-w-7xl mx-auto">
       <!-- Header -->
-      <div class="mb-8">
-        <div class="flex items-center gap-3 mb-2">
-          <div class="p-3 rounded-xl shadow-lg" style="background: linear-gradient(135deg, #1E1C8F 0%, #14134F 100%);">
-            <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <div class="mb-3 md:mb-4">
+        <div class="flex items-center gap-3 mb-0">
+          <div class="p-2 rounded-xl shadow-lg" style="background: linear-gradient(135deg, #1E1C8F 0%, #14134F 100%);">
+            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
             </svg>
           </div>
           <div>
-            <h1 class="text-3xl font-bold text-#333333">Nueva Solicitud de Servicio</h1>
-            <p class="text-#333333 text-sm mt-1">Complete el formulario para crear su solicitud</p>
+            <h1 class="text-xl md:text-2xl font-bold text-#333333">Nueva Solicitud de Servicio</h1>
+            <p class="text-#333333 text-sm mt-0">Complete el formulario para crear su solicitud</p>
           </div>
         </div>
       </div>
@@ -385,36 +385,36 @@ function handleFiles(e) {
             <div class="p-6">
               <!-- Cantidad Simple -->
               <div v-if="!usaTamanos">
-                <div class="mb-5">
-                  <label class="block text-sm font-semibold text-gray-700 mb-2">
-                    <span class="flex items-center gap-2">
-                      <svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14"/>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div class="rounded-xl border-2 border-gray-200 bg-gray-50 p-4">
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">
+                      <span class="flex items-center gap-2">
+                        <svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14"/>
+                        </svg>
+                        Cantidad
+                        <span class="text-red-500">*</span>
+                      </span>
+                    </label>
+                    <input 
+                      type="number" 
+                      min="1" 
+                      v-model.number="form.cantidad" 
+                      class="w-full px-4 py-3 text-lg font-semibold rounded-xl border-2 border-gray-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all outline-none bg-white hover:bg-white" 
+                    />
+                    <p v-if="form.errors.cantidad" class="text-red-600 text-sm mt-2 flex items-center gap-1">
+                      <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
                       </svg>
-                      Cantidad
-                      <span class="text-red-500">*</span>
-                    </span>
-                  </label>
-                  <input 
-                    type="number" 
-                    min="1" 
-                    v-model.number="form.cantidad" 
-                    class="w-full md:w-48 px-4 py-3 text-lg font-semibold rounded-xl border-2 border-gray-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all outline-none bg-gray-50 hover:bg-white" 
-                  />
-                  <p v-if="form.errors.cantidad" class="text-red-600 text-sm mt-2 flex items-center gap-1">
-                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                      <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
-                    </svg>
-                    {{ form.errors.cantidad }}
-                  </p>
-                </div>
+                      {{ form.errors.cantidad }}
+                    </p>
+                  </div>
 
-                <!-- Desglose de Precios -->
-                <div class="grid md:grid-cols-2 gap-4">
                   <div class="bg-gradient-to-br from-upper-50 to-upper-100 rounded-xl p-4 border-2 border-upper-200">
                     <div class="text-xs font-semibold text-blue-700 uppercase mb-1">Precio Unitario</div>
                     <div class="text-2xl font-bold text-blue-900">${{ precioUnitario.toFixed(2) }}</div>
                   </div>
+
                   <div class="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl p-4 border-2 border-emerald-100">
                     <div class="text-xs font-semibold text-emerald-700 uppercase mb-1">Subtotal</div>
                     <div class="text-2xl font-bold text-emerald-900">${{ subtotal.toFixed(2) }}</div>
@@ -435,24 +435,24 @@ function handleFiles(e) {
                     </div>
                   </div>
                 </div>
-                <div class="mb-5">
-                  <label class="block text-sm font-semibold text-gray-700 mb-2">Total de piezas <span class="text-red-500">*</span></label>
-                  <input type="number" min="1" v-model.number="form.cantidad"
-                         class="w-full md:w-48 px-4 py-3 text-lg font-semibold rounded-xl border-2 border-gray-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all outline-none bg-gray-50 hover:bg-white" />
-                  <p v-if="form.errors.cantidad" class="text-red-600 text-sm mt-2 flex items-center gap-1">
-                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                      <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
-                    </svg>
-                    {{ form.errors.cantidad }}
-                  </p>
-                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div class="rounded-xl border-2 border-gray-200 bg-gray-50 p-4">
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Total de piezas <span class="text-red-500">*</span></label>
+                    <input type="number" min="1" v-model.number="form.cantidad"
+                           class="w-full px-4 py-3 text-lg font-semibold rounded-xl border-2 border-gray-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all outline-none bg-white hover:bg-white" />
+                    <p v-if="form.errors.cantidad" class="text-red-600 text-sm mt-2 flex items-center gap-1">
+                      <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                      </svg>
+                      {{ form.errors.cantidad }}
+                    </p>
+                  </div>
 
-                <!-- Totales en cero (diferidos) -->
-                <div class="grid md:grid-cols-2 gap-4">
                   <div class="bg-gradient-to-br from-upper-50 to-upper-100 rounded-xl p-4 border-2 border-upper-200">
                     <div class="text-xs font-semibold text-blue-700 uppercase mb-1">Subtotal</div>
                     <div class="text-2xl font-bold text-blue-900">$0.00</div>
                   </div>
+
                   <div class="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl p-4 border-2 border-emerald-100">
                     <div class="text-xs font-semibold text-emerald-700 uppercase mb-1">Total (con IVA)</div>
                     <div class="text-2xl font-bold text-emerald-900">$0.00</div>

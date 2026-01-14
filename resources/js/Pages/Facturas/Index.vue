@@ -98,18 +98,20 @@ function goToPage(p){
 </script>
 
 <template>
-  <div class="max-w-none px-4 py-6 sm:px-6 lg:px-8">
-    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-5">
-      <h1 class="text-3xl font-extrabold tracking-tight uppercase text-slate-900">Facturación</h1>
-      <div class="mt-3 sm:mt-0 inline-flex flex-col gap-1 rounded-xl border border-slate-200 bg-slate-900/5 px-4 py-3 shadow-sm self-start sm:self-end">
-        <span class="text-[0.7rem] uppercase tracking-wide text-slate-500">Periodo actual</span>
-        <span class="text-xl font-semibold text-slate-900">Periodo {{ currentPeriod }}</span>
-        <span class="text-xs text-slate-500">Año {{ currentYear }}</span>
-      </div>
-    </div>
-
+  <div class="max-w-none px-1 py-3 sm:px-2 lg:px-3">
     <div class="rounded-xl border bg-white shadow-sm overflow-hidden">
-      <div class="px-4 py-4 sm:px-6 lg:px-8 space-y-3 lg:space-y-0 lg:flex lg:flex-wrap lg:items-center lg:justify-start lg:gap-3">
+      <div class="px-2 pt-3 pb-2 sm:px-3 lg:px-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight uppercase text-slate-900">Facturación</h1>
+        <div class="inline-flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-900/5 px-3 py-2 self-start sm:self-end">
+          <div class="leading-tight">
+            <div class="text-[0.65rem] uppercase tracking-wide text-slate-500">Periodo actual</div>
+            <div class="text-lg font-semibold text-slate-900">Periodo {{ currentPeriod }}</div>
+          </div>
+          <div class="text-xs text-slate-500">Año {{ currentYear }}</div>
+        </div>
+      </div>
+
+      <div class="px-2 py-2 sm:px-3 lg:px-4 space-y-3 lg:space-y-0 lg:flex lg:flex-wrap lg:items-center lg:justify-start lg:gap-3">
         <div class="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full lg:w-auto">
           <select v-model="centroSel" @change="applyFilter" class="border p-2 rounded w-full sm:w-auto sm:min-w-[180px]">
             <option value="">Todos los centros</option>
@@ -134,7 +136,7 @@ function goToPage(p){
         </div>
       </div>
 
-      <div class="px-3 sm:px-4 lg:px-6 pb-4 hidden md:block">
+      <div class="px-2 sm:px-3 lg:px-4 pb-3 hidden md:block">
         <div class="rounded-lg shadow-sm border border-slate-200">
           <div class="overflow-x-auto">
             <table class="w-full text-[0.65rem] sm:text-[0.75rem] xl:text-xs 2xl:text-sm table-auto">
@@ -191,7 +193,7 @@ function goToPage(p){
         </div>
       </div>
 
-      <div class="md:hidden px-4 sm:px-6 lg:px-8 pb-4">
+      <div class="md:hidden px-2 sm:px-3 lg:px-4 pb-3">
         <div class="space-y-4">
           <div v-for="f in pageItems" :key="f.id" class="border border-slate-200 rounded-xl p-4 shadow-sm">
             <div class="flex items-start justify-between gap-3">
@@ -228,7 +230,7 @@ function goToPage(p){
         </div>
       </div>
 
-      <div class="px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-end gap-2">
+      <div class="px-2 sm:px-3 lg:px-4 py-3 flex items-center justify-end gap-2">
         <button class="px-3 py-1.5 rounded border text-sm disabled:opacity-50" :disabled="currentPage<=1" @click="goToPage(currentPage-1)">Anterior</button>
         <span class="text-sm">Página {{ currentPage }} de {{ totalPages }}</span>
         <button class="px-3 py-1.5 rounded border text-sm disabled:opacity-50" :disabled="currentPage>=totalPages" @click="goToPage(currentPage+1)">Siguiente</button>

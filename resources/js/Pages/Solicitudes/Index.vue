@@ -75,17 +75,17 @@ const isGerente = computed(() => roles.value.includes('gerente_upper'))
 
 
 <template>
-  <div class="max-w-none px-4 py-6 sm:px-6 lg:px-8">
-    <!-- Header -->
-    <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-5">
-      <h1 class="font-display text-3xl font-semibold tracking-wide uppercase text-slate-900 dark:text-slate-100">Solicitudes</h1>
-      <a v-if="!isGerente" href="./solicitudes/create" class="btn btn-primary w-full md:w-auto text-center">AGREGAR +</a>
-    </div>
-
+  <div class="max-w-none px-1 py-3 sm:px-2 lg:px-3">
     <!-- Tarjeta principal -->
     <div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
+      <!-- Header integrado -->
+      <div class="px-2 pt-3 pb-2 sm:px-3 lg:px-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <h1 class="font-display text-2xl sm:text-3xl font-semibold tracking-wide uppercase text-slate-900 dark:text-slate-100">Solicitudes</h1>
+        <a v-if="!isGerente" href="./solicitudes/create" class="btn btn-primary w-full sm:w-auto text-center self-start sm:self-end">AGREGAR +</a>
+      </div>
+
       <!-- Acciones y filtros -->
-      <div class="px-4 py-4 sm:px-6 lg:px-8 space-y-4 md:space-y-0 md:flex md:flex-wrap md:items-center md:justify-between md:gap-4">
+      <div class="px-2 py-2 sm:px-3 lg:px-4 space-y-3 md:space-y-0 md:flex md:flex-wrap md:items-center md:justify-between md:gap-4">
         <div class="flex flex-col sm:flex-row sm:items-center gap-2 w-full md:w-auto">
           <button @click="downloadExcel" class="w-full sm:w-auto px-4 py-2 rounded text-white font-semibold shadow-sm shadow-green-500/20" style="background:#22c55e">Excel</button>
           <button @click="copyTable" class="w-full sm:w-auto px-4 py-2 rounded text-white font-semibold shadow-sm shadow-slate-500/20" style="background:#64748b">Copiar</button>
@@ -118,7 +118,7 @@ const isGerente = computed(() => roles.value.includes('gerente_upper'))
       </div>
 
       <!-- Tabla desktop -->
-      <div class="px-4 pb-4 sm:px-6 lg:px-8 hidden md:block">
+      <div class="px-2 pb-3 sm:px-3 lg:px-4 hidden md:block">
         <div class="rounded-lg shadow-sm border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/40">
           <div class="overflow-x-auto">
           <table class="w-full text-xs md:text-sm xl:text-[0.95rem] 2xl:text-base table-auto">
@@ -183,7 +183,7 @@ const isGerente = computed(() => roles.value.includes('gerente_upper'))
       </div>
 
       <!-- Listado móvil -->
-      <div class="md:hidden px-4 pb-4 sm:px-6 lg:px-8">
+      <div class="md:hidden px-2 pb-3 sm:px-3 lg:px-4">
         <div class="space-y-4">
           <div v-for="s in data.data" :key="s.id" class="border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-sm bg-white dark:bg-slate-900/80 text-slate-800 dark:text-slate-100">
             <div class="flex items-start justify-between gap-3">
@@ -252,7 +252,7 @@ const isGerente = computed(() => roles.value.includes('gerente_upper'))
       </div>
 
       <!-- Paginación -->
-      <div class="px-4 sm:px-6 lg:px-8 py-3 flex flex-wrap items-center justify-center md:justify-end gap-2">
+      <div class="px-2 sm:px-3 lg:px-4 py-3 flex flex-wrap items-center justify-center md:justify-end gap-2">
         <button v-for="link in data.links" :key="link.label"
                 @click="toPage(link)"
                 class="px-3 py-1.5 rounded border text-sm min-w-[2.5rem] text-center border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
