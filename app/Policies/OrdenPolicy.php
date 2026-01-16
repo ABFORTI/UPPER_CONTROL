@@ -37,30 +37,48 @@ class OrdenPolicy
         }
 
         $allowed = false;
+        $checkedAnyScope = false;
+
         // 3) Gerente Upper: puede ver si la OT pertenece a alguno de sus centros asignados (principal + pivots)
         if ($u->hasRole('gerente_upper')) {
+            $checkedAnyScope = true;
             $ids = $u->centros()->pluck('centros_trabajo.id')->map(fn($v)=>(int)$v)->all();
             $primary = (int)($u->centro_trabajo_id ?? 0);
             if ($primary) $ids[] = $primary;
             $ids = array_values(array_unique($ids));
-            $allowed = in_array((int)$o->id_centrotrabajo, $ids, true);
-        } elseif ($u->hasRole('Cliente_Gerente')) {
-            // Gerente (antes 'cliente_centro'): alcance a todo el centro
-            $allowed = (int)$o->id_centrotrabajo === (int)$u->centro_trabajo_id;
-        } elseif ($u->hasRole('Cliente_Supervisor')) {
-            // Supervisor (antes 'cliente'): sólo sus propias OTs (las de sus solicitudes)
-            $allowed = $isOwner;
-        } elseif ($u->hasRole('team_leader')) {
-            $allowed = (int)$o->team_leader_id === (int)$u->id;
-        } elseif ($u->hasAnyRole(['calidad','coordinador'])) {
-            // calidad o coordinador: permitir centros asignados (pivot) + principal
+            $allowed = $allowed || in_array((int)$o->id_centrotrabajo, $ids, true);
+        }
+
+        // Cliente con alcance a centro completo
+        if ($u->hasRole('Cliente_Gerente')) {
+            $checkedAnyScope = true;
+            $allowed = $allowed || ((int)$o->id_centrotrabajo === (int)$u->centro_trabajo_id);
+        }
+
+        // Supervisor: sólo sus propias OTs
+        if ($u->hasRole('Cliente_Supervisor')) {
+            $checkedAnyScope = true;
+            $allowed = $allowed || $isOwner;
+        }
+
+        // Team Leader: sólo OTs asignadas (pero si además tiene roles más amplios, se suman abajo)
+        if ($u->hasRole('team_leader')) {
+            $checkedAnyScope = true;
+            $allowed = $allowed || ((int)$o->team_leader_id === (int)$u->id);
+        }
+
+        // Calidad o coordinador: permitir centros asignados (pivot) + principal
+        if ($u->hasAnyRole(['calidad','coordinador'])) {
+            $checkedAnyScope = true;
             $ids = $u->centros()->pluck('centros_trabajo.id')->map(fn($v)=>(int)$v)->all();
             $primary = (int)($u->centro_trabajo_id ?? 0);
             if ($primary) $ids[] = $primary;
             $ids = array_values(array_unique($ids));
-            $allowed = in_array((int)$o->id_centrotrabajo, $ids, true);
-        } else {
-            // resto por centro (solo principal)
+            $allowed = $allowed || in_array((int)$o->id_centrotrabajo, $ids, true);
+        }
+
+        // Resto (sin roles con alcance explícito): por centro principal
+        if (!$checkedAnyScope) {
             $allowed = (int)$u->centro_trabajo_id === (int)$o->id_centrotrabajo;
         }
 
@@ -78,22 +96,22 @@ class OrdenPolicy
     {
         if ($u->hasRole('admin')) return true;
 
-        // Team leader: sólo si está asignado a la OT
+        // Sumar permisos entre roles
+        $allowed = false;
+
         if ($u->hasRole('team_leader')) {
-            return (int)$o->team_leader_id === (int)$u->id;
+            $allowed = $allowed || ((int)$o->team_leader_id === (int)$u->id);
         }
 
-        // Coordinador: sólo si tiene acceso al centro (principal + pivots)
         if ($u->hasRole('coordinador')) {
             $ids = $u->centros()->pluck('centros_trabajo.id')->map(fn($v)=>(int)$v)->all();
             $primary = (int)($u->centro_trabajo_id ?? 0);
             if ($primary) $ids[] = $primary;
             $ids = array_values(array_unique($ids));
-            return in_array((int)$o->id_centrotrabajo, $ids, true);
+            $allowed = $allowed || in_array((int)$o->id_centrotrabajo, $ids, true);
         }
 
-        // Resto: no puede modificar producción
-        return false;
+        return $allowed;
     }
     // ya tenías:
     public function createFromSolicitud(User $u, int $centroId): bool

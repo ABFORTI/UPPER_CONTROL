@@ -1,5 +1,6 @@
 <script setup>
 import { useForm } from '@inertiajs/vue3'
+import { computed } from 'vue'
 
 const props = defineProps({ user:Object, centros:Array, roles:Array })
 
@@ -8,10 +9,15 @@ const form = useForm({
   email: props.user?.email || '',
   phone: props.user?.phone || '',
   centro_trabajo_id: props.user?.centro_trabajo_id || '',
-  role: props.user?.role || 'Cliente_Supervisor',
+  roles: props.user?.roles || ['Cliente_Supervisor'],
   centros_ids: props.user?.centros_ids || [],
   password: '',
   password_confirmation: ''
+})
+
+const canSelectCentros = computed(() => {
+  const selected = form.roles || []
+  return selected.some(r => ['admin','calidad','facturacion','control','comercial','gerente_upper'].includes(r))
 })
 
 function save(){
@@ -141,27 +147,32 @@ function save(){
               <!-- Rol -->
               <div>
                 <label class="block text-sm font-semibold text-gray-700 mb-2">
-                  Rol del usuario
+                  Roles del usuario
                   <span class="text-red-500">*</span>
                 </label>
-                <select v-model="form.role"
+                <select v-model="form.roles"
                         required
-                        class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-indigo-100 focus:border-indigo-400 transition-all duration-200 capitalize"
-                        :class="{ 'border-red-300 bg-red-50': form.errors.role }">
+                        multiple
+                        size="6"
+                        class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-indigo-100 focus:border-indigo-400 transition-all duration-200"
+                        :class="{ 'border-red-300 bg-red-50': form.errors.roles }">
                   <option v-for="r in roles" :key="r" :value="r" class="capitalize">{{ r }}</option>
                 </select>
-                <p v-if="form.errors.role" class="text-red-600 text-sm mt-2 flex items-center gap-1">
+                <p class="text-xs text-gray-500 mt-2">
+                  Mantén presionado <kbd class="px-2 py-1 bg-white rounded border border-gray-300 text-xs">Ctrl</kbd> (Windows) o <kbd class="px-2 py-1 bg-white rounded border border-gray-300 text-xs">⌘ Cmd</kbd> (Mac) para seleccionar múltiples roles.
+                </p>
+                <p v-if="form.errors.roles" class="text-red-600 text-sm mt-2 flex items-center gap-1">
                   <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                     <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
                   </svg>
-                  {{ form.errors.role }}
+                  {{ form.errors.roles }}
                 </p>
               </div>
 
             </div>
 
     <!-- Multiselección de centros (admin, calidad, facturacion, control, comercial y gerente_upper) -->
-  <div v-if="['admin','calidad','facturacion','control','comercial','gerente_upper'].includes(form.role)" 
+  <div v-if="canSelectCentros" 
          class="bg-gradient-to-r from-indigo-50 to-blue-50 rounded-xl p-6 border-2 border-indigo-200">
               <label class="block text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
                 <svg class="w-5 h-5 text-[#1E1C8F]" fill="none" stroke="currentColor" viewBox="0 0 24 24">

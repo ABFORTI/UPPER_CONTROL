@@ -193,7 +193,7 @@ function isoWeekNumber(dateStr){
             Descargar Excel
           </a>
 
-          <a :href="exportFacturacionUrl"
+          <a v-if="props.urls?.export_facturacion" :href="exportFacturacionUrl"
              class="w-full lg:w-auto inline-flex items-center justify-center px-4 py-2 rounded font-semibold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors">
             Excel facturación
           </a>

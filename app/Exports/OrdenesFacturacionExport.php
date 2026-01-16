@@ -28,7 +28,9 @@ class OrdenesFacturacionExport implements FromQuery, WithMapping, WithHeadings, 
         $f = $this->filters;
 
         $isPrivilegedViewer = $u->hasAnyRole(['admin', 'facturacion', 'gerente_upper']);
-        $isTL = $u->hasRole('team_leader');
+        $isTLStrict = $u->hasRole('team_leader') && !$u->hasAnyRole([
+            'admin', 'coordinador', 'calidad', 'facturacion', 'gerente_upper', 'Cliente_Supervisor', 'Cliente_Gerente',
+        ]);
         $isClienteSupervisor = $u->hasRole('Cliente_Supervisor');
         $isClienteCentro = $u->hasRole('Cliente_Gerente');
 
@@ -47,7 +49,7 @@ class OrdenesFacturacionExport implements FromQuery, WithMapping, WithHeadings, 
                 'orden.centro',
                 'orden.solicitud.centroCosto',
             ])
-            ->whereHas('orden', function (Builder $qq) use ($u, $f, $isPrivilegedViewer, $centrosPermitidos, $isTL, $isClienteSupervisor, $isClienteCentro) {
+            ->whereHas('orden', function (Builder $qq) use ($u, $f, $isPrivilegedViewer, $centrosPermitidos, $isTLStrict, $isClienteSupervisor, $isClienteCentro) {
                 $qq
                     ->when(!$isPrivilegedViewer, function (Builder $sub) use ($centrosPermitidos) {
                         if (!empty($centrosPermitidos)) {
@@ -62,7 +64,7 @@ class OrdenesFacturacionExport implements FromQuery, WithMapping, WithHeadings, 
                             $sub->where('id_centrotrabajo', $f['centro']);
                         }
                     })
-                    ->when($isTL, fn (Builder $sub) => $sub->where('team_leader_id', $u->id))
+                    ->when($isTLStrict, fn (Builder $sub) => $sub->where('team_leader_id', $u->id))
                     ->when($isClienteSupervisor && !$isClienteCentro, fn (Builder $sub) => $sub->whereHas('solicitud', fn ($w) => $w->where('id_cliente', $u->id)))
 
                     ->when(!empty($f['id']), fn (Builder $sub) => $sub->where('id', $f['id']))

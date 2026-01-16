@@ -1105,6 +1105,10 @@ class OrdenController extends Controller
     // Privilegio de vista amplia: admin, facturación y gerente_upper (solo lectura)
     $isPrivilegedViewer = $u && method_exists($u, 'hasAnyRole') ? $u->hasAnyRole(['admin','facturacion','gerente_upper']) : false;
     $isTL = $u && method_exists($u, 'hasRole') ? $u->hasRole('team_leader') : false;
+    // Si además de TL tiene otros roles con mayor alcance, no restringir el listado a sus OTs
+    $isTLStrict = $u && method_exists($u, 'hasAnyRole')
+        ? ($isTL && !$u->hasAnyRole(['admin','coordinador','calidad','facturacion','gerente_upper','Cliente_Supervisor','Cliente_Gerente']))
+        : $isTL;
     $isCliente = $u && method_exists($u, 'hasRole') ? $u->hasRole('Cliente_Supervisor') : false;
     $isClienteCentro = $u && method_exists($u, 'hasRole') ? $u->hasRole('Cliente_Gerente') : false;
 
@@ -1145,7 +1149,7 @@ class OrdenController extends Controller
                 $qq->where('id_centrotrabajo', $filters['centro']);
             }
         })
-        ->when($isTL, fn($qq)=>$qq->where('team_leader_id',$u->id))
+        ->when($isTLStrict, fn($qq)=>$qq->where('team_leader_id',$u->id))
         ->when($isCliente && !$isClienteCentro, fn($qq)=>$qq->whereHas('solicitud', fn($w)=>$w->where('id_cliente',$u->id)))
             ->when($filters['id'], fn($qq,$v)=>$qq->where('id',$v))
             ->when($filters['estatus'], fn($qq,$v)=>$qq->where('estatus',$v))
@@ -1253,7 +1257,9 @@ class OrdenController extends Controller
             'urls'      => [
                 'index' => route('ordenes.index'),
                 'export' => route('ordenes.export'),
-                'export_facturacion' => route('ordenes.exportFacturacion'),
+                'export_facturacion' => $u->hasAnyRole(['admin', 'facturacion', 'gerente_upper'])
+                    ? route('ordenes.exportFacturacion')
+                    : null,
                 'facturas_batch' => route('facturas.batch'),
                 'facturas_batch_create' => route('facturas.batch.create'),
             ],
@@ -1313,6 +1319,10 @@ class OrdenController extends Controller
         if (!($u instanceof \App\Models\User)) abort(403);
         if ($u->hasAnyRole(['admin','facturacion'])) return; // acceso amplio
 
+        $isTLStrict = $u->hasRole('team_leader') && !$u->hasAnyRole([
+            'admin', 'coordinador', 'calidad', 'facturacion', 'gerente_upper', 'Cliente_Supervisor', 'Cliente_Gerente',
+        ]);
+
         // Supervisor (antes 'cliente'): permitir si es dueño de la solicitud de la OT
         if ($orden && $u->hasRole('Cliente_Supervisor')) {
             if ($orden->solicitud && (int)$orden->solicitud->id_cliente === (int)$u->id) return;
@@ -1323,7 +1333,7 @@ class OrdenController extends Controller
             $ids = $this->allowedCentroIds($u);
             if (in_array((int)$centroId, array_map('intval', $ids), true)) {
                 // Si es TL además, validar que la OT sea suya
-                if ($orden && $u->hasRole('team_leader') && (int)$orden->team_leader_id !== (int)$u->id) {
+                if ($orden && $isTLStrict && (int)$orden->team_leader_id !== (int)$u->id) {
                     Log::warning('authorizeFromCentro DENY (TL no coincide)', [
                         'user_id' => $u->id,
                         'roles' => $u->roles->pluck('name')->all(),
@@ -1353,7 +1363,7 @@ class OrdenController extends Controller
             ]);
             abort(403);
         }
-        if ($orden && $u->hasRole('team_leader') && (int)$orden->team_leader_id !== (int)$u->id) {
+        if ($orden && $isTLStrict && (int)$orden->team_leader_id !== (int)$u->id) {
             Log::warning('authorizeFromCentro DENY (TL distinto a la OT)', [
                 'user_id' => $u->id,
                 'orden_id' => $orden->id,

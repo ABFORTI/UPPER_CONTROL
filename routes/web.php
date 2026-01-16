@@ -75,7 +75,6 @@ Route::middleware(['auth', 'check.areas'])->group(function () {
     Route::get('/marcas', [\App\Http\Controllers\MarcaController::class,'index'])->name('marcas.index');
     Route::post('/marcas', [\App\Http\Controllers\MarcaController::class,'store'])->name('marcas.store');
     Route::put('/marcas/{marca}', [\App\Http\Controllers\MarcaController::class,'update'])->name('marcas.update');
-        Route::get('/ordenes/export-facturacion', [OrdenController::class,'exportFacturacion'])->name('ordenes.exportFacturacion');
     Route::delete('/marcas/{marca}', [\App\Http\Controllers\MarcaController::class,'destroy'])->name('marcas.destroy');
 });
 
@@ -124,6 +123,9 @@ Route::middleware('auth')->group(function () {
 Route::middleware('auth')->group(function () {
     Route::get('/ordenes', [OrdenController::class,'index'])->name('ordenes.index');
     Route::get('/ordenes/export', [OrdenController::class,'export'])->name('ordenes.export');
+    Route::get('/ordenes/export-facturacion', [OrdenController::class,'exportFacturacion'])
+        ->middleware('role:admin|facturacion|gerente_upper')
+        ->name('ordenes.exportFacturacion');
     Route::get('/ordenes/{orden}', [OrdenController::class,'show'])->name('ordenes.show');
 
     Route::patch('/ordenes/{orden}/asignar-tl', [OrdenController::class,'asignarTL'])->name('ordenes.asignarTL');

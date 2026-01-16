@@ -37,7 +37,9 @@ class OrdenesIndexExport implements FromQuery, WithMapping, WithHeadings, Should
         $f = $this->filters;
 
         $isPrivilegedViewer = $u->hasAnyRole(['admin', 'facturacion', 'gerente_upper']);
-        $isTL = $u->hasRole('team_leader');
+        $isTLStrict = $u->hasRole('team_leader') && !$u->hasAnyRole([
+            'admin', 'coordinador', 'calidad', 'facturacion', 'gerente_upper', 'Cliente_Supervisor', 'Cliente_Gerente',
+        ]);
         $isClienteSupervisor = $u->hasRole('Cliente_Supervisor');
         $isClienteCentro = $u->hasRole('Cliente_Gerente');
 
@@ -76,7 +78,7 @@ class OrdenesIndexExport implements FromQuery, WithMapping, WithHeadings, Should
                     $qq->where('id_centrotrabajo', $f['centro']);
                 }
             })
-            ->when($isTL, fn (Builder $qq) => $qq->where('team_leader_id', $u->id))
+            ->when($isTLStrict, fn (Builder $qq) => $qq->where('team_leader_id', $u->id))
             ->when($isClienteSupervisor && !$isClienteCentro, fn (Builder $qq) => $qq->whereHas('solicitud', fn ($w) => $w->where('id_cliente', $u->id)))
 
             ->when(!empty($f['id']), fn (Builder $qq) => $qq->where('id', $f['id']))

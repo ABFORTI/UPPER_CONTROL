@@ -15,7 +15,8 @@ class StoreUserRequest extends FormRequest {
             'phone'  => ['nullable','string','max:30'],
             'password' => ['required','string','min:8','confirmed'],
             'centro_trabajo_id' => ['required','integer','exists:centros_trabajo,id'],
-            'role'   => ['required','string', Rule::exists('roles','name')->where('guard_name','web')],
+            'roles'   => ['required','array','min:1'],
+            'roles.*' => ['string', Rule::exists('roles','name')->where('guard_name','web')],
             // Centros múltiples (solo aplica si role es calidad o facturacion, pero lo dejamos opcional)
             'centros_ids'   => ['sometimes','array'],
             'centros_ids.*' => ['integer','exists:centros_trabajo,id'],
