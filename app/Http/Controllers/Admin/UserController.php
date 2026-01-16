@@ -75,8 +75,8 @@ class UserController extends Controller
             'activo' => true,
         ]);
 
-        $role = $data['role'];
-        $u->syncRoles([$role]);
+        $roles = $data['roles'];
+        $u->syncRoles($roles);
 
         // Asignaciones múltiples (opcional)
         if (!empty($data['centros_ids']) && is_array($data['centros_ids'])) {
@@ -99,7 +99,7 @@ class UserController extends Controller
                 'email' => $user->email,
                 'phone' => $user->phone,
                 'centro_trabajo_id' => $user->centro_trabajo_id,
-                'role' => $user->getRoleNames()->first(),
+                'roles' => $user->getRoleNames()->values()->toArray(),
                 'activo' => $user->activo,
                 'centros_ids' => $user->centros()->pluck('centros_trabajo.id')->toArray(),
             ],
@@ -113,8 +113,8 @@ class UserController extends Controller
     $authId = Auth::id();
     $data = $req->validated();
     $isSelf = $authId !== null && $authId === $user->id;
-        if ($isSelf && ($data['role'] ?? '') !== 'admin') {
-            return back()->withErrors(['role' => 'No puedes quitarte el rol de admin a ti mismo.']);
+        if ($isSelf && $user->hasRole('admin') && !in_array('admin', $data['roles'] ?? [], true)) {
+            return back()->withErrors(['roles' => 'No puedes quitarte el rol de admin a ti mismo.']);
         }
 
         $update = [
@@ -127,7 +127,7 @@ class UserController extends Controller
             $update['password'] = Hash::make($data['password']);
         }
         $user->update($update);
-        $user->syncRoles([$data['role']]);
+        $user->syncRoles($data['roles']);
 
         if (!empty($data['centros_ids']) && is_array($data['centros_ids'])) {
             $user->centros()->sync($data['centros_ids']);

@@ -39,7 +39,12 @@ const isComercial = computed(() => roles.value.includes('comercial'))
 const isGerente = computed(() => roles.value.includes('gerente_upper'))
 const isGerenteCentro = computed(() => roles.value.includes('Cliente_Gerente'))
 const isOnlyCalidad = computed(() => isCalidad.value && roles.value.length === 1)
-const isOnlyControlOrComercial = computed(() => (isControl.value || isComercial.value) && !isAdmin.value && !isCoord.value && !isCalidad.value)
+const isOnlyTeamLeader = computed(() => isTeamLeader.value && roles.value.length === 1)
+const isOnlyControlOrComercial = computed(() => {
+  const rs = roles.value || []
+  if (rs.length === 0) return false
+  return rs.every(r => r === 'control' || r === 'comercial')
+})
 
 const unread = computed(() => page.props.auth?.user?.unread_count || 0)
 function markAll () {
@@ -133,7 +138,7 @@ function closeMobile () {
                 <span :class="['overflow-hidden transition-all duration-200', labelVisibilityClasses]">Dashboard</span>
               </Link>
             </li>
-            <li v-if="!isOnlyCalidad && !isOnlyControlOrComercial && !isTeamLeader">
+            <li v-if="!isOnlyCalidad && !isOnlyControlOrComercial && !isOnlyTeamLeader">
               <Link :href="route('solicitudes.index')" :class="[
                 'flex items-center p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all',
                 navArrangementClasses,

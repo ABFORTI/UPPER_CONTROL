@@ -3,6 +3,7 @@
 namespace App\Exports;
 
 use App\Models\Orden;
+use App\Models\User;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Maatwebsite\Excel\Concerns\FromQuery;
 use Maatwebsite\Excel\Concerns\WithMapping;
@@ -24,17 +25,34 @@ class OtExport implements FromQuery, WithMapping, WithHeadings, ShouldAutoSize, 
         $u = $this->user;
         $f = $this->filters;
 
+        /** @var User|null $user */
+        $user = $u instanceof User ? $u : null;
+
+        $isPrivilegedViewer = $user?->hasAnyRole(['admin', 'facturacion', 'gerente_upper']) ?? false;
+
+        $isTLStrict = $user
+            ? ($user->hasRole('team_leader') && !$user->hasAnyRole([
+                'admin', 'coordinador', 'calidad', 'facturacion', 'gerente_upper', 'Cliente_Supervisor', 'Cliente_Gerente',
+            ]))
+            : false;
+
+        $centrosPermitidos = $user ? $this->allowedCentroIds($user) : [];
+
         $q = Orden::query()
             ->with(['servicio','centro','teamLeader','solicitud.cliente'])
             // visibilidad por rol
-            ->when(!$u->hasAnyRole(['admin','facturacion']), fn($qq) =>
-                $qq->where('id_centrotrabajo', $u->centro_trabajo_id)
+            ->when(!$isPrivilegedViewer, function ($qq) use ($centrosPermitidos) {
+                if (!empty($centrosPermitidos)) {
+                    $qq->whereIn('id_centrotrabajo', $centrosPermitidos);
+                } else {
+                    $qq->whereRaw('1=0');
+                }
+            })
+            ->when($isTLStrict, fn($qq) =>
+                $qq->where('team_leader_id', $user->id)
             )
-            ->when($u->hasRole('team_leader'), fn($qq) =>
-                $qq->where('team_leader_id', $u->id)
-            )
-            ->when($u->hasRole('Cliente_Supervisor'), fn($qq) =>
-                $qq->whereHas('solicitud', fn($w)=>$w->where('id_cliente', $u->id))
+            ->when(($user?->hasRole('Cliente_Supervisor') ?? false), fn($qq) =>
+                $qq->whereHas('solicitud', fn($w)=>$w->where('id_cliente', $user->id))
             )
             // filtros
             ->when(data_get($f,'id'),        fn($qq,$v)=>$qq->where('id',$v))
@@ -52,6 +70,21 @@ class OtExport implements FromQuery, WithMapping, WithHeadings, ShouldAutoSize, 
             ->orderBy('id');
 
         return $q;
+    }
+
+    private function allowedCentroIds(User $u): array
+    {
+        if ($u->hasRole('admin')) {
+            return [];
+        }
+
+        $ids = $u->centros()->pluck('centros_trabajo.id')->map(fn($v)=>(int)$v)->all();
+        $primary = (int)($u->centro_trabajo_id ?? 0);
+        if ($primary) {
+            $ids[] = $primary;
+        }
+
+        return array_values(array_unique(array_filter($ids)));
     }
 
     public function headings(): array

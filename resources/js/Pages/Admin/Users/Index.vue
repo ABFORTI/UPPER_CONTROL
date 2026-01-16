@@ -83,7 +83,7 @@ function impersonate(url){
                 <th class="px-4 lg:px-6 py-3 text-left font-bold">Usuario</th>
                 <th class="px-4 lg:px-6 py-3 text-left font-bold">Centro Principal</th>
                 <th class="px-4 lg:px-6 py-3 text-left font-bold">Centros Asignados</th>
-                <th class="px-4 lg:px-6 py-3 text-left font-bold">Rol</th>
+                <th class="px-4 lg:px-6 py-3 text-left font-bold">Roles</th>
                 <th class="px-4 lg:px-6 py-3 text-center font-bold">Estado</th>
                 <th class="px-4 lg:px-6 py-3 text-right font-bold">Acciones</th>
               </tr>
@@ -112,9 +112,13 @@ function impersonate(url){
                   <span v-else class="text-gray-400 text-sm">—</span>
                 </td>
                 <td class="px-4 lg:px-6 py-3">
-                  <span class="px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full text-xs font-semibold uppercase">
-                    {{ u.roles?.[0]?.name || '—' }}
-                  </span>
+                  <div v-if="u.roles?.length" class="flex flex-wrap gap-1">
+                    <span v-for="r in u.roles" :key="r.name"
+                          class="px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full text-xs font-semibold uppercase">
+                      {{ r.name }}
+                    </span>
+                  </div>
+                  <span v-else class="text-gray-400 text-sm">—</span>
                 </td>
                 <td class="px-4 lg:px-6 py-3 text-center">
                   <span v-if="u.activo" class="inline-flex items-center gap-1 px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-semibold">
@@ -202,7 +206,12 @@ function impersonate(url){
               </div>
               <div>
                 <span class="font-semibold text-gray-700">Rol:</span>
-                <span class="ml-2 px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full text-xs font-semibold uppercase inline-flex items-center">{{ u.roles?.[0]?.name || '—' }}</span>
+                <div class="mt-1 flex flex-wrap gap-1">
+                  <span v-if="u.roles?.length" v-for="r in u.roles" :key="`mrole-${r.name}`" class="px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full text-xs font-semibold uppercase inline-flex items-center">
+                    {{ r.name }}
+                  </span>
+                  <span v-else class="text-gray-400">—</span>
+                </div>
               </div>
               <div>
                 <span class="font-semibold text-gray-700">Estado:</span>
