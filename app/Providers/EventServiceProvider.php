@@ -22,6 +22,9 @@ class EventServiceProvider extends ServiceProvider
         \Spatie\Backup\Events\BackupWasSuccessful::class => [
             \App\Listeners\NotifyBackupOk::class,
         ],
+        \App\Events\QuotationApproved::class => [
+            \App\Listeners\CreateSolicitudesFromQuotationApproval::class,
+        ],
         // ...otros listeners...
     ];
 

@@ -148,6 +148,18 @@ function closeMobile () {
                 <span :class="['overflow-hidden transition-all duration-200', labelVisibilityClasses]">Solicitudes</span>
               </Link>
             </li>
+
+            <!-- Cotizaciones: coordinador + clientes + admin + gerente_upper + facturacion (solo lectura) -->
+            <li v-if="!isOnlyCalidad && !isOnlyControlOrComercial && (isAdmin || isCoord || roles.includes('Cliente_Supervisor') || roles.includes('Cliente_Gerente') || isGerente || roles.includes('facturacion'))">
+              <Link :href="route('cotizaciones.index')" :class="[
+                'flex items-center p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all',
+                navArrangementClasses,
+                { 'bg-blue-50 text-blue-700 dark:bg-slate-800': url.includes('/cotizaciones') }
+              ]">
+                <Icon name="document" :size="24" />
+                <span :class="['overflow-hidden transition-all duration-200', labelVisibilityClasses]">Cotizaciones</span>
+              </Link>
+            </li>
             <li v-if="!isOnlyCalidad && !isOnlyControlOrComercial">
               <Link :href="route('ordenes.index')" :class="[
                 'flex items-center p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all',
