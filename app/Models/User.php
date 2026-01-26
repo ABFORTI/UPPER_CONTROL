@@ -3,17 +3,20 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use Laravel\Sanctum\HasApiTokens;
 use Spatie\Permission\Traits\HasRoles;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Spatie\Activitylog\Traits\LogsActivity;
 use Spatie\Activitylog\LogOptions;
 
 class User extends Authenticatable
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasFactory, Notifiable, HasRoles, LogsActivity;
+    use HasApiTokens, HasFactory, Notifiable, HasRoles, LogsActivity;
 
     /**
      * The attributes that are mass assignable.
@@ -74,6 +77,40 @@ class User extends Authenticatable
             ->logOnly(['name','email','phone','centro_trabajo_id','activo'])
             ->logOnlyDirty()
             ->dontSubmitEmptyLogs();
+    }
+
+    /**
+     * Permite elegir destinatario cuando el cliente tiene varios contactos.
+     * Si existe tabla `client_contacts`, usa el contacto primario (o el primero disponible).
+     */
+    public function routeNotificationForMail($notification): array|string|null
+    {
+        // Solo aplicar lógica de contactos para roles de cliente.
+        if ($this->hasAnyRole(['Cliente_Supervisor', 'Cliente_Gerente'])) {
+            $email = $this->clientNotificationRecipientEmail();
+            if ($email) return $email;
+        }
+
+        return $this->email;
+    }
+
+    public function clientNotificationRecipientEmail(): ?string
+    {
+        if (Schema::hasTable('client_contacts')) {
+            $row = DB::table('client_contacts')
+                ->where('client_id', (int)$this->id)
+                ->whereNotNull('email')
+                ->where('email', '<>', '')
+                ->orderByDesc('is_primary')
+                ->orderBy('id')
+                ->value('email');
+
+            $row = is_string($row) ? trim($row) : null;
+            if ($row !== null && $row !== '') return $row;
+        }
+
+        $fallback = is_string($this->email) ? trim($this->email) : null;
+        return ($fallback !== null && $fallback !== '') ? $fallback : null;
     }
 
 }

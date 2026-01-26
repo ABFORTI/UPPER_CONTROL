@@ -27,4 +27,8 @@ return [
     // PARA PRUEBAS: 1 (1 minuto)
     // PARA PRODUCCIÓN: 360 (6 horas)
     'recordatorio_validacion_intervalo_minutos' => env('RECORDATORIO_VALIDACION_INTERVALO', 360),
+
+    // Si true, envía email al coordinador cuando un cliente autoriza una cotización.
+    // Siempre se genera notificación in-app (campanita) vía canal database.
+    'notify_coordinator_email_on_quotation_approved' => env('NOTIFY_COORDINATOR_EMAIL_ON_QUOTATION_APPROVED', false),
 ];

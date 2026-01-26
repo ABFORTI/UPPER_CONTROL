@@ -6,6 +6,7 @@ use Inertia\Inertia;
 use App\Http\Controllers\{
     ProfileController,
     SolicitudController,
+    CotizacionController,
     OrdenController,
     CalidadController,
     ClienteController,
@@ -15,6 +16,8 @@ use App\Http\Controllers\{
     EvidenciaController,
     HomeController
 };
+
+use App\Http\Controllers\ClientPublicQuotationController;
 
 use App\Http\Controllers\Admin\{
     UserController as AdminUserController,
@@ -45,6 +48,17 @@ Route::middleware('auth')->group(function () {
     Route::post('/notificaciones/{notification}/read', [\App\Http\Controllers\SupportController::class, 'notificacionesRead'])
         ->name('notificaciones.read');
 });
+
+/* =====================
+ |  CLIENTE (público)
+ * =====================
+ | Vista pública para revisar/autorizar/rechazar con token.
+ | La validación de token/estatus se realiza en /api/client/*.
+ */
+
+Route::get('/client/public/quotations/{cotizacion}', ClientPublicQuotationController::class)
+    ->middleware(['throttle:30,1'])
+    ->name('client.public.quotations.show');
 
 /* ==========
  |  SERVICIOS (precios)
@@ -107,6 +121,61 @@ Route::middleware('auth')->group(function () {
         ->name('ordenes.createFromSolicitud');
     Route::post('/solicitudes/{solicitud}/generar-ot', [OrdenController::class,'storeFromSolicitud'])
         ->name('ordenes.storeFromSolicitud');
+});
+
+/* ===============
+ |  COTIZACIONES
+ * =============== */
+Route::middleware('auth')->group(function () {
+    Route::get('/cotizaciones', [CotizacionController::class, 'index'])->name('cotizaciones.index');
+    Route::get('/cotizaciones/create', [CotizacionController::class, 'create'])
+        ->middleware('role:coordinador|admin')
+        ->name('cotizaciones.create');
+    Route::post('/cotizaciones', [CotizacionController::class, 'store'])
+        ->middleware('role:coordinador|admin')
+        ->name('cotizaciones.store');
+
+    Route::get('/cotizaciones/{cotizacion}/edit', [CotizacionController::class, 'edit'])
+        ->middleware('role:coordinador|admin')
+        ->name('cotizaciones.edit');
+    Route::patch('/cotizaciones/{cotizacion}', [CotizacionController::class, 'update'])
+        ->middleware('role:coordinador|admin')
+        ->name('cotizaciones.update');
+    Route::post('/cotizaciones/{cotizacion}/duplicate', [CotizacionController::class, 'duplicate'])
+        ->middleware('role:coordinador|admin')
+        ->name('cotizaciones.duplicate');
+    Route::get('/cotizaciones/{cotizacion}', [CotizacionController::class, 'show'])->name('cotizaciones.show');
+
+    // Enviar / cancelar (coordinador/admin)
+    Route::get('/cotizaciones/{cotizacion}/recipients', [CotizacionController::class, 'recipients'])
+        ->middleware('role:coordinador|admin')
+        ->name('cotizaciones.recipients');
+    Route::post('/cotizaciones/{cotizacion}/send', [CotizacionController::class, 'send'])
+        ->middleware('role:coordinador|admin')
+        ->name('cotizaciones.send');
+
+    // PDF (web) - protegido por auth + policy view
+    Route::get('/cotizaciones/{cotizacion}/pdf', [CotizacionController::class, 'pdf'])
+        ->name('cotizaciones.pdf');
+    Route::post('/cotizaciones/{cotizacion}/cancel', [CotizacionController::class, 'cancel'])
+        ->middleware('role:coordinador|admin')
+        ->name('cotizaciones.cancel');
+
+    // Revisión por cliente con link firmado (redirige a login si no está autenticado)
+    Route::get('/cotizaciones/{cotizacion}/review', [CotizacionController::class, 'review'])
+        ->middleware(['signed', 'throttle:6,1'])
+        ->name('cotizaciones.review');
+
+    // Revisión por cliente desde el sistema (campanita / email con token)
+    Route::get('/client/quotations/{cotizacion}', [CotizacionController::class, 'review'])
+        ->middleware(['throttle:12,1'])
+        ->name('client.quotations.review');
+
+    // Respuesta del cliente (auth + policy)
+    Route::post('/cotizaciones/{cotizacion}/approve', [CotizacionController::class, 'approve'])
+        ->name('cotizaciones.approve');
+    Route::post('/cotizaciones/{cotizacion}/reject', [CotizacionController::class, 'reject'])
+        ->name('cotizaciones.reject');
 });
 
 /* ===============

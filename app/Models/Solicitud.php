@@ -9,10 +9,18 @@ use Spatie\Activitylog\LogOptions;
 class Solicitud extends Model {
   use LogsActivity;
   protected $table='solicitudes';
+  protected $casts = [
+    'tamanos_json' => 'array',
+    'metadata_json' => 'array',
+  ];
   protected $fillable=[
     'folio','id_cliente','id_centrotrabajo','id_servicio',
     'tamano','descripcion','id_area','id_centrocosto','id_marca','cantidad','subtotal','iva','total','notas','estatus','aprobada_por','aprobada_at','tamanos_json',
-    'motivo_rechazo'
+    'motivo_rechazo',
+    'id_cotizacion',
+    'id_cotizacion_item',
+    'id_cotizacion_item_servicio',
+    'metadata_json'
   ];
   public function cliente(){ return $this->belongsTo(User::class,'id_cliente'); }
   public function centro(){ return $this->belongsTo(CentroTrabajo::class,'id_centrotrabajo'); }
