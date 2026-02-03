@@ -37,6 +37,30 @@ class Orden extends Model {
         return $this->belongsToMany(\App\Models\Factura::class, 'factura_orden', 'id_orden', 'id_factura');
     }
 
+    /**
+     * Relación con los servicios de la OT (múltiples servicios)
+     */
+    public function otServicios()
+    {
+        return $this->hasMany(OTServicio::class, 'ot_id');
+    }
+
+    /**
+     * Recalcular totales de la OT basados en los servicios
+     */
+    public function recalcTotals(): void
+    {
+        $subtotal = $this->otServicios()->sum('subtotal');
+        $iva = $subtotal * 0.16;
+        $total = $subtotal + $iva;
+
+        $this->update([
+            'subtotal' => $subtotal,
+            'iva' => $iva,
+            'total' => $total,
+        ]);
+    }
+
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()

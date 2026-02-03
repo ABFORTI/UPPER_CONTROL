@@ -1,5 +1,5 @@
 <script setup>
-import { computed, watch } from 'vue'
+import { computed, watch, ref } from 'vue'
 import { useForm } from '@inertiajs/vue3'
 
 
@@ -20,6 +20,8 @@ const props = defineProps({
   marcasPorCentro: { type: Object, required: false, default: () => ({}) },
 })
 
+// Control para múltiples servicios
+const multipleServicios = ref(false)
 
 const form = useForm({
 id_centrotrabajo: null,
@@ -33,6 +35,12 @@ notas: '',
 archivos: [],
 id_centrocosto: null,
 id_marca: null,
+// Nuevo: array de servicios para modo múltiple
+serviciosMultiples: [
+  {
+    id_servicio: '',
+  }
+],
 })
 // Inicializar centro: si puede elegir usa el selectedCentroId o primer centro disponible;
 // si no puede elegir (cliente), usa igualmente selectedCentroId (su centro asignado)
@@ -150,30 +158,147 @@ const total = computed(() => subtotal.value + ivaMonto.value)
 // En el nuevo flujo diferido: si usa tamaños, seguimos capturando 'cantidad'
 watch(usaTamanos, v => { if (!v) form.tamanos = {chico:0,mediano:0,grande:0,jumbo:0} })
 
+// Funciones para múltiples servicios
+function toggleMultipleServicios() {
+  multipleServicios.value = !multipleServicios.value
+  
+  if (multipleServicios.value) {
+    // Activar modo múltiple: inicializar con un servicio vacío
+    form.serviciosMultiples = [{ id_servicio: '' }]
+    form.id_servicio = ''
+    form.cantidad = 1
+  }
+}
+
+function agregarServicio() {
+  form.serviciosMultiples.push({ id_servicio: '' })
+}
+
+function eliminarServicio(index) {
+  if (form.serviciosMultiples.length > 1) {
+    form.serviciosMultiples.splice(index, 1)
+  }
+}
+
+// En modo múltiple, el total de servicios es la cantidad de servicios agregados
+const totalServiciosMultiples = computed(() => {
+  return form.serviciosMultiples.length
+})
+
+// Calcular precios para cada servicio en modo múltiple
+const preciosMultiples = computed(() => {
+  if (!multipleServicios.value) return []
+  
+  return form.serviciosMultiples.map(s => {
+    const sid = Number(s.id_servicio)
+    if (!sid) return { subtotal: 0, iva: 0, total: 0, nombre: 'Sin seleccionar', usaTamanos: false }
+    
+    const servicio = filteredServicios.value.find(fs => fs.id === sid)
+    const nombre = servicio?.nombre || 'Sin seleccionar'
+    
+    // Obtener precio según centro
+    let precioData = null
+    if (props.canChooseCentro) {
+      const cid = Number(form.id_centrotrabajo)
+      precioData = props.preciosPorCentro?.[cid]?.[sid]
+    } else {
+      precioData = props.precios?.[sid]
+    }
+    
+    const usaTamanos = serviceUsesSizesInCentro(sid)
+    
+    // Si usa tamaños, no calcular precio aún
+    if (usaTamanos) {
+      return { subtotal: 0, iva: 0, total: 0, nombre, usaTamanos: true }
+    }
+    
+    const precioBase = Number(precioData?.precio_base || 0)
+    const cantidad = Number(form.cantidad || 0)
+    const subtotal = precioBase * cantidad
+    const iva = subtotal * (props.iva || 0)
+    const total = subtotal + iva
+    
+    return { subtotal, iva, total, nombre, usaTamanos: false, precioBase }
+  })
+})
+
+// Totales acumulados para modo múltiple
+const totalesMultiples = computed(() => {
+  const servicios = preciosMultiples.value.filter(p => !p.usaTamanos)
+  const subtotal = servicios.reduce((acc, p) => acc + p.subtotal, 0)
+  const iva = servicios.reduce((acc, p) => acc + p.iva, 0)
+  const total = servicios.reduce((acc, p) => acc + p.total, 0)
+  const tieneTamanos = preciosMultiples.value.some(p => p.usaTamanos)
+  
+  return { subtotal, iva, total, tieneTamanos }
+})
+
 
 function guardar(){
 const payload = {
 id_centrotrabajo: form.id_centrotrabajo,
-id_servicio: form.id_servicio,
 descripcion: form.descripcion,
 notas: form.notas,
-archivos: form.archivos,
 id_centrocosto: form.id_centrocosto,
 id_marca: form.id_marca,
 id_area: form.id_area,
 }
-if (usaTamanos.value) payload.tamanos = {
-  // Ya no se envían tamaños; sólo total de piezas
+
+// Si es modo múltiple, enviar array de servicios con la cantidad compartida
+if (multipleServicios.value) {
+  payload.servicios = form.serviciosMultiples.map(s => ({
+    id_servicio: s.id_servicio,
+    cantidad: +form.cantidad || 1,
+  }))
+  payload.cantidad = +form.cantidad || 1
+  
+  // DEBUG: Log para verificar
+  console.log('🔥 Enviando múltiples servicios:', {
+    total: payload.servicios.length,
+    servicios: payload.servicios
+  })
+} else {
+  // Modo simple (un solo servicio)
+  payload.id_servicio = form.id_servicio
+  if (usaTamanos.value) payload.tamanos = {
+    // Ya no se envían tamaños; sólo total de piezas
+  }
+  else payload.cantidad = +form.cantidad||0
+  
+  // Para usa_tamanos, enviar cantidad total
+  if (usaTamanos.value) payload.cantidad = +form.cantidad||0
 }
-else payload.cantidad = +form.cantidad||0
 
-// Para usa_tamanos, enviar cantidad total
-if (usaTamanos.value) payload.cantidad = +form.cantidad||0
+// Construir URL completa respetando la base path
+const baseUrl = window.location.origin + window.location.pathname.split('/solicitudes')[0]
+const postUrl = baseUrl + '/solicitudes'
 
+// SIEMPRE usar FormData para asegurar compatibilidad
+const formData = new FormData()
 
-form.transform(() => payload).post(props.urls.store, { 
+// Agregar campos simples
+for (const [key, value] of Object.entries(payload)) {
+  if (key === 'servicios' && Array.isArray(value)) {
+    // Agregar cada servicio individualmente con índice
+    value.forEach((servicio, index) => {
+      formData.append(`servicios[${index}][id_servicio]`, servicio.id_servicio)
+      formData.append(`servicios[${index}][cantidad]`, servicio.cantidad)
+    })
+  } else if (value !== null && value !== undefined) {
+    formData.append(key, value)
+  }
+}
+
+// Agregar archivos si existen
+if (form.archivos && form.archivos.length > 0) {
+  form.archivos.forEach((file, index) => {
+    formData.append(`archivos[${index}]`, file)
+  })
+}
+
+form.transform(() => formData).post(postUrl, { 
   preserveScroll:true,
-  forceFormData: true, // Para enviar archivos
+  forceFormData: true,
 })
 }
 
@@ -293,54 +418,187 @@ function handleFiles(e) {
               </div>
 
               <!-- Servicio y Descripción -->
-              <div class="grid md:grid-cols-2 gap-5">
-                <div class="form-group">
-                  <label class="block text-sm font-semibold text-gray-700 mb-2">
-                    <span class="flex items-center gap-2">
-                      <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+              <div class="space-y-5">
+                <!-- Modo Simple: Un solo servicio -->
+                <div v-if="!multipleServicios" class="space-y-5">
+                  <!-- Primera fila: Tipo de Servicio y Toggle -->
+                  <div class="grid md:grid-cols-2 gap-5">
+                    <div class="form-group">
+                      <label class="block text-sm font-semibold text-gray-700 mb-2">
+                        <span class="flex items-center gap-2">
+                          <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+                          </svg>
+                          Tipo de Servicio
+                          <span class="text-red-500">*</span>
+                        </span>
+                      </label>
+                      <select 
+                        v-model="form.id_servicio" 
+                        class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none bg-gray-50 hover:bg-white"
+                      >
+                        <option value="">— Seleccione un servicio —</option>
+                        <option v-for="s in filteredServicios" :key="s.id" :value="s.id">
+                          {{ s.nombre }} {{ serviceUsesSizesInCentro(s.id) ? '(Por tamaños)' : '(Unitario)' }}
+                        </option>
+                      </select>
+                      <p v-if="form.errors.id_servicio" class="text-red-600 text-sm mt-2 flex items-center gap-1">
+                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                          <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                        </svg>
+                        {{ form.errors.id_servicio }}
+                      </p>
+                    </div>
+
+                    <!-- Botón para múltiples servicios -->
+                    <div class="form-group flex items-end">
+                      <button type="button" @click="toggleMultipleServicios"
+                              class="w-full px-6 py-3 rounded-xl font-bold text-white transition-all duration-200 transform hover:scale-105 shadow-lg bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600">
+                        <span class="flex items-center justify-center gap-2">
+                          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                          </svg>
+                          Múltiples Servicios
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <!-- Segunda fila: Descripción del Producto (ancho completo) -->
+                  <div class="form-group">
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">
+                      <span class="flex items-center gap-2">
+                        <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/>
+                        </svg>
+                        Descripción del Producto
+                      </span>
+                    </label>
+                    <input 
+                      v-model="form.descripcion" 
+                      class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none bg-gray-50 hover:bg-white" 
+                      placeholder="Nombre del producto"
+                    />
+                    <p v-if="form.errors.descripcion" class="text-red-600 text-sm mt-2 flex items-center gap-1">
+                      <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
                       </svg>
-                      Tipo de Servicio
-                      <span class="text-red-500">*</span>
-                    </span>
-                  </label>
-                  <select 
-                    v-model="form.id_servicio" 
-                    class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none bg-gray-50 hover:bg-white"
-                  >
-                    <option value="">— Seleccione un servicio —</option>
-                    <option v-for="s in filteredServicios" :key="s.id" :value="s.id">
-                      {{ s.nombre }} {{ serviceUsesSizesInCentro(s.id) ? '(Por tamaños)' : '(Unitario)' }}
-                    </option>
-                  </select>
-                  <p v-if="form.errors.id_servicio" class="text-red-600 text-sm mt-2 flex items-center gap-1">
-                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                      <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
-                    </svg>
-                    {{ form.errors.id_servicio }}
-                  </p>
+                      {{ form.errors.descripcion }}
+                    </p>
+                  </div>
                 </div>
 
-                <div class="form-group">
-                  <label class="block text-sm font-semibold text-gray-700 mb-2">
-                    <span class="flex items-center gap-2">
-                      <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/>
+                <!-- Modo Múltiple: Varios servicios -->
+                <div v-else class="space-y-4">
+                  <!-- Botón para desactivar múltiples servicios -->
+                  <div class="flex justify-end">
+                    <button type="button" @click="toggleMultipleServicios"
+                            class="px-6 py-3 rounded-xl font-bold text-white transition-all duration-200 transform hover:scale-105 shadow-lg bg-gradient-to-r from-red-500 to-pink-500 hover:from-red-600 hover:to-pink-600">
+                      <span class="flex items-center gap-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                        Desactivar Múltiples Servicios
+                      </span>
+                    </button>
+                  </div>
+
+                  <!-- Descripción general (una sola vez) -->
+                  <div class="form-group">
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">
+                      <span class="flex items-center gap-2">
+                        <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/>
+                        </svg>
+                        Descripción General del Producto/Servicio
+                      </span>
+                    </label>
+                    <input 
+                      v-model="form.descripcion" 
+                      class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none bg-gray-50 hover:bg-white" 
+                      placeholder="Descripción que aplica a todos los servicios"
+                    />
+                  </div>
+
+                  <!-- Cantidad compartida -->
+                  <div class="form-group mb-4">
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">
+                      <span class="flex items-center gap-2">
+                        <svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14"/>
+                        </svg>
+                        Cantidad (aplica a todos los servicios)
+                        <span class="text-red-500">*</span>
+                      </span>
+                    </label>
+                    <input 
+                      type="number" 
+                      min="1" 
+                      v-model.number="form.cantidad" 
+                      class="w-full px-4 py-3 text-lg font-semibold rounded-xl border-2 border-gray-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all outline-none bg-gray-50 hover:bg-white" 
+                      placeholder="Cantidad para todos los servicios"
+                    />
+                    <p class="text-xs text-gray-500 mt-2 flex items-center gap-1">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
                       </svg>
-                      Descripción del Producto
-                    </span>
-                  </label>
-                  <input 
-                    v-model="form.descripcion" 
-                    class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none bg-gray-50 hover:bg-white" 
-                    placeholder="Nombre del producto"
-                  />
-                  <p v-if="form.errors.descripcion" class="text-red-600 text-sm mt-2 flex items-center gap-1">
-                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                      <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
-                    </svg>
-                    {{ form.errors.descripcion }}
-                  </p>
+                      Esta cantidad se aplicará a cada uno de los servicios agregados
+                    </p>
+                    <p v-if="form.errors.cantidad" class="text-red-600 text-sm mt-2 flex items-center gap-1">
+                      <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                      </svg>
+                      {{ form.errors.cantidad }}
+                    </p>
+                  </div>
+
+                  <!-- Lista de servicios -->
+                  <div class="space-y-3">
+                    <div v-for="(servicio, index) in form.serviciosMultiples" :key="index"
+                         class="bg-gradient-to-br from-gray-50 to-white border-2 border-gray-200 rounded-xl p-4">
+                      
+                      <div class="flex items-center justify-between mb-3">
+                        <h4 class="text-sm font-bold text-gray-800">Servicio #{{ index + 1 }}</h4>
+                        <button v-if="form.serviciosMultiples.length > 1" 
+                                type="button" 
+                                @click="eliminarServicio(index)"
+                                class="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                          </svg>
+                        </button>
+                      </div>
+
+                      <div>
+                        <label class="block text-xs font-semibold text-gray-600 mb-1">
+                          Tipo de Servicio <span class="text-red-500">*</span>
+                        </label>
+                        <select 
+                          v-model="servicio.id_servicio"
+                          class="w-full px-3 py-2 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none bg-white text-sm"
+                        >
+                          <option value="">— Seleccionar —</option>
+                          <option v-for="s in filteredServicios" :key="s.id" :value="s.id">
+                            {{ s.nombre }}
+                          </option>
+                        </select>
+                        <p v-if="form.errors[`servicios.${index}.id_servicio`]" class="text-red-600 text-xs mt-1">
+                          {{ form.errors[`servicios.${index}.id_servicio`] }}
+                        </p>
+                      </div>
+                    </div>
+
+                    <!-- Botón agregar servicio -->
+                    <button type="button" @click="agregarServicio"
+                            class="w-full py-3 bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-semibold rounded-xl hover:from-emerald-600 hover:to-teal-600 transition-all shadow-md">
+                      <span class="flex items-center justify-center gap-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                        </svg>
+                        Agregar Otro Servicio
+                      </span>
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -564,14 +822,36 @@ function handleFiles(e) {
                 </h3>
               </div>
               <div class="p-5 space-y-4">
-                <!-- Servicio -->
+                <!-- Servicio(s) -->
                 <div class="pb-3 border-b border-gray-200">
-                  <div class="text-xs font-semibold text-gray-500 uppercase mb-1">Servicio</div>
-                  <div class="text-sm font-bold text-gray-900">{{ servicio?.nombre || 'No seleccionado' }}</div>
+                  <div class="text-xs font-semibold text-gray-500 uppercase mb-1">
+                    {{ multipleServicios ? 'Servicios' : 'Servicio' }}
+                  </div>
+                  <div v-if="!multipleServicios" class="text-sm font-bold text-gray-900">
+                    {{ servicio?.nombre || 'No seleccionado' }}
+                  </div>
+                  <div v-else class="space-y-2">
+                    <div v-for="(s, i) in form.serviciosMultiples" :key="i" class="flex items-start justify-between text-sm">
+                      <div class="flex-1">
+                        <span class="font-semibold text-gray-700">{{ i + 1 }}.</span> 
+                        <span class="text-gray-900">{{ preciosMultiples[i]?.nombre || 'Sin seleccionar' }}</span>
+                        <div v-if="preciosMultiples[i]?.usaTamanos" class="text-xs text-blue-600 mt-1">
+                          Por tamaños
+                        </div>
+                      </div>
+                      <div v-if="!preciosMultiples[i]?.usaTamanos && s.id_servicio" class="text-right ml-2">
+                        <div class="text-xs text-gray-500">{{ form.cantidad }} × ${{ preciosMultiples[i]?.precioBase?.toFixed(2) || '0.00' }}</div>
+                        <div class="font-bold text-gray-900">${{ preciosMultiples[i]?.subtotal?.toFixed(2) || '0.00' }}</div>
+                      </div>
+                    </div>
+                    <div v-if="form.serviciosMultiples.length === 0" class="text-sm text-gray-500 italic">
+                      Sin servicios agregados
+                    </div>
+                  </div>
                 </div>
 
-                <!-- Tipo -->
-                <div class="pb-3 border-b border-gray-200">
+                <!-- Tipo (solo modo simple) -->
+                <div v-if="!multipleServicios" class="pb-3 border-b border-gray-200">
                   <div class="text-xs font-semibold text-gray-500 uppercase mb-1">Tipo</div>
                   <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold"
                     :class="usaTamanos ? 'bg-upper-50 text-[#1E1C8F]' : 'bg-blue-100 text-blue-700'"
@@ -584,35 +864,65 @@ function handleFiles(e) {
                 </div>
 
                 <!-- Cantidades -->
-                <div v-if="!usaTamanos" class="pb-3 border-b border-gray-200">
-                  <div class="text-xs font-semibold text-gray-500 uppercase mb-1">Cantidad</div>
-                  <div class="text-2xl font-bold text-gray-900">{{ form.cantidad || 0 }}</div>
-                </div>
-                <div v-else class="pb-3 border-b border-gray-200">
-                  <div class="text-xs font-semibold text-gray-500 uppercase mb-1">Total de piezas</div>
-                  <div class="text-2xl font-bold text-gray-900">{{ form.cantidad || 0 }}</div>
-                  <div class="mt-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg text-[11px] text-blue-800">
+                <div class="pb-3 border-b border-gray-200">
+                  <div class="text-xs font-semibold text-gray-500 uppercase mb-1">
+                    {{ multipleServicios ? 'Cantidad por Servicio' : (usaTamanos ? 'Total de piezas' : 'Cantidad') }}
+                  </div>
+                  <div class="text-2xl font-bold text-gray-900">
+                    {{ form.cantidad || 0 }}
+                  </div>
+                  <div v-if="usaTamanos && !multipleServicios" class="mt-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg text-[11px] text-blue-800">
                     El precio se calculará al finalizar la OT con la separación por tamaños.
+                  </div>
+                  <div v-if="multipleServicios" class="mt-2 px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-lg text-[11px] text-emerald-800">
+                    Se aplicará a cada uno de los {{ form.serviciosMultiples.length }} servicio(s)
                   </div>
                 </div>
 
-                <!-- Totales -->
-                <div class="space-y-2 pt-2">
+                <!-- Totales (solo modo simple sin tamaños) -->
+                <div v-if="!multipleServicios && !usaTamanos" class="space-y-2 pt-2">
                   <div class="flex items-center justify-between text-sm">
                     <span class="text-gray-600">Subtotal</span>
-                    <span class="font-semibold text-gray-900">${{ (usaTamanos ? 0 : subtotal).toFixed(2) }}</span>
+                    <span class="font-semibold text-gray-900">${{ subtotal.toFixed(2) }}</span>
                   </div>
                   <div class="flex items-center justify-between text-sm">
                     <span class="text-gray-600">IVA ({{ (iva*100).toFixed(0) }}%)</span>
-                    <span class="font-semibold text-gray-900">${{ (usaTamanos ? 0 : ivaMonto).toFixed(2) }}</span>
+                    <span class="font-semibold text-gray-900">${{ ivaMonto.toFixed(2) }}</span>
                   </div>
                   <div class="pt-3 border-t-2 border-gray-300">
                     <div class="flex items-center justify-between">
                       <span class="text-base font-bold text-gray-700">Total</span>
                       <span class="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-                        ${{ (usaTamanos ? 0 : total).toFixed(2) }}
+                        ${{ total.toFixed(2) }}
                       </span>
                     </div>
+                  </div>
+                </div>
+                
+                <!-- Nota para modo múltiple -->
+                <div v-if="multipleServicios" class="space-y-2 pt-2">
+                  <!-- Totales -->
+                  <div v-if="!totalesMultiples.tieneTamanos || totalesMultiples.subtotal > 0" class="space-y-2">
+                    <div class="flex items-center justify-between text-sm">
+                      <span class="text-gray-600">Subtotal</span>
+                      <span class="font-semibold text-gray-900">${{ totalesMultiples.subtotal.toFixed(2) }}</span>
+                    </div>
+                    <div class="flex items-center justify-between text-sm">
+                      <span class="text-gray-600">IVA ({{ (iva*100).toFixed(0) }}%)</span>
+                      <span class="font-semibold text-gray-900">${{ totalesMultiples.iva.toFixed(2) }}</span>
+                    </div>
+                    <div class="pt-3 border-t-2 border-gray-300">
+                      <div class="flex items-center justify-between">
+                        <span class="text-base font-bold text-gray-700">Total</span>
+                        <span class="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+                          ${{ totalesMultiples.total.toFixed(2) }}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div v-if="totalesMultiples.tieneTamanos" class="px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
+                    <strong>Nota:</strong> Los precios se calcularán individualmente para cada servicio.
                   </div>
                 </div>
               </div>

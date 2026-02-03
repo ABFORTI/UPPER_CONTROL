@@ -204,6 +204,8 @@ Route::middleware('auth')->group(function () {
 
     // Definir desglose por tamaños (flujo diferido)
     Route::post('/ordenes/{orden}/tamanos/definir', [OrdenController::class,'definirTamanos'])->name('ordenes.definirTamanos');
+    Route::post('/ordenes/{orden}/servicios/{servicio}/tamanos/definir', [OrdenController::class,'definirTamanosServicio'])->name('ordenes.servicios.definirTamanos');
+
 
     // PDFs
     Route::get('/ordenes/{orden}/pdf',  [OrdenController::class,'pdf'])->name('ordenes.pdf');
@@ -211,6 +213,18 @@ Route::middleware('auth')->group(function () {
     // Evidencias
     Route::post('/ordenes/{orden}/evidencias', [EvidenciaController::class,'store'])->name('evidencias.store');
     Route::delete('/evidencias/{evidencia}',  [EvidenciaController::class,'destroy'])->name('evidencias.destroy');
+});
+
+/* =============================
+ |  OT CON MÚLTIPLES SERVICIOS
+ * ============================= */
+Route::middleware('auth')->group(function () {
+    Route::get('/ot-multi-servicio/create', [\App\Http\Controllers\OTMultiServicioController::class, 'create'])
+        ->name('ot-multi-servicio.create');
+    Route::post('/ot-multi-servicio', [\App\Http\Controllers\OTMultiServicioController::class, 'store'])
+        ->name('ot-multi-servicio.store');
+    Route::get('/ot-multi-servicio/{orden}', [\App\Http\Controllers\OTMultiServicioController::class, 'show'])
+        ->name('ot-multi-servicio.show');
 });
 
 /* ==========================

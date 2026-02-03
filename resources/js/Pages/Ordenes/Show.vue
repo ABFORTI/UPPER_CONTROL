@@ -11,11 +11,35 @@ const props = defineProps({
   cotizacion:  { type: Object, default: () => ({}) },
   precios_tamano: { type: Object, default: () => null },
   unidades: { type: Object, default: () => ({ planeado:0, completado:0, faltante:0, total:0 }) },
+  servicios_con_tamanos: { type: Object, default: () => ({}) },
+  precios_por_servicio: { type: Object, default: () => ({}) },
 })
+
+// Alias para acceder fácilmente en el template
+const serviciosConTamanos = computed(() => props.servicios_con_tamanos)
+const preciosPorServicio = computed(() => props.precios_por_servicio)
 
 // colecciones “a prueba de null”
 const items   = computed(() => props.orden?.items   ?? [])
 const avances = computed(() => props.orden?.avances ?? [])
+const servicios = computed(() => props.orden?.ot_servicios ?? [])
+
+// Helper para números seguros
+const toNum = (v) => {
+  const n = Number.parseFloat(v)
+  return Number.isFinite(n) ? n : 0
+}
+
+// Formatter de moneda
+const money = (v) => new Intl.NumberFormat('es-MX', {
+  style: 'currency',
+  currency: 'MXN',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+}).format(toNum(v))
+
+// Detectar si es multi-servicio
+const esMultiServicio = computed(() => (props.orden?.ot_servicios?.length ?? 0) > 0)
 
 // Utilidad: formatear fecha/hora a local (CDMX) desde ISO/Date
 function fmtDate (input) {
@@ -292,6 +316,122 @@ function definirTamanos() {
     },
   })
 }
+
+// ----- Definir tamaños para servicios individuales en multi-servicio -----
+const servicioSeleccionadoTamanos = ref(null)
+const tamanosFormServicio = ref({})
+
+// Funciones para tamaños por servicio
+const sumaTamanosServicio = computed(() => (servicioId) => {
+  const form = tamanosFormServicio.value[servicioId]
+  if (!form) return 0
+  return Number(form.chico || 0) + Number(form.mediano || 0) + Number(form.grande || 0) + Number(form.jumbo || 0)
+})
+
+const tamanosValidServicio = computed(() => (servicioId) => {
+  const info = serviciosConTamanos.value[servicioId]
+  if (!info) return false
+  const suma = sumaTamanosServicio.value(servicioId)
+  return suma === info.cantidad_total
+})
+
+function definirTamanosServicio(servicioId) {
+  if (!tamanosValidServicio.value(servicioId)) return
+  
+  const form = tamanosFormServicio.value[servicioId]
+  router.post(route('ordenes.servicios.definirTamanos', { orden: props.orden.id, servicio: servicioId }), {
+    chico: form.chico || 0,
+    mediano: form.mediano || 0,
+    grande: form.grande || 0,
+    jumbo: form.jumbo || 0,
+  }, {
+    preserveScroll: true,
+    onSuccess: () => {
+      servicioSeleccionadoTamanos.value = null
+      router.visit(window.location.href, { replace: true, preserveScroll: true })
+    },
+  })
+}
+
+// Inicializar forms de tamaños para servicios pendientes
+const inicializarTamanosServicios = () => {
+  Object.keys(serviciosConTamanos.value).forEach(servicioId => {
+    const info = serviciosConTamanos.value[servicioId]
+    if (info?.pendiente_definir && !tamanosFormServicio.value[servicioId]) {
+      tamanosFormServicio.value[servicioId] = { chico: 0, mediano: 0, grande: 0, jumbo: 0 }
+    }
+  })
+}
+inicializarTamanosServicios()
+
+// ----- Avances para multi-servicio -----
+const avancesMultiServicio = ref({})
+const avancesFormsServicio = ref({})
+
+// Inicializar formularios de avances por servicio
+const inicializarAvancesServicios = () => {
+  servicios.value.forEach(servicio => {
+    if (!avancesMultiServicio.value[servicio.id]) {
+      avancesMultiServicio.value[servicio.id] = {
+        items: (servicio.items || []).map(item => ({ 
+          id_item: item.id, 
+          cantidad: '' 
+        })),
+        comentario: '',
+        tarifa_tipo: 'NORMAL',
+        precio_unitario_manual: ''
+      }
+    }
+  })
+}
+inicializarAvancesServicios()
+
+// Función para guardar avance de un servicio
+function guardarAvanceServicio(servicioId) {
+  const formData = avancesMultiServicio.value[servicioId]
+  if (!formData) return
+  
+  // Filtrar solo items con cantidad > 0
+  const itemsConCantidad = formData.items
+    .map(item => ({
+      id_item: item.id_item,
+      cantidad: Number(item.cantidad || 0)
+    }))
+    .filter(item => item.cantidad > 0)
+  
+  if (itemsConCantidad.length === 0) {
+    alert('Ingresa al menos una cantidad mayor a 0')
+    return
+  }
+  
+  // Preparar payload con id_servicio
+  const payload = {
+    id_servicio: servicioId,
+    items: itemsConCantidad,
+    comentario: formData.comentario || '',
+    tarifa_tipo: formData.tarifa_tipo || 'NORMAL',
+    precio_unitario_manual: formData.precio_unitario_manual || ''
+  }
+  
+  console.log('📤 Enviando avance:', payload)
+  
+  // Usar router.post directamente
+  router.post(props.urls.avances_store, payload, {
+    preserveScroll: true,
+    onSuccess: () => {
+      console.log('✅ Avance guardado exitosamente')
+      // Limpiar formulario
+      avancesMultiServicio.value[servicioId].items.forEach(i => i.cantidad = '')
+      avancesMultiServicio.value[servicioId].comentario = ''
+      router.visit(window.location.href, { replace: true, preserveScroll: true })
+    },
+    onError: (errors) => {
+      console.error('❌ Error al guardar avance:', errors)
+      alert('Error al guardar el avance. Revisa los datos ingresados.')
+    }
+  })
+}
+
 </script>
 
 <template>
@@ -629,94 +769,163 @@ function definirTamanos() {
               </div>
             </div>
             <div v-else class="p-8 text-center text-gray-500 dark:text-slate-400">
-              <svg class="w-16 h-16 mx-auto mb-4 text-gray-300 dark:text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/>
-              </svg>
-              <p class="dark:text-slate-200">No hay ítems registrados</p>
-            </div>
-          </div>
-
-          <!-- Registrar Avance -->
-          <div v-if="can?.reportarAvance" class="bg-white rounded-2xl shadow-lg border-2 border-blue-100 overflow-hidden dark:bg-slate-900/80 dark:border-blue-500/30">
-            <div class="bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-2 dark:from-blue-500 dark:to-indigo-500">
-              <h3 class="text-base font-bold text-white flex items-center gap-1.5 leading-tight">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                </svg>
-                Registrar Avance
-              </h3>
-            </div>
-            <div class="p-6 space-y-4">
-              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label class="block text-sm font-semibold text-gray-700 mb-2 dark:text-slate-200">Tarifa</label>
-                  <select v-model="avForm.tarifa_tipo"
-                          class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-400 transition-all duration-200 bg-white text-gray-800 font-medium dark:bg-slate-900/60 dark:border-slate-700 dark:text-slate-100">
-                    <option value="NORMAL">NORMAL (precio del servicio)</option>
-                    <option value="EXTRA">EXTRA (precio manual)</option>
-                    <option value="FIN_DE_SEMANA">FIN DE SEMANA (precio manual)</option>
-                  </select>
-                </div>
-                <div>
-                  <label class="block text-sm font-semibold text-gray-700 mb-2 dark:text-slate-200">Precio unitario (si aplica)</label>
-                  <input type="number" min="0" step="0.0001" inputmode="decimal"
-                         :disabled="(avForm.tarifa_tipo || 'NORMAL') === 'NORMAL'"
-                         v-model="avForm.precio_unitario_manual"
-                         @input="avForm.clearErrors('precio_unitario_manual')"
-                         placeholder="Ej: 12.50"
-                         class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-400 transition-all duration-200 dark:bg-slate-900/60 dark:border-slate-700 dark:text-slate-100 dark:placeholder-slate-400 disabled:opacity-60" />
-                  <p v-if="avForm.errors.precio_unitario_manual" class="mt-2 text-sm text-red-600 flex items-center gap-1">
-                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                      <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
-                    </svg>
-                    {{ avForm.errors.precio_unitario_manual }}
-                  </p>
+              <!-- Mostrar servicios multi-servicio -->
+              <div v-if="esMultiServicio && servicios.length > 0" class="text-left space-y-4">
+                <div v-for="(servicio, idx) in servicios" :key="servicio.id" 
+                     class="bg-gradient-to-br from-indigo-50 to-blue-50 dark:from-indigo-500/10 dark:to-blue-500/5 rounded-xl p-5 border-2 border-indigo-200 dark:border-indigo-500/30">
+                  
+                  <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center gap-3">
+                      <div class="w-10 h-10 rounded-full bg-indigo-600 text-white flex items-center justify-center font-bold text-lg">
+                        {{ idx + 1 }}
+                      </div>
+                      <div>
+                        <h4 class="font-bold text-lg text-gray-800 dark:text-slate-100">{{ servicio.servicio?.nombre || 'Servicio' }}</h4>
+                        <p class="text-sm text-gray-600 dark:text-slate-400">
+                          {{ servicio.cantidad }} unidades — {{ money(servicio.precio_unitario) }}/unidad
+                        </p>
+                      </div>
+                    </div>
+                    <div class="text-right">
+                      <p class="text-xs text-gray-600 dark:text-slate-400">Subtotal</p>
+                      <p class="text-lg font-bold text-emerald-600 dark:text-emerald-400">{{ money(servicio.subtotal) }}</p>
+                    </div>
+                  </div>
+                  
+                  <!-- Badges de progreso -->
+                  <div class="grid grid-cols-4 gap-2 mb-4">
+                    <div class="bg-blue-50 border border-blue-200 rounded-lg p-2 dark:bg-blue-500/10 dark:border-blue-500/30">
+                      <p class="text-xs text-blue-600 font-semibold dark:text-blue-300">PLANEADO</p>
+                      <p class="text-xl font-bold text-blue-800 dark:text-blue-200">{{ servicio.items?.reduce((sum, i) => sum + (i.planeado || 0), 0) || servicio.cantidad }}</p>
+                    </div>
+                    <div class="bg-emerald-50 border border-emerald-200 rounded-lg p-2 dark:bg-emerald-500/10 dark:border-emerald-500/30">
+                      <p class="text-xs text-emerald-600 font-semibold dark:text-emerald-300">COMPLETADO</p>
+                      <p class="text-xl font-bold text-emerald-800 dark:text-emerald-200">{{ servicio.items?.reduce((sum, i) => sum + (i.completado || 0), 0) || 0 }}</p>
+                    </div>
+                    <div class="bg-orange-50 border border-orange-200 rounded-lg p-2 dark:bg-orange-500/10 dark:border-orange-500/30">
+                      <p class="text-xs text-orange-600 font-semibold dark:text-orange-300">FALTANTE</p>
+                      <p class="text-xl font-bold text-orange-800 dark:text-orange-200">{{ (servicio.items?.reduce((sum, i) => sum + (i.planeado || 0), 0) || servicio.cantidad) - (servicio.items?.reduce((sum, i) => sum + (i.completado || 0), 0) || 0) }}</p>
+                    </div>
+                    <div class="bg-indigo-50 border border-indigo-200 rounded-lg p-2 dark:bg-indigo-500/10 dark:border-indigo-500/30">
+                      <p class="text-xs text-indigo-600 font-semibold dark:text-indigo-300">TOTAL</p>
+                      <p class="text-xl font-bold text-indigo-800 dark:text-indigo-200">{{ servicio.items?.reduce((sum, i) => sum + (i.planeado || 0), 0) || servicio.cantidad }}</p>
+                    </div>
+                  </div>
+                  
+                  <!-- Tabla de items del servicio -->
+                  <div v-if="servicio.items && servicio.items.length > 0" class="bg-white dark:bg-slate-800/50 rounded-lg border border-indigo-100 dark:border-indigo-500/20 overflow-hidden">
+                    <table class="w-full text-sm">
+                      <thead class="bg-indigo-50 dark:bg-indigo-500/10">
+                        <tr>
+                          <th class="px-3 py-2 text-left text-xs font-semibold text-indigo-700 dark:text-indigo-300">DESCRIPCIÓN</th>
+                          <th class="px-3 py-2 text-center text-xs font-semibold text-indigo-700 dark:text-indigo-300">PLANEADO</th>
+                          <th class="px-3 py-2 text-center text-xs font-semibold text-indigo-700 dark:text-indigo-300">COMPLETADO</th>
+                          <th class="px-3 py-2 text-center text-xs font-semibold text-indigo-700 dark:text-indigo-300">PROGRESO</th>
+                          <th v-if="can?.reportarAvance" class="px-3 py-2 text-center text-xs font-semibold text-indigo-700 dark:text-indigo-300">REGISTRAR</th>
+                        </tr>
+                      </thead>
+                      <tbody class="divide-y divide-indigo-100 dark:divide-indigo-500/20">
+                        <tr v-for="item in servicio.items" :key="item.id" class="hover:bg-indigo-50/50 dark:hover:bg-indigo-500/5">
+                          <td class="px-3 py-2">
+                            <div class="flex items-center gap-2">
+                              <svg class="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                              </svg>
+                              <span class="font-medium text-gray-700 dark:text-slate-200">{{ item.descripcion || (item.tamano ? item.tamano.toUpperCase() : 'Distribución') }}</span>
+                            </div>
+                          </td>
+                          <td class="px-3 py-2 text-center">
+                            <span class="inline-flex px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-bold dark:bg-blue-500/20 dark:text-blue-200">{{ item.planeado || 0 }}</span>
+                          </td>
+                          <td class="px-3 py-2 text-center">
+                            <span class="inline-flex px-2 py-1 rounded-full text-xs font-bold"
+                                  :class="(item.completado || 0) >= (item.planeado || 0) ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-200' : 'bg-orange-100 text-orange-800 dark:bg-orange-500/20 dark:text-orange-200'">
+                              {{ item.completado || 0 }}
+                            </span>
+                          </td>
+                          <td class="px-3 py-2">
+                            <div class="flex items-center gap-2">
+                              <div class="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden dark:bg-slate-700">
+                                <div class="h-full rounded-full transition-all"
+                                     :class="(item.completado || 0) >= (item.planeado || 0) ? 'bg-emerald-500' : 'bg-orange-500'"
+                                     :style="{ width: Math.min(100, ((item.completado || 0) / (item.planeado || 1)) * 100) + '%' }"></div>
+                              </div>
+                              <span class="text-xs font-semibold text-gray-600 dark:text-slate-300 w-10 text-right">{{ Math.round(((item.completado || 0) / (item.planeado || 1)) * 100) }}%</span>
+                            </div>
+                          </td>
+                          <td v-if="can?.reportarAvance" class="px-3 py-2 text-center">
+                            <input type="number" min="0" 
+                                   :max="(item.planeado || 0) - (item.completado || 0)" 
+                                   v-model.number="avancesMultiServicio[servicio.id].items.find(i => i.id_item === item.id).cantidad"
+                                   placeholder="0"
+                                   class="w-16 px-2 py-1 text-center border rounded dark:bg-slate-900 dark:border-slate-600 dark:text-slate-100 text-sm" />
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  
+                  <!-- Formulario para registrar avances -->
+                  <div v-if="can?.reportarAvance" class="mt-4 bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl p-4 dark:from-blue-500/10 dark:to-indigo-500/10 dark:border-blue-500/30">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+                      <div>
+                        <label class="block text-xs font-semibold text-gray-700 mb-1 dark:text-slate-200">Tarifa</label>
+                        <select v-model="avancesMultiServicio[servicio.id].tarifa_tipo"
+                                class="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-900 dark:border-slate-600 dark:text-slate-100">
+                          <option value="NORMAL">NORMAL (precio del servicio)</option>
+                          <option value="EXTRA">EXTRA</option>
+                          <option value="FIN_DE_SEMANA">FIN DE SEMANA</option>
+                        </select>
+                      </div>
+                      <div v-if="avancesMultiServicio[servicio.id].tarifa_tipo !== 'NORMAL'">
+                        <label class="block text-xs font-semibold text-gray-700 mb-1 dark:text-slate-200">Precio unitario</label>
+                        <input type="number" step="0.01" min="0"
+                               v-model.number="avancesMultiServicio[servicio.id].precio_unitario_manual"
+                               placeholder="Ej: 12.50"
+                               class="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-900 dark:border-slate-600 dark:text-slate-100" />
+                      </div>
+                    </div>
+                    <div class="mb-3">
+                      <label class="block text-xs font-semibold text-gray-700 mb-1 dark:text-slate-200">Comentario (opcional)</label>
+                      <textarea v-model="avancesMultiServicio[servicio.id].comentario" rows="2"
+                                placeholder="Describe el progreso realizado..."
+                                class="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-900 dark:border-slate-600 dark:text-slate-100"></textarea>
+                    </div>
+                    <button @click="guardarAvanceServicio(servicio.id)" type="button"
+                            class="w-full px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg transition-colors shadow-md">
+                      ✓ Guardar Avance
+                    </button>
+                  </div>
+                  
+                  <!-- Alerta si necesita definir tamaños -->
+                  <div v-if="can?.definir_tamanos && serviciosConTamanos[servicio.id]?.pendiente_definir" 
+                       class="mt-4 bg-gradient-to-r from-amber-50 via-yellow-50 to-amber-50 border-2 border-amber-300 rounded-xl p-4">
+                    <div class="flex items-start gap-3">
+                      <svg class="w-6 h-6 text-amber-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                      </svg>
+                      <div class="flex-1">
+                        <h4 class="font-bold text-amber-900 mb-1">Este servicio requiere definición de tamaños</h4>
+                        <p class="text-sm text-amber-800 mb-3">
+                          Total de piezas: <span class="font-bold">{{ serviciosConTamanos[servicio.id].cantidad_total }}</span>
+                        </p>
+                        <button type="button" @click="servicioSeleccionadoTamanos = servicio.id"
+                                class="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-semibold text-sm transition-colors shadow-md">
+                          Definir Tamaños
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                  
                 </div>
               </div>
-
-              <div>
-                <label class="block text-sm font-semibold text-gray-700 mb-2 dark:text-slate-200">Comentario (opcional)</label>
-                <textarea v-model="avForm.comentario" rows="3"
-                          class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-400 transition-all duration-200 resize-none dark:bg-slate-900/60 dark:border-slate-700 dark:text-slate-100 dark:placeholder-slate-400"
-                          placeholder="Describe el progreso realizado..."></textarea>
-              </div>
-              <button @click="registrarAvance" :disabled="avForm.processing || !hasAvance"
-                      class="w-full px-6 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold rounded-xl shadow-lg hover:shadow-xl hover:scale-105 transform transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:scale-100 flex items-center justify-center gap-2 dark:from-emerald-500 dark:to-teal-500">
-                <svg v-if="!avForm.processing" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+              
+              <!-- Mensaje si no hay items ni servicios -->
+              <div v-else>
+                <svg class="w-16 h-16 mx-auto mb-4 text-gray-300 dark:text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/>
                 </svg>
-                <svg v-else class="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-                </svg>
-                {{ avForm.processing ? 'Guardando Avance...' : 'Guardar Avance' }}
-              </button>
-              <p v-if="avForm.errors.items" class="text-sm text-red-600 flex items-center gap-1">
-                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                  <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
-                </svg>
-                {{ avForm.errors.items }}
-              </p>
-              <div class="pt-4 border-t dark:border-slate-800/80">
-                <label class="block text-sm font-semibold text-gray-700 mb-2 dark:text-slate-200">Nota por faltantes (opcional)</label>
-                <textarea v-model="faltForm.nota" rows="2"
-                          class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-indigo-100 focus:border-indigo-400 transition-all duration-200 resize-none dark:bg-slate-900/60 dark:border-slate-700 dark:text-slate-100 dark:placeholder-slate-400"
-                          placeholder="Ej: Faltaron piezas por daño o falta de material..."></textarea>
-    <button @click="aplicarFaltantes" :disabled="faltForm.processing || !hasFaltantes"
-                        class="mt-3 w-full px-6 py-3 bg-gradient-to-r from-indigo-600 to-blue-600 text-white font-bold rounded-xl shadow-lg hover:shadow-xl hover:scale-105 transform transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:scale-100 flex items-center justify-center gap-2 dark:from-indigo-500 dark:to-blue-500">
-                  <svg v-if="!faltForm.processing" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-                  </svg>
-                  <svg v-else class="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-                  </svg>
-                  {{ faltForm.processing ? 'Aplicando...' : 'Aplicar faltantes' }}
-                </button>
-                <p v-if="faltForm.errors.items" class="text-sm text-red-600 flex items-center gap-1 mt-2">
-                  <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
-                  </svg>
-                  {{ faltForm.errors.items }}
-                </p>
+                <p class="dark:text-slate-200">No hay ítems registrados</p>
               </div>
             </div>
           </div>
@@ -1309,6 +1518,79 @@ function definirTamanos() {
         <div class="mt-4 flex justify-end gap-3">
           <button @click="showRechazoModal = false" class="px-4 py-2 rounded bg-gray-200 dark:bg-slate-700 dark:text-slate-100">Cancelar</button>
           <button @click="rechazarCalidad" class="px-4 py-2 rounded bg-red-600 text-white">Enviar Rechazo</button>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Modal Definir Tamaños para Servicio -->
+    <div v-if="servicioSeleccionadoTamanos" class="fixed inset-0 z-[9999] flex items-center justify-center px-4">
+      <div class="fixed inset-0 bg-black/50 z-40" @click="servicioSeleccionadoTamanos = null"></div>
+      <div class="relative w-full max-w-2xl bg-white rounded-2xl shadow-xl p-6 z-50 dark:bg-slate-900">
+        <h3 class="text-xl font-bold mb-2 dark:text-slate-100">Definir Tamaños - Servicio #{{ servicioSeleccionadoTamanos }}</h3>
+        <p class="text-sm text-gray-600 mb-4 dark:text-slate-400">
+          Total a distribuir: <strong>{{ serviciosConTamanos[servicioSeleccionadoTamanos]?.cantidad_total || 0 }}</strong> unidades
+        </p>
+        
+        <div class="grid grid-cols-2 gap-4 mb-4">
+          <div>
+            <label class="block text-sm font-semibold mb-2 dark:text-slate-100">Chico</label>
+            <input type="number" min="0" v-model.number="tamanosFormServicio[servicioSeleccionadoTamanos].chico"
+                   class="w-full px-3 py-2 border rounded-lg dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100" />
+            <p v-if="preciosPorServicio[servicioSeleccionadoTamanos]?.chico" class="text-xs text-gray-600 mt-1 dark:text-slate-400">
+              Precio: {{ preciosPorServicio[servicioSeleccionadoTamanos].chico }}/ud
+            </p>
+          </div>
+          <div>
+            <label class="block text-sm font-semibold mb-2 dark:text-slate-100">Mediano</label>
+            <input type="number" min="0" v-model.number="tamanosFormServicio[servicioSeleccionadoTamanos].mediano"
+                   class="w-full px-3 py-2 border rounded-lg dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100" />
+            <p v-if="preciosPorServicio[servicioSeleccionadoTamanos]?.mediano" class="text-xs text-gray-600 mt-1 dark:text-slate-400">
+              Precio: {{ preciosPorServicio[servicioSeleccionadoTamanos].mediano }}/ud
+            </p>
+          </div>
+          <div>
+            <label class="block text-sm font-semibold mb-2 dark:text-slate-100">Grande</label>
+            <input type="number" min="0" v-model.number="tamanosFormServicio[servicioSeleccionadoTamanos].grande"
+                   class="w-full px-3 py-2 border rounded-lg dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100" />
+            <p v-if="preciosPorServicio[servicioSeleccionadoTamanos]?.grande" class="text-xs text-gray-600 mt-1 dark:text-slate-400">
+              Precio: {{ preciosPorServicio[servicioSeleccionadoTamanos].grande }}/ud
+            </p>
+          </div>
+          <div>
+            <label class="block text-sm font-semibold mb-2 dark:text-slate-100">Jumbo</label>
+            <input type="number" min="0" v-model.number="tamanosFormServicio[servicioSeleccionadoTamanos].jumbo"
+                   class="w-full px-3 py-2 border rounded-lg dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100" />
+            <p v-if="preciosPorServicio[servicioSeleccionadoTamanos]?.jumbo" class="text-xs text-gray-600 mt-1 dark:text-slate-400">
+              Precio: {{ preciosPorServicio[servicioSeleccionadoTamanos].jumbo }}/ud
+            </p>
+          </div>
+        </div>
+        
+        <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg dark:bg-slate-800">
+          <div>
+            <p class="text-sm text-gray-600 dark:text-slate-400">Suma actual:</p>
+            <p class="text-2xl font-bold" :class="tamanosValidServicio(servicioSeleccionadoTamanos) ? 'text-emerald-600' : 'text-rose-600'">
+              {{ sumaTamanosServicio(servicioSeleccionadoTamanos) }}
+            </p>
+          </div>
+          <div class="text-right">
+            <p class="text-sm text-gray-600 dark:text-slate-400">Objetivo:</p>
+            <p class="text-2xl font-bold text-gray-800 dark:text-slate-100">
+              {{ serviciosConTamanos[servicioSeleccionadoTamanos]?.cantidad_total || 0 }}
+            </p>
+          </div>
+        </div>
+        
+        <div class="mt-6 flex justify-end gap-3">
+          <button @click="servicioSeleccionadoTamanos = null" 
+                  class="px-4 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 dark:bg-slate-700 dark:text-slate-100">
+            Cancelar
+          </button>
+          <button @click="definirTamanosServicio(servicioSeleccionadoTamanos)" 
+                  :disabled="!tamanosValidServicio(servicioSeleccionadoTamanos)"
+                  class="px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed">
+            Confirmar
+          </button>
         </div>
       </div>
     </div>

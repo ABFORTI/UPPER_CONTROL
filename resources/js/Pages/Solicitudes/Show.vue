@@ -1,9 +1,38 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { router } from '@inertiajs/vue3'
 import FilePreview from '@/Components/FilePreview.vue'
 
 const props = defineProps({ solicitud: Object, can: Object, urls: Object, flags: Object, cotizacion: Object })
+
+// Helpers para manejo seguro de números
+const toNum = (v) => {
+  const n = Number.parseFloat(v)
+  return Number.isFinite(n) ? n : 0
+}
+
+const money = (v) => new Intl.NumberFormat('es-MX', {
+  style: 'currency',
+  currency: 'MXN',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+}).format(toNum(v))
+
+// Normalizar servicios con valores numéricos seguros
+const servicios = computed(() => (props.solicitud?.servicios ?? []).map(s => ({
+  ...s,
+  cantidad: toNum(s.cantidad),
+  precio_unitario: toNum(s.precio_unitario),
+  subtotal: toNum(s.subtotal) || (toNum(s.cantidad) * toNum(s.precio_unitario)),
+})))
+
+// Calcular totales desde servicios
+const subtotal = computed(() => servicios.value.reduce((acc, s) => acc + s.subtotal, 0))
+const iva = computed(() => subtotal.value * 0.16)
+const total = computed(() => subtotal.value + iva.value)
+
+// Determinar si tiene múltiples servicios
+const esMultiServicio = computed(() => servicios.value.length > 0)
 
 function aprobar()  { router.post(props.urls.aprobar) }
 
@@ -122,10 +151,39 @@ function canPreview(mime) {
             </div>
             <div class="p-6 space-y-4">
               <div class="grid md:grid-cols-2 gap-4">
-                <div class="bg-upper-50 dark:bg-slate-900/70 rounded-xl p-4 border border-upper-50 dark:border-slate-700 transition-colors">
+                <!-- NUEVO: Mostrar múltiples servicios si existen -->
+                <div v-if="esMultiServicio" 
+                     class="md:col-span-2 bg-upper-50 dark:bg-slate-900/70 rounded-xl p-4 border border-upper-50 dark:border-slate-700 transition-colors">
+                  <label class="text-xs font-semibold text-[#9CA3FF] dark:text-indigo-200 uppercase tracking-wide mb-3 block">Servicios Solicitados</label>
+                  <div class="space-y-2">
+                    <div v-for="(ss, idx) in servicios" :key="ss.id" 
+                         class="flex items-center justify-between bg-white dark:bg-slate-800 rounded-lg p-3 border border-indigo-100 dark:border-slate-700">
+                      <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-full bg-indigo-600 text-white flex items-center justify-center font-bold text-sm">
+                          {{ idx + 1 }}
+                        </div>
+                        <div>
+                          <p class="font-bold text-gray-800 dark:text-slate-100">{{ ss.servicio?.nombre || 'Servicio' }}</p>
+                          <p class="text-xs text-gray-500 dark:text-slate-400">
+                            {{ ss.cantidad }} {{ ss.tipo_cobro === 'tamanos' ? 'unidades' : 'piezas' }} · 
+                            {{ money(ss.precio_unitario) }} c/u
+                          </p>
+                        </div>
+                      </div>
+                      <p class="text-lg font-bold text-indigo-600 dark:text-indigo-400">
+                        {{ money(ss.subtotal) }}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                
+                <!-- FALLBACK: Servicio único (compatibilidad) -->
+                <div v-else-if="solicitud.servicio" 
+                     class="bg-upper-50 dark:bg-slate-900/70 rounded-xl p-4 border border-upper-50 dark:border-slate-700 transition-colors">
                   <label class="text-xs font-semibold text-[#9CA3FF] dark:text-indigo-200 uppercase tracking-wide">Servicio</label>
                   <p class="mt-1 text-lg font-bold text-gray-800 dark:text-slate-100">{{ solicitud.servicio?.nombre }}</p>
                 </div>
+                
                 <div class="bg-upper-50 dark:bg-slate-900/70 rounded-xl p-4 border border-upper-50 dark:border-slate-700 transition-colors">
                   <label class="text-xs font-semibold text-[#9CA3FF] dark:text-indigo-200 uppercase tracking-wide">Centro de Trabajo</label>
                   <p class="mt-1 text-lg font-bold text-gray-800 dark:text-slate-100">{{ solicitud.centro?.nombre }}</p>
@@ -283,16 +341,16 @@ function canPreview(mime) {
             <div v-if="cotizacion?.lines?.length" class="p-5">
               <!-- Items -->
               <div class="space-y-3 mb-4">
-       <div v-for="(l,i) in cotizacion.lines" :key="i" 
-         class="bg-gray-50 dark:bg-slate-800/70 rounded-xl p-4 border border-upper-50 dark:border-slate-700">
+                <div v-for="(l,i) in cotizacion.lines" :key="i" 
+                     class="bg-gray-50 dark:bg-slate-800/70 rounded-xl p-4 border border-upper-50 dark:border-slate-700">
                   <div class="font-semibold text-gray-800 dark:text-slate-100 mb-2">{{ l.label }}</div>
                   <div class="grid grid-cols-2 gap-2 text-sm">
                     <div class="text-gray-600 dark:text-slate-400">Cantidad:</div>
-                    <div class="text-right font-bold text-gray-800 dark:text-slate-100">{{ l.cantidad }}</div>
+                    <div class="text-right font-bold text-gray-800 dark:text-slate-100">{{ toNum(l.cantidad) }}</div>
                     <div class="text-gray-600 dark:text-slate-400">P. Unitario:</div>
-                    <div class="text-right font-bold text-[#1E1C8F] dark:text-indigo-300">${{ (l.pu||0).toFixed(2) }}</div>
+                    <div class="text-right font-bold text-[#1E1C8F] dark:text-indigo-300">{{ money(l.pu) }}</div>
                     <div class="text-gray-600 dark:text-slate-400">Subtotal:</div>
-                    <div class="text-right font-bold text-gray-800 dark:text-slate-100">${{ (l.subtotal||0).toFixed(2) }}</div>
+                    <div class="text-right font-bold text-gray-800 dark:text-slate-100">{{ money(l.subtotal) }}</div>
                   </div>
                 </div>
               </div>
@@ -301,15 +359,15 @@ function canPreview(mime) {
               <div class="border-t-2 border-upper-50 pt-4 space-y-3">
                 <div class="flex justify-between items-center text-sm">
                   <span class="text-gray-600 dark:text-slate-400 font-medium">Subtotal:</span>
-                  <span class="font-bold text-gray-800 dark:text-slate-100 text-lg">${{ (cotizacion.subtotal||0).toFixed(2) }}</span>
+                  <span class="font-bold text-gray-800 dark:text-slate-100 text-lg">{{ money(cotizacion.subtotal) }}</span>
                 </div>
                 <div class="flex justify-between items-center text-sm">
-                  <span class="text-gray-600 dark:text-slate-400 font-medium">IVA ({{ ((cotizacion.iva_rate||0)*100).toFixed(0) }}%):</span>
-                  <span class="font-bold text-gray-800 dark:text-slate-100 text-lg">${{ (cotizacion.iva||0).toFixed(2) }}</span>
+                  <span class="text-gray-600 dark:text-slate-400 font-medium">IVA (16%):</span>
+                  <span class="font-bold text-gray-800 dark:text-slate-100 text-lg">{{ money(cotizacion.iva) }}</span>
                 </div>
                 <div class="rounded-xl px-4 py-3 flex justify-between items-center bg-[#FF7A00]">
                   <span class="text-white font-bold text-lg">Total:</span>
-                  <span class="text-white font-bold text-2xl">${{ (cotizacion.total||0).toFixed(2) }}</span>
+                  <span class="text-white font-bold text-2xl">{{ money(cotizacion.total) }}</span>
                 </div>
               </div>
             </div>
