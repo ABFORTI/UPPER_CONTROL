@@ -47,4 +47,24 @@ class Solicitud extends Model {
   {
       return $this->hasMany(\App\Models\Orden::class, 'id_solicitud');
   }
+
+  // NUEVO: Relación con múltiples servicios
+  public function servicios()
+  {
+      return $this->hasMany(\App\Models\SolicitudServicio::class, 'solicitud_id');
+  }
+
+  // Método helper para recalcular totales desde servicios
+  public function recalcularTotales()
+  {
+      $subtotal = $this->servicios->sum('subtotal');
+      $iva = $subtotal * 0.16;
+      $total = $subtotal + $iva;
+      
+      $this->update([
+          'subtotal' => $subtotal,
+          'iva' => $iva,
+          'total' => $total,
+      ]);
+  }
 }

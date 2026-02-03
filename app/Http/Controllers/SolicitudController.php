@@ -240,7 +240,32 @@ class SolicitudController extends Controller
             ])->withInput();
         }
         
-        $serv = ServicioEmpresa::findOrFail($req->id_servicio);
+        // NUEVO: Detectar si viene con múltiples servicios
+        $esMultipleServicios = $req->has('servicios') && is_array($req->servicios);
+        
+        // DEBUG TEMPORAL
+        \Log::info('📝 Datos recibidos en store', [
+            'esMultiple' => $esMultipleServicios,
+            'servicios_raw' => $req->servicios,
+            'cantidad_servicios' => $esMultipleServicios ? count($req->servicios) : 0,
+        ]);
+        
+        // Validar servicio(s)
+        if ($esMultipleServicios) {
+            $req->validate([
+                'servicios' => ['required', 'array', 'min:1'],
+                'servicios.*.id_servicio' => ['required', 'integer', 'exists:servicios_empresa,id'],
+                'servicios.*.cantidad' => ['required', 'integer', 'min:1'],
+                'cantidad' => ['required', 'integer', 'min:1'],
+            ]);
+        } else {
+            $req->validate([
+                'id_servicio' => ['required', 'integer', 'exists:servicios_empresa,id'],
+            ]);
+        }
+        
+        // Para modo simple, obtener el servicio
+        $serv = $esMultipleServicios ? null : ServicioEmpresa::findOrFail($req->id_servicio);
 
         // Determinar centro a usar
     $canChooseCentro = $u && $u->hasAnyRole(['admin','facturacion','calidad','control','comercial']);
@@ -292,6 +317,110 @@ class SolicitudController extends Controller
             $areaId = (int)$area->id;
         }
 
+        // NUEVO: Si es modo múltiple servicios, crear UNA solicitud con múltiples servicios asociados
+        if ($esMultipleServicios) {
+            DB::beginTransaction();
+            try {
+                \Log::info('🔄 Creando solicitud con múltiples servicios', ['count' => count($req->servicios)]);
+                
+                // Crear la solicitud principal (sin servicio único)
+                $sol = Solicitud::create([
+                    'folio'            => $this->generarFolio($centroId),
+                    'id_cliente'       => $u->id,
+                    'id_centrotrabajo' => $centroId,
+                    'id_servicio'      => null, // Ya no usamos este campo para múltiples
+                    'descripcion'      => $req->descripcion,
+                    'id_centrocosto'   => (int)$req->id_centrocosto,
+                    'id_marca'         => $req->filled('id_marca') ? (int)$req->id_marca : null,
+                    'id_area'          => $areaId,
+                    'cantidad'         => (int)$req->cantidad, // Cantidad total de referencia
+                    'subtotal'         => 0, // Se calculará después
+                    'iva'              => 0,
+                    'total'            => 0,
+                    'notas'            => $req->notas,
+                    'estatus'          => 'pendiente',
+                ]);
+                
+                $pricing = app(\App\Domain\Servicios\PricingService::class);
+                
+                // Crear cada servicio asociado
+                foreach ($req->servicios as $index => $servicioData) {
+                    \Log::info("➡️ Creando servicio #{$index}", $servicioData);
+                    
+                    $serv = ServicioEmpresa::findOrFail($servicioData['id_servicio']);
+                    $cantidadServicio = (int)$servicioData['cantidad'];
+                    
+                    // Determinar si usa tamaños
+                    $usaTamanosCentro = \App\Models\ServicioCentro::where('id_centrotrabajo', $centroId)
+                        ->where('id_servicio', $serv->id)
+                        ->whereHas('tamanos')
+                        ->exists();
+                    
+                    $precioUnitario = 0;
+                    if (!$usaTamanosCentro) {
+                        $precioUnitario = (float)$pricing->precioUnitario($centroId, $serv->id, null);
+                    }
+                    
+                    // Crear SolicitudServicio
+                    \App\Models\SolicitudServicio::create([
+                        'solicitud_id'     => $sol->id,
+                        'servicio_id'      => $serv->id,
+                        'tipo_cobro'       => $usaTamanosCentro ? 'tamanos' : 'cantidad',
+                        'cantidad'         => $cantidadServicio,
+                        'precio_unitario'  => $precioUnitario,
+                        'subtotal'         => $precioUnitario * $cantidadServicio,
+                    ]);
+                }
+                
+                // Recalcular totales de la solicitud
+                $sol->recalcularTotales();
+                
+                // Manejar archivos adjuntos
+                if ($req->hasFile('archivos')) {
+                    $archivos = $req->file('archivos');
+                    if (is_array($archivos)) {
+                        foreach ($archivos as $file) {
+                            if ($file && $file->isValid()) {
+                                $path = $file->store('solicitudes/' . $sol->id, 'public');
+                                $sol->archivos()->create([
+                                    'path'             => $path,
+                                    'nombre_original'  => $file->getClientOriginalName(),
+                                    'mime'             => $file->getClientMimeType(),
+                                    'size'             => $file->getSize(),
+                                    'subtipo'          => 'adjunto',
+                                ]);
+                            }
+                        }
+                    }
+                }
+                
+                DB::commit();
+                
+                // Notificar a coordinador
+                try {
+                    $serviciosNombres = $sol->servicios()->with('servicio')->get()->pluck('servicio.nombre')->join(', ');
+                    Notifier::toRoleInCentro(
+                        'coordinador',
+                        $sol->id_centrotrabajo,
+                        'Nueva solicitud',
+                        "El cliente creó la solicitud {$sol->folio} con servicios: {$serviciosNombres} ({$sol->descripcion}).",
+                        route('solicitudes.show',$sol->id)
+                    );
+                } catch (\Throwable $e) {
+                    \Log::warning('Error al notificar solicitud', ['error' => $e->getMessage()]);
+                }
+                
+                return redirect()
+                    ->route('solicitudes.show', $sol->id)
+                    ->with('ok', 'Solicitud con ' . count($req->servicios) . ' servicio(s) creada exitosamente');
+                    
+            } catch (\Throwable $ex) {
+                DB::rollBack();
+                throw $ex;
+            }
+        }
+
+        // FLUJO NORMAL: Un solo servicio (compatibilidad con código anterior)
         // Usar un pequeño retry para evitar colisiones de folio bajo concurrencia
         $attempts = 0; $maxAttempts = 3; $lastException = null;
         while ($attempts < $maxAttempts) {
@@ -504,7 +633,18 @@ class SolicitudController extends Controller
 
     public function show(Request $req, Solicitud $solicitud)
     {
-    $solicitud->load(['cliente','servicio','centro','area','centroCosto','marca','archivos','tamanos','ordenes']);
+        $solicitud->load([
+            'cliente',
+            'servicio',
+            'centro',
+            'area',
+            'centroCosto',
+            'marca',
+            'archivos',
+            'tamanos',
+            'ordenes',
+            'servicios.servicio' // Eager load múltiples servicios
+        ]);
         $user = $req->user();
 
         $canAprobar = $user->hasAnyRole(['coordinador','admin'])
@@ -546,6 +686,41 @@ class SolicitudController extends Controller
         $pricing = app(PricingService::class);
         $lines = [];
         $subtotal = 0.0;
+
+        // NUEVO: Si tiene múltiples servicios, construir cotización desde solicitud_servicios
+        if ($solicitud->servicios()->exists()) {
+            foreach ($solicitud->servicios as $solServicio) {
+                $lines[] = [
+                    'label'    => $solServicio->servicio->nombre ?? 'Servicio',
+                    'tamano'   => null,
+                    'cantidad' => $solServicio->cantidad,
+                    'pu'       => $solServicio->precio_unitario,
+                    'subtotal' => $solServicio->subtotal,
+                ];
+                $subtotal += $solServicio->subtotal;
+            }
+            $iva = $subtotal * $ivaRate;
+            $total = $subtotal + $iva;
+            return [
+                'mode'      => 'multi_servicio',
+                'lines'     => $lines,
+                'subtotal'  => $subtotal,
+                'iva'       => $iva,
+                'total'     => $total,
+            ];
+        }
+
+        // Flujo TRADICIONAL: Servicio único
+        if (!$solicitud->id_servicio) {
+            // Sin servicio asignado (edge case)
+            return [
+                'mode'      => 'sin_servicio',
+                'lines'     => [],
+                'subtotal'  => 0.0,
+                'iva'       => 0.0,
+                'total'     => 0.0,
+            ];
+        }
 
         // Determinar modo per-centro (ignora flag global en servicios_empresa)
         $usaTamanosCentro = \App\Models\ServicioCentro::where('id_centrotrabajo', $solicitud->id_centrotrabajo)

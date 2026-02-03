@@ -146,7 +146,96 @@ class OrdenController extends Controller
         }
 
         // Cargar relaciones necesarias
-        $solicitud->load(['servicio','centro','tamanos','centroCosto','marca','area']);
+        $solicitud->load(['servicio','centro','tamanos','centroCosto','marca','area','servicios.servicio']);
+
+        // NUEVO: Detectar si es multi-servicio
+        $esMultiServicio = $solicitud->servicios()->exists();
+        
+        // Si es multi-servicio, crear OT directamente (sin formulario)
+        if ($esMultiServicio) {
+            // Crear OT sin items (multi-servicio no requiere items tradicionales)
+            DB::beginTransaction();
+            try {
+                $orden = Orden::create([
+                    'folio'            => $this->buildFolioOT($solicitud->id_centrotrabajo),
+                    'id_solicitud'     => $solicitud->id,
+                    'id_centrotrabajo' => $solicitud->id_centrotrabajo,
+                    'id_servicio'      => null, // Multi-servicio
+                    'id_area'          => $solicitud->id_area,
+                    'team_leader_id'   => null,
+                    'descripcion_general' => $solicitud->descripcion ?? '',
+                    'estatus'          => 'generada',
+                    'total_planeado'   => $solicitud->cantidad ?? 0,
+                    'total_real'       => 0,
+                    'calidad_resultado'=> 'pendiente',
+                ]);
+
+                // Copiar servicios de solicitud a OT
+                \Log::info('🔄 Copiando servicios a OT (createFromSolicitud)', [
+                    'orden_id' => $orden->id,
+                    'count' => $solicitud->servicios->count()
+                ]);
+                
+                foreach ($solicitud->servicios as $solServicio) {
+                    $otServicio = \App\Models\OTServicio::create([
+                        'ot_id'            => $orden->id,
+                        'servicio_id'      => $solServicio->servicio_id,
+                        'tipo_cobro'       => $solServicio->tipo_cobro,
+                        'cantidad'         => $solServicio->cantidad,
+                        'precio_unitario'  => $solServicio->precio_unitario,
+                        'subtotal'         => $solServicio->subtotal,
+                    ]);
+                    
+                    // Crear item por defecto para este servicio
+                    \App\Models\OTServicioItem::create([
+                        'ot_servicio_id'   => $otServicio->id,
+                        'descripcion_item' => $solServicio->servicio->nombre ?? 'Item',
+                        'planeado'         => $solServicio->cantidad,
+                        'completado'       => 0,
+                    ]);
+                    
+                    \Log::info('✅ Servicio + Item creado', [
+                        'ot_servicio_id' => $otServicio->id,
+                        'cantidad' => $solServicio->cantidad
+                    ]);
+                }
+
+                // Recalcular totales
+                $orden->recalcTotals();
+
+                DB::commit();
+
+                // Activity log
+                $this->act('ordenes')
+                    ->performedOn($orden)
+                    ->event('generar_ot_multi')
+                    ->log("OT #{$orden->id} generada desde solicitud multi-servicio {$solicitud->folio}");
+
+                // Notificar a calidad
+                Notifier::toRoleInCentro(
+                    'calidad',
+                    $orden->id_centrotrabajo,
+                    'OT multi-servicio generada',
+                    "Se generó la OT #{$orden->id} con múltiples servicios.",
+                    route('ordenes.show', $orden->id)
+                );
+
+                // Generar PDF en background
+                \App\Jobs\GenerateOrdenPdf::dispatch($orden->id)->onQueue('pdfs');
+
+                return redirect()->route('ordenes.show', $orden->id)
+                    ->with('ok', 'OT multi-servicio creada correctamente');
+                    
+            } catch (\Throwable $ex) {
+                DB::rollBack();
+                \Log::error('Error creando OT multi-servicio', [
+                    'solicitud_id' => $solicitud->id,
+                    'error' => $ex->getMessage()
+                ]);
+                return redirect()->route('solicitudes.show', $solicitud->id)
+                    ->with('error', 'Error al crear OT: ' . $ex->getMessage());
+            }
+        }
 
         // Modo per-centro: detectar tamaños configurados en el centro de la solicitud
         $usaTamanos = \App\Models\ServicioCentro::where('id_centrotrabajo',$solicitud->id_centrotrabajo)
@@ -233,7 +322,11 @@ class OrdenController extends Controller
                 ->withErrors(['ot' => 'Ya existe una Orden de Trabajo para esta solicitud.']);
         }
 
-        $solicitud->load('servicio', 'tamanos');
+        $solicitud->load('servicio', 'tamanos', 'servicios.servicio');
+        
+        // NUEVO: Detectar si es multi-servicio
+        $esMultiServicio = $solicitud->servicios()->exists();
+        
         $usaTamanos = \App\Models\ServicioCentro::where('id_centrotrabajo',$solicitud->id_centrotrabajo)
             ->where('id_servicio',$solicitud->id_servicio)
             ->whereHas('tamanos')
@@ -246,7 +339,7 @@ class OrdenController extends Controller
             'separar_items'  => ['nullable','boolean'],
             'items'          => ['required','array','min:1'],
             'items.*.cantidad' => ['required','integer','min:1'],
-            'items.*.descripcion' => ['nullable','string','max:255'], // IMPORTANTE: Incluir aquí para que Laravel no lo elimine
+            'items.*.descripcion' => ['nullable','string','max:255'],
             'items.*.tamano' => ['nullable','string'],
         ]);
 
@@ -323,7 +416,7 @@ class OrdenController extends Controller
             }
         }
 
-        $orden = DB::transaction(function () use ($solicitud, $data, $usaTamanos, $separarItems) {
+        $orden = DB::transaction(function () use ($solicitud, $data, $usaTamanos, $separarItems, $esMultiServicio) {
             $totalPlan = collect($data['items'])->sum(fn($i) => (int)($i['cantidad'] ?? 0));
 
             $orden = Orden::create([
@@ -340,38 +433,56 @@ class OrdenController extends Controller
                 'calidad_resultado'=> 'pendiente',
             ]);
 
-            // Resolver precios unitarios por item
-            $pricing = app(\App\Domain\Servicios\PricingService::class);
-            $sub = 0.0;
-            
-            foreach ($data['items'] as $it) {
-                $tamano = $it['tamano'] ?? null;
-                $descripcion = $it['descripcion'] ?? null;
-                
-                // Si no hay descripción específica, usar la descripción general de la solicitud
-                if (empty($descripcion)) {
-                    $descripcion = $solicitud->descripcion ?? 'Sin descripción';
+            // NUEVO: Si es multi-servicio, copiar todos los servicios a ot_servicios
+            if ($esMultiServicio) {
+                \Log::info('🔄 Copiando servicios de solicitud a OT', ['orden_id' => $orden->id, 'count' => $solicitud->servicios->count()]);
+                foreach ($solicitud->servicios as $solServicio) {
+                    \App\Models\OTServicio::create([
+                        'ot_id'            => $orden->id,
+                        'servicio_id'      => $solServicio->servicio_id,
+                        'tipo_cobro'       => $solServicio->tipo_cobro,
+                        'cantidad'         => $solServicio->cantidad,
+                        'precio_unitario'  => $solServicio->precio_unitario,
+                        'subtotal'         => $solServicio->subtotal,
+                    ]);
                 }
-                
-                // Flujo diferido (usa_tamanos sin desglose): PU = 0 hasta finalizar OT
-                $pu = ($usaTamanos && $solicitud->tamanos->count() === 0)
-                    ? 0.0
-                    : (float)$pricing->precioUnitario($solicitud->id_centrotrabajo, $solicitud->id_servicio, $tamano);
+                // Recalcular totales de la orden desde servicios
+                $orden->recalcTotals();
+            } else {
+                // Flujo TRADICIONAL: crear items de la orden (sin servicios múltiples)
+                // Resolver precios unitarios por item
+                $pricing = app(\App\Domain\Servicios\PricingService::class);
+                $sub = 0.0;
+            
+                foreach ($data['items'] as $it) {
+                    $tamano = $it['tamano'] ?? null;
+                    $descripcion = $it['descripcion'] ?? null;
+                    
+                    // Si no hay descripción específica, usar la descripción general de la solicitud
+                    if (empty($descripcion)) {
+                        $descripcion = $solicitud->descripcion ?? 'Sin descripción';
+                    }
+                    
+                    // Flujo diferido (usa_tamanos sin desglose): PU = 0 hasta finalizar OT
+                    $pu = ($usaTamanos && $solicitud->tamanos->count() === 0)
+                        ? 0.0
+                        : (float)$pricing->precioUnitario($solicitud->id_centrotrabajo, $solicitud->id_servicio, $tamano);
 
-                OrdenItem::create([
-                    'id_orden'          => $orden->id,
-                    'descripcion'       => $descripcion,
-                    'tamano'            => $tamano,
-                    'cantidad_planeada' => (int)$it['cantidad'],
-                    'precio_unitario'   => $pu,
-                    'subtotal'          => $pu * (int)$it['cantidad'],
-                ]);
-                $sub += $pu * (int)$it['cantidad'];
+                    OrdenItem::create([
+                        'id_orden'          => $orden->id,
+                        'descripcion'       => $descripcion,
+                        'tamano'            => $tamano,
+                        'cantidad_planeada' => (int)$it['cantidad'],
+                        'precio_unitario'   => $pu,
+                        'subtotal'          => $pu * (int)$it['cantidad'],
+                    ]);
+                    $sub += $pu * (int)$it['cantidad'];
+                }
+
+                // Totales con IVA
+                $ivaRate = 0.16; $iva = $sub * $ivaRate; $total = $sub + $iva;
+                $orden->subtotal = $sub; $orden->iva = $iva; $orden->total = $total; $orden->save();
             }
-
-            // Totales con IVA
-            $ivaRate = 0.16; $iva = $sub * $ivaRate; $total = $sub + $iva;
-            $orden->subtotal = $sub; $orden->iva = $iva; $orden->total = $total; $orden->save();
 
             return $orden;
         });
@@ -426,14 +537,42 @@ class OrdenController extends Controller
             'items'    => $req->input('items'),
         ]);
 
-        $data = $req->validate([
+        // Detectar si es OT multi-servicio ANTES de validar
+        $esMultiServicio = $orden->otServicios()->exists();
+        
+        // Validación condicional según tipo de OT
+        $rules = [
+            'id_servicio'           => ['nullable','integer','exists:ot_servicios,id'],
             'items'                 => ['required','array','min:1'],
-            'items.*.id_item'       => ['required','integer','exists:orden_items,id'],
+            'items.*.id_item'       => ['required','integer'],
             'items.*.cantidad'      => ['required','integer','min:1'],
             'comentario'            => ['nullable','string','max:500'],
             'tarifa_tipo'           => ['nullable','in:NORMAL,EXTRA,FIN_DE_SEMANA'],
             'precio_unitario_manual'=> ['nullable','numeric','min:0.0001'],
-        ]);
+        ];
+        
+        // Validar tabla correcta según tipo de OT
+        if ($esMultiServicio) {
+            $rules['items.*.id_item'][] = 'exists:ot_servicio_items,id';
+        } else {
+            $rules['items.*.id_item'][] = 'exists:orden_items,id';
+        }
+        
+        $data = $req->validate($rules);
+        
+        // Si es multi-servicio, validar que se haya seleccionado servicio
+        if ($esMultiServicio && empty($data['id_servicio'])) {
+            return back()->withErrors(['id_servicio' => 'Selecciona un servicio para registrar el avance.']);
+        }
+        
+        // Si se proporcionó id_servicio, validar que pertenece a esta OT
+        $otServicio = null;
+        if (!empty($data['id_servicio'])) {
+            $otServicio = $orden->otServicios()->where('id', $data['id_servicio'])->first();
+            if (!$otServicio) {
+                return back()->withErrors(['id_servicio' => 'El servicio seleccionado no pertenece a esta OT.']);
+            }
+        }
 
         $tipoTarifa = (string)($data['tarifa_tipo'] ?? 'NORMAL');
         $precioManual = array_key_exists('precio_unitario_manual', $data)
@@ -452,27 +591,77 @@ class OrdenController extends Controller
         }
 
         // Validación adicional: todos los items deben pertenecer a la misma OT
-        $ids = collect($data['items'])->pluck('id_item')->map(fn($v)=>(int)$v)->all();
-        $count = \App\Models\OrdenItem::whereIn('id', $ids)->where('id_orden', $orden->id)->count();
-        if ($count !== count($ids)) {
-            Log::warning('RegistrarAvance: id_item ajeno a la OT', [
-                'orden_id' => $orden->id,
-                'ids' => $ids,
-                'count_validos' => $count,
-            ]);
-            return back()->withErrors(['items' => 'Hay ítems que no pertenecen a esta OT. Actualiza la página e inténtalo de nuevo.']);
+        // Solo validar si NO es multi-servicio (en multi-servicio se valida dentro de la transacción)
+        if (!$esMultiServicio) {
+            $ids = collect($data['items'])->pluck('id_item')->map(fn($v)=>(int)$v)->all();
+            $count = \App\Models\OrdenItem::whereIn('id', $ids)->where('id_orden', $orden->id)->count();
+            if ($count !== count($ids)) {
+                Log::warning('RegistrarAvance: id_item ajeno a la OT', [
+                    'orden_id' => $orden->id,
+                    'ids' => $ids,
+                    'count_validos' => $count,
+                ]);
+                return back()->withErrors(['items' => 'Hay ítems que no pertenecen a esta OT. Actualiza la página e inténtalo de nuevo.']);
+            }
         }
 
         $justCompleted = false;
         try {
-        DB::transaction(function () use ($orden, $data, $req, &$justCompleted, $tipoTarifa, $precioManual, $comentarioFinal) {
+        DB::transaction(function () use ($orden, $data, $req, &$justCompleted, $tipoTarifa, $precioManual, $comentarioFinal, $esMultiServicio, $otServicio) {
             $pricing = app(\App\Domain\Servicios\PricingService::class);
             $cantAplicada = [];
-            foreach ($data['items'] as $i) {
-                $item = \App\Models\OrdenItem::where('id', $i['id_item'])
-                    ->where('id_orden', $orden->id)
-                    ->lockForUpdate()
-                    ->firstOrFail();
+            
+            // Si es multi-servicio, trabajar con ot_servicio_items
+            if ($esMultiServicio) {
+                foreach ($data['items'] as $i) {
+                    $item = \App\Models\OTServicioItem::where('id', $i['id_item'])
+                        ->where('ot_servicio_id', $otServicio->id)
+                        ->lockForUpdate()
+                        ->firstOrFail();
+                    
+                    $remaining = max(0, (int)$item->planeado - (int)$item->completado);
+                    $reqQty = (int)($i['cantidad'] ?? 0);
+                    $addQty = min($reqQty, $remaining);
+                    
+                    if ($addQty <= 0) {
+                        $cantAplicada[(int)$item->id] = 0;
+                        continue;
+                    }
+                    
+                    $cantAplicada[(int)$item->id] = $addQty;
+                    
+                    // Actualizar completado
+                    $item->completado += $addQty;
+                    $item->save();
+                }
+                
+                // Verificar si TODOS los servicios de la OT están completados
+                $todosServiciosCompletos = true;
+                foreach ($orden->otServicios as $servicio) {
+                    $itemsIncompletos = $servicio->items()->where('completado', '<', DB::raw('planeado'))->count();
+                    if ($itemsIncompletos > 0) {
+                        $todosServiciosCompletos = false;
+                        break;
+                    }
+                }
+                
+                if ($todosServiciosCompletos && $orden->estatus !== 'completada') {
+                    $orden->estatus = 'completada';
+                    $orden->calidad_resultado = 'pendiente';
+                    if (Schema::hasColumn('ordenes_trabajo', 'fecha_completada')) {
+                        $orden->fecha_completada = now();
+                    }
+                    $justCompleted = true;
+                }
+                $orden->save();
+                
+            } else {
+                // Lógica tradicional con orden_items
+                foreach ($data['items'] as $i) {
+                    $item = \App\Models\OrdenItem::where('id', $i['id_item'])
+                        ->where('id_orden', $orden->id)
+                        ->lockForUpdate()
+                        ->firstOrFail();
 
                 // Cargar/asegurar segmentos existentes bajo lock
                 $segQ = OrdenItemProduccionSegmento::where('id_orden', $orden->id)
@@ -556,7 +745,7 @@ class OrdenController extends Controller
                 $item->save();
             }
 
-            // totales y estatus
+            // totales y estatus (solo para modo tradicional)
             $sumReal = $orden->items()->sum('cantidad_real');
             $sumPlan = $orden->items()->sum('cantidad_planeada');
 
@@ -604,39 +793,68 @@ class OrdenController extends Controller
             } else {
                 $orden->save();
             }
+            } // Fin del else (lógica tradicional)
 
             // Registrar avances en la tabla de avances
-            // Marcar como corregido SOLO si:
-            // 1. Existe un rechazo de calidad registrado para esta orden
-            // 2. Y ese rechazo fue DESPUÉS de que ya había avances (es decir, es una corrección real)
-            $rechazoCalidad = \App\Models\Aprobacion::where('aprobable_type', \App\Models\Orden::class)
-                ->where('aprobable_id', $orden->id)
-                ->where('tipo', 'calidad')
-                ->where('resultado', 'rechazado')
-                ->latest()
-                ->first();
-            
-            // Solo es corregido si hay un rechazo Y había avances antes de ese rechazo
-            $isCorregido = false;
-            if ($rechazoCalidad) {
-                $avancesAntesDeRechazo = \App\Models\Avance::where('id_orden', $orden->id)
-                    ->where('created_at', '<', $rechazoCalidad->created_at)
-                    ->exists();
-                $isCorregido = $avancesAntesDeRechazo;
-            }
-            
-            foreach ($data['items'] as $d) {
-                $aplicada = (int)($cantAplicada[(int)$d['id_item']] ?? 0);
-                if ($aplicada > 0) {
-                    \App\Models\Avance::create([
-                        'id_orden' => $orden->id,
-                        'id_item' => $d['id_item'],
-                        'id_usuario' => Auth::id(),
-                        'cantidad' => $aplicada,
-                        'comentario' => $comentarioFinal ?: null,
-                        'es_corregido' => $isCorregido,
-                    ]);
+            // SOLO para OTs tradicionales (no multi-servicio)
+            // Para multi-servicio se usa ot_servicio_avances más abajo
+            if (!$esMultiServicio) {
+                // Marcar como corregido SOLO si:
+                // 1. Existe un rechazo de calidad registrado para esta orden
+                // 2. Y ese rechazo fue DESPUÉS de que ya había avances (es decir, es una corrección real)
+                $rechazoCalidad = \App\Models\Aprobacion::where('aprobable_type', \App\Models\Orden::class)
+                    ->where('aprobable_id', $orden->id)
+                    ->where('tipo', 'calidad')
+                    ->where('resultado', 'rechazado')
+                    ->latest()
+                    ->first();
+                
+                // Solo es corregido si hay un rechazo Y había avances antes de ese rechazo
+                $isCorregido = false;
+                if ($rechazoCalidad) {
+                    $avancesAntesDeRechazo = \App\Models\Avance::where('id_orden', $orden->id)
+                        ->where('created_at', '<', $rechazoCalidad->created_at)
+                        ->exists();
+                    $isCorregido = $avancesAntesDeRechazo;
                 }
+                
+                foreach ($data['items'] as $d) {
+                    $aplicada = (int)($cantAplicada[(int)$d['id_item']] ?? 0);
+                    if ($aplicada > 0) {
+                        \App\Models\Avance::create([
+                            'id_orden' => $orden->id,
+                            'id_item' => $d['id_item'],
+                            'id_usuario' => Auth::id(),
+                            'cantidad' => $aplicada,
+                            'comentario' => $comentarioFinal ?: null,
+                            'es_corregido' => $isCorregido,
+                        ]);
+                    }
+                }
+            }
+
+            // Si es OT multi-servicio, registrar también en ot_servicio_avances
+            if ($esMultiServicio && !empty($data['id_servicio'])) {
+                $cantidadTotalAvance = array_sum(array_values($cantAplicada));
+                $precioUnitarioAplicado = $tipoTarifa === 'NORMAL' 
+                    ? $otServicio->precio_unitario 
+                    : ($precioManual ?? $otServicio->precio_unitario);
+                
+                \App\Models\OTServicioAvance::create([
+                    'ot_servicio_id' => $data['id_servicio'],
+                    'tarifa' => $tipoTarifa,
+                    'precio_unitario_aplicado' => $precioUnitarioAplicado,
+                    'cantidad_registrada' => $cantidadTotalAvance,
+                    'comentario' => $comentarioFinal,
+                    'created_by' => Auth::id(),
+                ]);
+                
+                Log::info('✅ Avance multi-servicio registrado', [
+                    'orden_id' => $orden->id,
+                    'ot_servicio_id' => $data['id_servicio'],
+                    'cantidad' => $cantidadTotalAvance,
+                    'tarifa' => $tipoTarifa,
+                ]);
             }
 
             // Registrar en activity log
@@ -810,6 +1028,9 @@ class OrdenController extends Controller
             'items.segmentosProduccion' => fn($q) => $q->with('usuario')->orderBy('created_at'),
             'avances' => fn($q) => $q->with(['usuario', 'item'])->orderByDesc('created_at'),
             'evidencias' => fn($q)=>$q->with('usuario')->orderByDesc('id'),
+            'otServicios.servicio', // NUEVO: Cargar servicios multi-servicio
+            'otServicios.items',
+            'otServicios.avances',
         ]);
 
         // Flag per-centro: servicio con tamaños SI existe configuración de tamaños en el centro y aún no hay desglose capturado
@@ -880,30 +1101,49 @@ class OrdenController extends Controller
         $lines = [];
         $sub = 0.0;
         $usaSegmentos = false;
-        foreach ($orden->items as $it) {
-            $qty = ($it->cantidad_real ?? 0) > 0 ? (int)$it->cantidad_real : (int)$it->cantidad_planeada;
-            $tieneSeg = ($it->segmentosProduccion ?? null) && $it->segmentosProduccion->count() > 0;
-            $lineSub = ($tieneSeg && (int)($it->cantidad_real ?? 0) > 0)
-                ? (float)($it->subtotal ?? 0)
-                : ((float)$it->precio_unitario * $qty);
-            if ($tieneSeg) { $usaSegmentos = true; }
-            $sub += $lineSub;
-            $lines[] = [
-                'label'    => $it->tamano ? ('Tamaño: '.ucfirst($it->tamano)) : ($it->descripcion ?: 'Item'),
-                'cantidad' => $qty,
-                'pu'       => ($tieneSeg && $qty > 0 && (int)($it->cantidad_real ?? 0) > 0)
-                    ? (float)($lineSub / max(1, $qty))
-                    : (float)$it->precio_unitario,
-                'subtotal' => $lineSub,
-            ];
+        
+        // Si es OT multi-servicio, usar los servicios directamente
+        $esMultiServicio = $orden->otServicios()->exists();
+        
+        if ($esMultiServicio) {
+            // Para multi-servicio, usar subtotales de servicios
+            $sub = (float)$orden->otServicios->sum('subtotal');
+            foreach ($orden->otServicios as $serv) {
+                $lines[] = [
+                    'label'    => $serv->servicio->nombre ?? 'Servicio',
+                    'cantidad' => (int)$serv->cantidad,
+                    'pu'       => $serv->cantidad > 0 ? ($serv->subtotal / $serv->cantidad) : 0,
+                    'subtotal' => (float)$serv->subtotal,
+                ];
+            }
+        } else {
+            // Para OT tradicional, usar items
+            foreach ($orden->items as $it) {
+                $qty = ($it->cantidad_real ?? 0) > 0 ? (int)$it->cantidad_real : (int)$it->cantidad_planeada;
+                $tieneSeg = ($it->segmentosProduccion ?? null) && $it->segmentosProduccion->count() > 0;
+                $lineSub = ($tieneSeg && (int)($it->cantidad_real ?? 0) > 0)
+                    ? (float)($it->subtotal ?? 0)
+                    : ((float)$it->precio_unitario * $qty);
+                if ($tieneSeg) { $usaSegmentos = true; }
+                $sub += $lineSub;
+                $lines[] = [
+                    'label'    => $it->tamano ? ('Tamaño: '.ucfirst($it->tamano)) : ($it->descripcion ?: 'Item'),
+                    'cantidad' => $qty,
+                    'pu'       => ($tieneSeg && $qty > 0 && (int)($it->cantidad_real ?? 0) > 0)
+                        ? (float)($lineSub / max(1, $qty))
+                        : (float)$it->precio_unitario,
+                    'subtotal' => $lineSub,
+                ];
+            }
         }
+        
         $cot = [
             'lines' => $lines,
             'subtotal' => $sub,
             'iva_rate' => $ivaRate,
             'iva' => $sub * $ivaRate,
             'total' => $sub * (1 + $ivaRate),
-            'calc_mode' => $usaSegmentos ? 'SEGMENTOS' : 'FIJO',
+            'calc_mode' => $esMultiServicio ? 'MULTI_SERVICIO' : ($usaSegmentos ? 'SEGMENTOS' : 'FIJO'),
         ];
 
         // Precios unitarios por tamaño para vista de desglose (flujo diferido)
@@ -924,6 +1164,76 @@ class OrdenController extends Controller
         $faltanteSum      = (int)$orden->items->sum(function($i){ return (int)($i->faltantes ?? 0); });
         $totalVigente     = (int)$orden->items->sum('cantidad_planeada');
 
+        // Información de servicios multi-servicio con tamaños
+        $serviciosConTamanos = [];
+        $preciosPorServicio = [];
+        
+        if ($orden->otServicios()->exists()) {
+            $pricing = app(\App\Domain\Servicios\PricingService::class);
+            
+            \Log::info('=== DEBUG SERVICIOS CON TAMAÑOS ===', [
+                'orden_id' => $orden->id,
+                'centro_trabajo' => $orden->id_centrotrabajo,
+                'total_servicios' => $orden->otServicios->count(),
+            ]);
+            
+            foreach ($orden->otServicios as $otServicio) {
+                \Log::info('Procesando servicio', [
+                    'ot_servicio_id' => $otServicio->id,
+                    'servicio_id' => $otServicio->servicio_id,
+                    'cantidad' => $otServicio->cantidad,
+                ]);
+                
+                $usaTamanos = \App\Models\ServicioCentro::where('id_centrotrabajo', $orden->id_centrotrabajo)
+                    ->where('id_servicio', $otServicio->servicio_id)
+                    ->whereHas('tamanos')
+                    ->exists();
+                
+                \Log::info('Verificación de tamaños', [
+                    'servicio_id' => $otServicio->servicio_id,
+                    'usa_tamanos' => $usaTamanos,
+                ]);
+                
+                // Verificar si tiene items con tamaños ya definidos
+                // Si tiene items pero todos tienen tamano=null, entonces está pendiente
+                $totalItems = $otServicio->items()->count();
+                $itemsConTamano = $otServicio->items()->whereNotNull('tamano')->count();
+                $tieneTamanosDefinidos = $totalItems > 0 && $itemsConTamano > 0;
+                
+                \Log::info('Items del servicio', [
+                    'total_items' => $totalItems,
+                    'items_con_tamano' => $itemsConTamano,
+                    'tiene_tamanos_definidos' => $tieneTamanosDefinidos,
+                ]);
+                
+                if ($usaTamanos) {
+                    $serviciosConTamanos[$otServicio->id] = [
+                        'usa_tamanos' => true,
+                        'pendiente_definir' => !$tieneTamanosDefinidos,
+                        'cantidad_total' => $otServicio->cantidad,
+                    ];
+                    
+                    // Obtener precios por tamaño para este servicio
+                    $preciosPorServicio[$otServicio->id] = [
+                        'chico'   => (float)$pricing->precioUnitario($orden->id_centrotrabajo, $otServicio->servicio_id, 'chico'),
+                        'mediano' => (float)$pricing->precioUnitario($orden->id_centrotrabajo, $otServicio->servicio_id, 'mediano'),
+                        'grande'  => (float)$pricing->precioUnitario($orden->id_centrotrabajo, $otServicio->servicio_id, 'grande'),
+                        'jumbo'   => (float)$pricing->precioUnitario($orden->id_centrotrabajo, $otServicio->servicio_id, 'jumbo'),
+                    ];
+                    
+                    \Log::info('Servicio con tamaños agregado', [
+                        'ot_servicio_id' => $otServicio->id,
+                        'info' => $serviciosConTamanos[$otServicio->id],
+                    ]);
+                }
+            }
+            
+            \Log::info('=== RESULTADO FINAL ===', [
+                'servicios_con_tamanos' => $serviciosConTamanos,
+                'count' => count($serviciosConTamanos),
+            ]);
+        }
+
         return Inertia::render('Ordenes/Show', [
             'orden'       => $orden,
             'can'         => [
@@ -932,6 +1242,7 @@ class OrdenController extends Controller
                 'calidad_validar'    => $canCalidad,
                 'cliente_autorizar'  => $canClienteAutorizar,
                 'facturar'           => $canFacturar,
+                'definir_tamanos'    => Gate::allows('definirTamanos', $orden),
             ],
             'debug' => [
                 'orden_team_leader_id' => (int)$orden->team_leader_id,
@@ -964,6 +1275,8 @@ class OrdenController extends Controller
             ],
             'flags' => [ 'pendiente_tamanos' => $pendienteTamanos ],
             'precios_tamano' => $preciosTamaño,
+            'servicios_con_tamanos' => $serviciosConTamanos,
+            'precios_por_servicio' => $preciosPorServicio,
         ]);
     }
 
@@ -1065,6 +1378,115 @@ class OrdenController extends Controller
         });
 
         return back()->with('ok','Desglose por tamaños aplicado correctamente');
+    }
+
+    /** Definir tamaños para un servicio específico en OT multi-servicio */
+    public function definirTamanosServicio(Request $req, Orden $orden, int $servicio)
+    {
+        $this->authorize('definirTamanos', $orden);
+        $this->authorizeFromCentro($orden->id_centrotrabajo, $orden);
+
+        // Buscar el servicio manualmente
+        $servicio = \App\Models\OTServicio::findOrFail($servicio);
+        
+        // Verificar que el servicio pertenece a esta OT
+        if ($servicio->ot_id !== $orden->id) {
+            abort(422, 'El servicio no pertenece a esta OT.');
+        }
+
+        // Verificar que el servicio usa tamaños
+        $usaTamanos = \App\Models\ServicioCentro::where('id_centrotrabajo', $orden->id_centrotrabajo)
+            ->where('id_servicio', $servicio->servicio_id)
+            ->whereHas('tamanos')
+            ->exists();
+
+        if (!$usaTamanos) {
+            return back()->withErrors(['tamanos' => 'Este servicio no usa tamaños.']);
+        }
+
+        // Verificar si ya tiene items con tamaños definidos
+        if ($servicio->items()->whereNotNull('tamano')->count() > 0) {
+            return back()->withErrors(['tamanos' => 'Este servicio ya tiene tamaños definidos.']);
+        }
+
+        $data = $req->validate([
+            'chico'   => ['nullable','integer','min:0'],
+            'mediano' => ['nullable','integer','min:0'],
+            'grande'  => ['nullable','integer','min:0'],
+            'jumbo'   => ['nullable','integer','min:0'],
+        ]);
+
+        $cantidades = [
+            'chico'   => (int)($data['chico'] ?? 0),
+            'mediano' => (int)($data['mediano'] ?? 0),
+            'grande'  => (int)($data['grande'] ?? 0),
+            'jumbo'   => (int)($data['jumbo'] ?? 0),
+        ];
+        $suma = array_sum($cantidades);
+        
+        // La suma debe ser igual a la cantidad del servicio
+        $totalServicio = (int)$servicio->cantidad;
+        if ($suma !== $totalServicio) {
+            return back()->withErrors(['tamanos' => "La suma ($suma) debe ser igual a la cantidad del servicio ($totalServicio)."]);
+        }
+
+        DB::transaction(function () use ($orden, $servicio, $cantidades) {
+            // Reemplazar items del servicio
+            $servicio->items()->delete();
+
+            // Obtener precios por tamaño del catálogo
+            $pricing = app(\App\Domain\Servicios\PricingService::class);
+            $subServicio = 0.0;
+            $totalCantidad = 0;
+            $totalValorPonderado = 0;
+
+            foreach ($cantidades as $tam => $qty) {
+                if ($qty <= 0) continue;
+                
+                // Cada tamaño usa su propio precio del catálogo
+                $pu = (float)$pricing->precioUnitario($orden->id_centrotrabajo, $servicio->servicio_id, $tam);
+                $lineSub = $pu * (int)$qty;
+
+                \App\Models\OTServicioItem::create([
+                    'ot_servicio_id'    => $servicio->id,
+                    'descripcion_item'  => ucfirst($tam),
+                    'tamano'            => $tam,
+                    'planeado'          => (int)$qty,
+                    'completado'        => 0,
+                    'precio_unitario'   => $pu,
+                    'subtotal'          => $lineSub,
+                ]);
+                
+                $subServicio += $lineSub;
+                $totalCantidad += (int)$qty;
+                $totalValorPonderado += $lineSub;
+            }
+
+            // Actualizar subtotal y precio_unitario promedio ponderado del servicio
+            $servicio->subtotal = $subServicio;
+            $servicio->precio_unitario = $totalCantidad > 0 ? ($totalValorPonderado / $totalCantidad) : 0;
+            $servicio->save();
+
+            // Recalcular totales de la OT
+            $subtotalTotal = $orden->otServicios()->sum('subtotal');
+            $ivaTotal = $subtotalTotal * 0.16;
+            $totalTotal = $subtotalTotal + $ivaTotal;
+
+            $orden->subtotal = $subtotalTotal;
+            $orden->iva = $ivaTotal;
+            $orden->total = $totalTotal;
+            $orden->total_real = $subtotalTotal;
+            $orden->save();
+
+            // Registrar actividad
+            $this->act('ordenes')
+                ->performedOn($orden)
+                ->event('definir_tamanos_servicio')
+                ->withProperties(['servicio_id' => $servicio->id, 'cantidades' => $cantidades])
+                ->log("OT #{$orden->id}: tamaños definidos para servicio #{$servicio->id}");
+        });
+
+        return back()->with('ok', 'Desglose por tamaños aplicado correctamente al servicio');
     }
 
     /** Asignar Team Leader */
