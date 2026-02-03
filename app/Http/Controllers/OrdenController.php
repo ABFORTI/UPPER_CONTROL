@@ -613,6 +613,8 @@ class OrdenController extends Controller
             
             // Si es multi-servicio, trabajar con ot_servicio_items
             if ($esMultiServicio) {
+                $totalCantidadRegistrada = 0;
+                
                 foreach ($data['items'] as $i) {
                     $item = \App\Models\OTServicioItem::where('id', $i['id_item'])
                         ->where('ot_servicio_id', $otServicio->id)
@@ -629,10 +631,42 @@ class OrdenController extends Controller
                     }
                     
                     $cantAplicada[(int)$item->id] = $addQty;
+                    $totalCantidadRegistrada += $addQty;
                     
                     // Actualizar completado
                     $item->completado += $addQty;
                     $item->save();
+                }
+                
+                // Determinar precio unitario aplicado según tarifa
+                $precioAplicado = null;
+                if ($tipoTarifa !== 'NORMAL' && $precioManual > 0) {
+                    // Tarifa EXTRA o FIN_DE_SEMANA: usar precio manual
+                    $precioAplicado = $precioManual;
+                } else {
+                    // Tarifa NORMAL: intentar obtener precio del catálogo
+                    // Para multi-servicio podríamos usar el precio_unitario del servicio o del item
+                    $precioAplicado = (float)$otServicio->precio_unitario;
+                    
+                    // Si el servicio no tiene precio, intentar con el primer item que tenga precio
+                    if ($precioAplicado <= 0) {
+                        $itemConPrecio = $otServicio->items()->where('precio_unitario', '>', 0)->first();
+                        if ($itemConPrecio) {
+                            $precioAplicado = (float)$itemConPrecio->precio_unitario;
+                        }
+                    }
+                }
+                
+                // Registrar el avance en ot_servicio_avances
+                if ($totalCantidadRegistrada > 0) {
+                    \App\Models\OTServicioAvance::create([
+                        'ot_servicio_id' => $otServicio->id,
+                        'tarifa' => $tipoTarifa,
+                        'precio_unitario_aplicado' => $precioAplicado,
+                        'cantidad_registrada' => $totalCantidadRegistrada,
+                        'comentario' => $comentarioFinal,
+                        'created_by' => Auth::id(),
+                    ]);
                 }
                 
                 // Verificar si TODOS los servicios de la OT están completados
