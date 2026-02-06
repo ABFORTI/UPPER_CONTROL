@@ -580,8 +580,8 @@ function guardarAvanceServicio(servicioId) {
             </div>
           </div>
 
-          <!-- Ítems de la OT -->
-          <div class="bg-white rounded-2xl shadow-lg border-2 border-emerald-100 overflow-hidden dark:bg-slate-900/80 dark:border-emerald-500/30">
+          <!-- Ítems de la OT - OT Tradicionales -->
+          <div v-if="items.length" class="bg-white rounded-2xl shadow-lg border-2 border-emerald-100 overflow-hidden dark:bg-slate-900/80 dark:border-emerald-500/30">
             <div class="bg-gradient-to-r from-emerald-600 to-teal-600 px-4 py-2 dark:from-emerald-500 dark:to-teal-500">
               <h2 class="text-base font-bold text-white flex items-center gap-1.5 leading-tight">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -590,8 +590,7 @@ function guardarAvanceServicio(servicioId) {
                 Ítems de la Orden
               </h2>
             </div>
-            
-            <div v-if="items.length" class="px-4 sm:px-6 py-5 space-y-5">
+            <div class="px-4 sm:px-6 py-5 space-y-5">
               <!-- Resumen de unidades -->
               <div class="flex flex-wrap gap-3">
                 <div class="px-3 py-2 bg-blue-50 border-2 border-blue-200 rounded-full text-blue-800 text-sm font-bold dark:bg-blue-500/10 dark:border-blue-500/40 dark:text-blue-200">
@@ -768,134 +767,176 @@ function guardarAvanceServicio(servicioId) {
                 </div>
               </div>
             </div>
-            <div v-else class="p-8 text-center text-gray-500 dark:text-slate-400">
-              <!-- Mostrar servicios multi-servicio -->
-              <div v-if="esMultiServicio && servicios.length > 0" class="text-left space-y-4">
-                <div v-for="(servicio, idx) in servicios" :key="servicio.id" 
-                     class="bg-gradient-to-br from-indigo-50 to-blue-50 dark:from-indigo-500/10 dark:to-blue-500/5 rounded-xl p-5 border-2 border-indigo-200 dark:border-indigo-500/30">
-                  
-                  <div class="flex items-center justify-between mb-3">
-                    <div class="flex items-center gap-3">
-                      <div class="w-10 h-10 rounded-full bg-indigo-600 text-white flex items-center justify-center font-bold text-lg">
-                        {{ idx + 1 }}
-                      </div>
-                      <div>
-                        <h4 class="font-bold text-lg text-gray-800 dark:text-slate-100">{{ servicio.servicio?.nombre || 'Servicio' }}</h4>
-                        <p class="text-sm text-gray-600 dark:text-slate-400">
-                          {{ servicio.cantidad }} unidades — {{ money(servicio.precio_unitario) }}/unidad
-                        </p>
-                      </div>
+          </div>
+          
+          <!-- Servicios Multi-Servicio -->
+          <div v-else-if="esMultiServicio && servicios.length > 0" class="space-y-6">
+            <div v-for="(servicio, idx) in servicios" :key="servicio.id" 
+                 class="bg-white rounded-2xl shadow-lg border-2 border-emerald-100 overflow-hidden dark:bg-slate-900/80 dark:border-emerald-500/30">
+              
+              <!-- Header -->
+              <div class="bg-gradient-to-r from-emerald-600 to-teal-600 px-4 py-2 dark:from-emerald-500 dark:to-teal-500">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-2">
+                    <div class="w-6 h-6 rounded-lg bg-white/20 flex items-center justify-center">
+                      <span class="text-white font-bold text-sm">{{ idx + 1 }}</span>
                     </div>
-                    <div class="text-right">
-                      <p class="text-xs text-gray-600 dark:text-slate-400">Subtotal</p>
-                      <p class="text-lg font-bold text-emerald-600 dark:text-emerald-400">{{ money(servicio.subtotal) }}</p>
+                    <h2 class="text-base font-bold text-white leading-tight">
+                      {{ servicio.servicio?.nombre || 'Servicio' }}
+                    </h2>
+                  </div>
+                  <div class="bg-white/95 rounded-lg px-2.5 py-1 shadow-sm">
+                    <p class="text-[9px] uppercase tracking-wider font-bold text-slate-500 mb-0.5">Subtotal</p>
+                    <p class="text-sm font-bold text-slate-900">{{ money(servicio.subtotal) }}</p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Contenido -->
+              <div class="px-4 sm:px-6 py-5 space-y-5">
+              
+              <!-- KPIs compactos -->
+              <div class="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+                <div class="bg-white border-l-3 border-blue-500 rounded-md p-2.5 shadow-sm dark:bg-slate-800/50 dark:border-blue-400">
+                  <p class="text-[9px] uppercase tracking-wide font-bold text-slate-500 dark:text-slate-400">Planeado</p>
+                  <p class="text-2xl font-extrabold text-slate-900 dark:text-slate-100 leading-none mt-1">{{ servicio.items?.reduce((sum, i) => sum + (i.planeado || 0), 0) || servicio.cantidad }}</p>
+                </div>
+                <div class="bg-white border-l-3 border-emerald-500 rounded-md p-2.5 shadow-sm dark:bg-slate-800/50 dark:border-emerald-400">
+                  <p class="text-[9px] uppercase tracking-wide font-bold text-slate-500 dark:text-slate-400">Completado</p>
+                  <p class="text-2xl font-extrabold text-slate-900 dark:text-slate-100 leading-none mt-1">{{ servicio.items?.reduce((sum, i) => sum + (i.completado || 0), 0) || 0 }}</p>
+                </div>
+                <div class="bg-white border-l-3 border-amber-500 rounded-md p-2.5 shadow-sm dark:bg-slate-800/50 dark:border-amber-400">
+                  <p class="text-[9px] uppercase tracking-wide font-bold text-slate-500 dark:text-slate-400">Faltante</p>
+                  <p class="text-2xl font-extrabold text-slate-900 dark:text-slate-100 leading-none mt-1">{{ (servicio.items?.reduce((sum, i) => sum + (i.planeado || 0), 0) || servicio.cantidad) - (servicio.items?.reduce((sum, i) => sum + (i.completado || 0), 0) || 0) }}</p>
+                </div>
+                <div class="bg-white border-l-3 border-indigo-500 rounded-md p-2.5 shadow-sm dark:bg-slate-800/50 dark:border-indigo-400">
+                  <p class="text-[9px] uppercase tracking-wide font-bold text-slate-500 dark:text-slate-400">Total</p>
+                  <p class="text-2xl font-extrabold text-slate-900 dark:text-slate-100 leading-none mt-1">{{ servicio.items?.reduce((sum, i) => sum + (i.planeado || 0), 0) || servicio.cantidad }}</p>
+                </div>
+              </div>
+              
+              <!-- Tabla de distribución / progreso -->
+              <div v-if="servicio.items && servicio.items.length > 0">
+                <!-- Section Header Inline -->
+                <div class="flex items-center gap-2 mb-2 pb-2 border-b border-slate-200 dark:border-slate-700">
+                  <svg class="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+                  </svg>
+                  <h5 class="text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wide">Distribución / Progreso</h5>
+                </div>
+                <div class="overflow-x-auto rounded-md border border-slate-200 dark:border-slate-700">
+                <table class="w-full text-sm">
+                  <thead class="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700">
+                    <tr>
+                      <th class="px-3 py-2 text-left text-[9px] uppercase tracking-wider font-bold text-slate-600 dark:text-slate-300">Descripción</th>
+                      <th class="px-3 py-2 text-center text-[9px] uppercase tracking-wider font-bold text-slate-600 dark:text-slate-300">Planeado</th>
+                      <th class="px-3 py-2 text-center text-[9px] uppercase tracking-wider font-bold text-slate-600 dark:text-slate-300">Completado</th>
+                      <th class="px-3 py-2 text-center text-[9px] uppercase tracking-wider font-bold text-slate-600 dark:text-slate-300">Progreso</th>
+                      <th v-if="can?.reportarAvance" class="px-3 py-2 text-center text-[9px] uppercase tracking-wider font-bold text-slate-600 dark:text-slate-300">Registrar</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+                    <tr v-for="item in servicio.items" :key="item.id" class="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
+                      <td class="px-3 py-2">
+                        <span class="font-semibold text-slate-800 dark:text-slate-100 text-xs">{{ item.descripcion || (item.tamano ? item.tamano.toUpperCase() : 'Distribución') }}</span>
+                      </td>
+                      <td class="px-3 py-2 text-center">
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300">{{ item.planeado || 0 }}</span>
+                      </td>
+                      <td class="px-3 py-2 text-center">
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold"
+                              :class="(item.completado || 0) >= (item.planeado || 0) ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300' : 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300'">
+                          {{ item.completado || 0 }}
+                        </span>
+                      </td>
+                      <td class="px-3 py-2">
+                        <div class="flex items-center gap-2">
+                          <div class="flex-1 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                            <div class="h-full rounded-full transition-all"
+                                 :class="(item.completado || 0) >= (item.planeado || 0) ? 'bg-emerald-500' : 'bg-amber-500'"
+                                 :style="{ width: Math.min(100, ((item.completado || 0) / (item.planeado || 1)) * 100) + '%' }"></div>
+                          </div>
+                          <span class="text-[10px] font-bold text-slate-600 dark:text-slate-300 min-w-[2.5rem] text-right">
+                            {{ Math.round(((item.completado || 0) / (item.planeado || 1)) * 100) }}%
+                          </span>
+                        </div>
+                      </td>
+                      <td v-if="can?.reportarAvance" class="px-3 py-2 text-center">
+                        <input type="number" min="0" 
+                               :max="(item.planeado || 0) - (item.completado || 0)" 
+                               v-model.number="avancesMultiServicio[servicio.id].items.find(i => i.id_item === item.id).cantidad"
+                               placeholder="0"
+                               class="w-16 px-2 py-1.5 text-center text-xs font-semibold border border-slate-300 dark:border-slate-600 rounded-md focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 dark:bg-slate-900 dark:text-slate-100 transition-colors" />
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+                </div>
+              </div>
+                  
+              <!-- Sección: Registrar Avance -->
+              <div v-if="can?.reportarAvance" class="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+                <!-- Section Header Inline -->
+                <div class="flex items-center gap-2.5 pb-2.5 mb-3 border-b-2 border-slate-200 dark:border-slate-700">
+                  <svg class="w-4 h-4 text-slate-600 dark:text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                  </svg>
+                  <h4 class="font-bold text-sm text-slate-800 dark:text-slate-200 tracking-tight">Registrar Avance</h4>
+                </div>
+                
+                <div class="flex flex-col md:flex-row gap-3 items-end">
+                  <div class="flex-none w-full md:w-auto">
+                    <label class="block text-[10px] font-bold text-slate-700 dark:text-slate-300 mb-1.5 uppercase tracking-wide">Tarifa</label>
+                    <div class="relative">
+                      <select v-model="avancesMultiServicio[servicio.id].tarifa_tipo"
+                              class="w-full md:w-48 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md text-xs font-medium focus:border-emerald-500 focus:ring-1 focus:ring-emerald-200 dark:bg-slate-900 dark:text-slate-100 transition-colors bg-white appearance-none">
+                        <option value="NORMAL">NORMAL</option>
+                        <option value="EXTRA">EXTRA</option>
+                        <option value="FIN_DE_SEMANA">FIN DE SEMANA</option>
+                      </select>
+                      <svg class="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                      </svg>
+                    </div>
+                    <span v-if="avancesMultiServicio[servicio.id].tarifa_tipo !== 'NORMAL'" 
+                          class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-100 text-orange-800 dark:bg-orange-500/20 dark:text-orange-300 mt-1.5">
+                      Tarifa {{ avancesMultiServicio[servicio.id].tarifa_tipo }}
+                    </span>
+                  </div>
+                  <div v-if="avancesMultiServicio[servicio.id].tarifa_tipo !== 'NORMAL'" class="flex-none w-full md:w-auto">
+                    <label class="block text-[10px] font-bold text-slate-700 dark:text-slate-300 mb-1.5 uppercase tracking-wide">Precio Unitario</label>
+                    <div class="relative">
+                      <span class="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500 font-semibold text-xs">$</span>
+                      <input type="number" step="0.01" min="0"
+                             v-model.number="avancesMultiServicio[servicio.id].precio_unitario_manual"
+                             placeholder="12.50"
+                             class="w-full md:w-32 pl-7 pr-3 py-2 border-2 rounded-md text-xs font-semibold transition-all
+                                    border-orange-300 dark:border-orange-600 
+                                    focus:border-orange-500 focus:ring-1 focus:ring-orange-200 
+                                    dark:bg-slate-900 dark:text-slate-100 bg-white" />
                     </div>
                   </div>
-                  
-                  <!-- Badges de progreso -->
-                  <div class="grid grid-cols-4 gap-2 mb-4">
-                    <div class="bg-blue-50 border border-blue-200 rounded-lg p-2 dark:bg-blue-500/10 dark:border-blue-500/30">
-                      <p class="text-xs text-blue-600 font-semibold dark:text-blue-300">PLANEADO</p>
-                      <p class="text-xl font-bold text-blue-800 dark:text-blue-200">{{ servicio.items?.reduce((sum, i) => sum + (i.planeado || 0), 0) || servicio.cantidad }}</p>
-                    </div>
-                    <div class="bg-emerald-50 border border-emerald-200 rounded-lg p-2 dark:bg-emerald-500/10 dark:border-emerald-500/30">
-                      <p class="text-xs text-emerald-600 font-semibold dark:text-emerald-300">COMPLETADO</p>
-                      <p class="text-xl font-bold text-emerald-800 dark:text-emerald-200">{{ servicio.items?.reduce((sum, i) => sum + (i.completado || 0), 0) || 0 }}</p>
-                    </div>
-                    <div class="bg-orange-50 border border-orange-200 rounded-lg p-2 dark:bg-orange-500/10 dark:border-orange-500/30">
-                      <p class="text-xs text-orange-600 font-semibold dark:text-orange-300">FALTANTE</p>
-                      <p class="text-xl font-bold text-orange-800 dark:text-orange-200">{{ (servicio.items?.reduce((sum, i) => sum + (i.planeado || 0), 0) || servicio.cantidad) - (servicio.items?.reduce((sum, i) => sum + (i.completado || 0), 0) || 0) }}</p>
-                    </div>
-                    <div class="bg-indigo-50 border border-indigo-200 rounded-lg p-2 dark:bg-indigo-500/10 dark:border-indigo-500/30">
-                      <p class="text-xs text-indigo-600 font-semibold dark:text-indigo-300">TOTAL</p>
-                      <p class="text-xl font-bold text-indigo-800 dark:text-indigo-200">{{ servicio.items?.reduce((sum, i) => sum + (i.planeado || 0), 0) || servicio.cantidad }}</p>
-                    </div>
+                  <div class="flex-1 w-full">
+                    <label class="block text-[10px] font-bold text-slate-700 dark:text-slate-300 mb-1.5 uppercase tracking-wide">Comentario (opcional)</label>
+                    <textarea v-model="avancesMultiServicio[servicio.id].comentario" rows="2"
+                              placeholder="Describe el progreso..."
+                              class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-200 dark:bg-slate-900 dark:text-slate-100 transition-colors bg-white resize-none"></textarea>
                   </div>
-                  
-                  <!-- Tabla de items del servicio -->
-                  <div v-if="servicio.items && servicio.items.length > 0" class="bg-white dark:bg-slate-800/50 rounded-lg border border-indigo-100 dark:border-indigo-500/20 overflow-hidden">
-                    <table class="w-full text-sm">
-                      <thead class="bg-indigo-50 dark:bg-indigo-500/10">
-                        <tr>
-                          <th class="px-3 py-2 text-left text-xs font-semibold text-indigo-700 dark:text-indigo-300">DESCRIPCIÓN</th>
-                          <th class="px-3 py-2 text-center text-xs font-semibold text-indigo-700 dark:text-indigo-300">PLANEADO</th>
-                          <th class="px-3 py-2 text-center text-xs font-semibold text-indigo-700 dark:text-indigo-300">COMPLETADO</th>
-                          <th class="px-3 py-2 text-center text-xs font-semibold text-indigo-700 dark:text-indigo-300">PROGRESO</th>
-                          <th v-if="can?.reportarAvance" class="px-3 py-2 text-center text-xs font-semibold text-indigo-700 dark:text-indigo-300">REGISTRAR</th>
-                        </tr>
-                      </thead>
-                      <tbody class="divide-y divide-indigo-100 dark:divide-indigo-500/20">
-                        <tr v-for="item in servicio.items" :key="item.id" class="hover:bg-indigo-50/50 dark:hover:bg-indigo-500/5">
-                          <td class="px-3 py-2">
-                            <div class="flex items-center gap-2">
-                              <svg class="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                              </svg>
-                              <span class="font-medium text-gray-700 dark:text-slate-200">{{ item.descripcion || (item.tamano ? item.tamano.toUpperCase() : 'Distribución') }}</span>
-                            </div>
-                          </td>
-                          <td class="px-3 py-2 text-center">
-                            <span class="inline-flex px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-bold dark:bg-blue-500/20 dark:text-blue-200">{{ item.planeado || 0 }}</span>
-                          </td>
-                          <td class="px-3 py-2 text-center">
-                            <span class="inline-flex px-2 py-1 rounded-full text-xs font-bold"
-                                  :class="(item.completado || 0) >= (item.planeado || 0) ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-200' : 'bg-orange-100 text-orange-800 dark:bg-orange-500/20 dark:text-orange-200'">
-                              {{ item.completado || 0 }}
-                            </span>
-                          </td>
-                          <td class="px-3 py-2">
-                            <div class="flex items-center gap-2">
-                              <div class="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden dark:bg-slate-700">
-                                <div class="h-full rounded-full transition-all"
-                                     :class="(item.completado || 0) >= (item.planeado || 0) ? 'bg-emerald-500' : 'bg-orange-500'"
-                                     :style="{ width: Math.min(100, ((item.completado || 0) / (item.planeado || 1)) * 100) + '%' }"></div>
-                              </div>
-                              <span class="text-xs font-semibold text-gray-600 dark:text-slate-300 w-10 text-right">{{ Math.round(((item.completado || 0) / (item.planeado || 1)) * 100) }}%</span>
-                            </div>
-                          </td>
-                          <td v-if="can?.reportarAvance" class="px-3 py-2 text-center">
-                            <input type="number" min="0" 
-                                   :max="(item.planeado || 0) - (item.completado || 0)" 
-                                   v-model.number="avancesMultiServicio[servicio.id].items.find(i => i.id_item === item.id).cantidad"
-                                   placeholder="0"
-                                   class="w-16 px-2 py-1 text-center border rounded dark:bg-slate-900 dark:border-slate-600 dark:text-slate-100 text-sm" />
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                  
-                  <!-- Formulario para registrar avances -->
-                  <div v-if="can?.reportarAvance" class="mt-4 bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl p-4 dark:from-blue-500/10 dark:to-indigo-500/10 dark:border-blue-500/30">
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-                      <div>
-                        <label class="block text-xs font-semibold text-gray-700 mb-1 dark:text-slate-200">Tarifa</label>
-                        <select v-model="avancesMultiServicio[servicio.id].tarifa_tipo"
-                                class="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-900 dark:border-slate-600 dark:text-slate-100">
-                          <option value="NORMAL">NORMAL (precio del servicio)</option>
-                          <option value="EXTRA">EXTRA</option>
-                          <option value="FIN_DE_SEMANA">FIN DE SEMANA</option>
-                        </select>
-                      </div>
-                      <div v-if="avancesMultiServicio[servicio.id].tarifa_tipo !== 'NORMAL'">
-                        <label class="block text-xs font-semibold text-gray-700 mb-1 dark:text-slate-200">Precio unitario</label>
-                        <input type="number" step="0.01" min="0"
-                               v-model.number="avancesMultiServicio[servicio.id].precio_unitario_manual"
-                               placeholder="Ej: 12.50"
-                               class="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-900 dark:border-slate-600 dark:text-slate-100" />
-                      </div>
-                    </div>
-                    <div class="mb-3">
-                      <label class="block text-xs font-semibold text-gray-700 mb-1 dark:text-slate-200">Comentario (opcional)</label>
-                      <textarea v-model="avancesMultiServicio[servicio.id].comentario" rows="2"
-                                placeholder="Describe el progreso realizado..."
-                                class="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-900 dark:border-slate-600 dark:text-slate-100"></textarea>
-                    </div>
-                    <button @click="guardarAvanceServicio(servicio.id)" type="button"
-                            class="w-full px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg transition-colors shadow-md">
-                      ✓ Guardar Avance
-                    </button>
-                  </div>
+                  <button @click="guardarAvanceServicio(servicio.id)" type="button"
+                          :disabled="avancesMultiServicio[servicio.id]?.processing"
+                          class="w-full md:w-auto md:flex-none px-6 py-2 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 disabled:bg-slate-400 disabled:cursor-not-allowed text-white font-bold text-sm rounded-md transition-colors duration-150 flex items-center justify-center gap-2 shadow-sm hover:shadow focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1">
+                    <svg v-if="!avancesMultiServicio[servicio.id]?.processing" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                    </svg>
+                    <svg v-else class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span v-if="avancesMultiServicio[servicio.id]?.processing">Guardando...</span>
+                    <span v-else>Guardar Avance</span>
+                  </button>
+                </div>
+              </div>
                   
                   <!-- Alerta si necesita definir tamaños -->
                   <div v-if="can?.definir_tamanos && serviciosConTamanos[servicio.id]?.pendiente_definir" 
@@ -917,16 +958,65 @@ function guardarAvanceServicio(servicioId) {
                     </div>
                   </div>
                   
-                </div>
-              </div>
+                  <!-- Avances Registrados (Historial) -->
+                  <div v-if="servicio.avances && servicio.avances.length > 0" class="mt-6 rounded-lg overflow-hidden border border-purple-200 dark:border-purple-700/40 shadow-sm">
+                    <div class="px-5 py-3 bg-gradient-to-r from-purple-500 to-fuchsia-500 dark:from-purple-600 dark:to-fuchsia-600">
+                      <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                          <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+                          </svg>
+                          <h3 class="text-sm font-bold text-white tracking-tight">Avances Registrados</h3>
+                        </div>
+                        <span class="text-xs text-purple-100 font-semibold">{{ servicio.avances.length }} registro(s)</span>
+                      </div>
+                    </div>
+                    
+                    <div class="p-4 bg-white dark:bg-slate-900/50 space-y-2.5">
+                      <div v-for="avance in servicio.avances" :key="avance.id"
+                           class="bg-slate-50 border border-slate-200 rounded-md p-3 hover:border-slate-300 transition-colors dark:bg-slate-800/30 dark:border-slate-700 dark:hover:border-slate-600">
+                        <div class="flex items-start justify-between">
+                          <div class="flex-1">
+                            <div class="flex items-center gap-2 mb-2 flex-wrap">
+                              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold"
+                                    :class="avance.tarifa === 'NORMAL' ? 'bg-blue-100 text-blue-800 dark:bg-blue-500/20 dark:text-blue-300' : 
+                                            avance.tarifa === 'EXTRA' ? 'bg-orange-100 text-orange-800 dark:bg-orange-500/20 dark:text-orange-300' : 
+                                            'bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-300'">
+                                {{ avance.tarifa || 'NORMAL' }}
+                              </span>
+                              <span class="text-[10px] text-slate-500 dark:text-slate-400">{{ new Date(avance.created_at).toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) }}</span>
+                              <span class="text-[10px] text-slate-500 dark:text-slate-400">• {{ avance.created_by?.name || 'Usuario' }}</span>
+                            </div>
+                            <div class="text-xs text-slate-700 dark:text-slate-300 flex items-center gap-3">
+                              <span><strong class="font-semibold">Cant:</strong> {{ avance.cantidad_registrada }}</span>
+                              <span v-if="avance.precio_unitario_aplicado">
+                                <strong class="font-semibold">P.U.:</strong> 
+                                <span class="font-mono">${{ parseFloat(avance.precio_unitario_aplicado).toFixed(2) }}</span>
+                              </span>
+                              <span v-if="avance.tarifa !== 'NORMAL'" class="text-[10px] text-orange-600 dark:text-orange-400 font-semibold">
+                                [Tarifa {{ avance.tarifa }}: ${{ parseFloat(avance.precio_unitario_aplicado).toFixed(2) }}]
+                              </span>
+                            </div>
+                            <p v-if="avance.comentario" class="text-xs text-slate-600 mt-2 p-1.5 bg-white rounded border-l-2 border-purple-400 dark:bg-slate-900/30 dark:text-slate-400 dark:border-purple-500">
+                              {{ avance.comentario }}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
               
-              <!-- Mensaje si no hay items ni servicios -->
-              <div v-else>
-                <svg class="w-16 h-16 mx-auto mb-4 text-gray-300 dark:text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/>
-                </svg>
-                <p class="dark:text-slate-200">No hay ítems registrados</p>
               </div>
+            </div>
+          </div>
+              
+          <!-- Mensaje si no hay items ni servicios -->
+          <div v-else class="bg-white rounded-2xl shadow-lg border-2 border-gray-200 overflow-hidden dark:bg-slate-900/80 dark:border-slate-700">
+            <div class="p-8 text-center text-gray-500 dark:text-slate-400">
+              <svg class="w-16 h-16 mx-auto mb-4 text-gray-300 dark:text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/>
+              </svg>
+              <p class="dark:text-slate-200">No hay ítems registrados</p>
             </div>
           </div>
 
