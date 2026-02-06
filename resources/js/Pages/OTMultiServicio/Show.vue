@@ -98,85 +98,100 @@ const estatusConfig = computed(() => {
         </div>
       </div>
 
-      <!-- Servicios (Cards) -->
+      <!-- Servicios (Cards) - Sin card contenedora -->
       <div class="space-y-6">
         <div v-for="(servicio, index) in servicios" :key="servicio.id"
-             class="bg-white rounded-2xl shadow-lg border-2 border-gray-200 overflow-hidden dark:bg-slate-900/75 dark:border-slate-700">
+             class="bg-white rounded-2xl shadow-md border border-slate-200 overflow-hidden dark:bg-slate-900/75 dark:border-slate-700">
           
-          <!-- Header del Servicio -->
-          <div class="bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-4">
-            <div class="flex items-center justify-between">
-              <div>
-                <h2 class="text-2xl font-bold text-white flex items-center gap-2">
-                  <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <!-- Header del Servicio - Compacto -->
+          <div class="bg-gradient-to-br from-emerald-600 via-emerald-600 to-emerald-700 px-5 py-3 border-b border-emerald-700/30">
+            <div class="flex items-center justify-between gap-4">
+              <div class="flex items-center gap-2.5 flex-1 min-w-0">
+                <div class="w-7 h-7 rounded-lg bg-white/20 backdrop-blur-sm flex items-center justify-center flex-shrink-0">
+                  <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
                   </svg>
-                  {{ servicio.servicio.nombre }}
-                </h2>
-                <p class="text-emerald-100 text-sm mt-1">
-                  Servicio #{{ index + 1 }} • {{ servicio.tipo_cobro }} • {{ servicio.cantidad }} unidades
-                </p>
+                </div>
+                <div class="flex-1 min-w-0">
+                  <h2 class="text-lg font-bold text-white tracking-tight truncate">
+                    {{ servicio.servicio.nombre }}
+                  </h2>
+                  <p class="text-emerald-50/90 text-xs">
+                    #{{ index + 1 }} • {{ servicio.tipo_cobro }} • {{ servicio.cantidad }} u
+                  </p>
+                </div>
               </div>
-              <div class="text-right">
-                <span class="block text-emerald-100 text-sm">Subtotal</span>
-                <span class="block text-3xl font-bold text-white">${{ parseFloat(servicio.subtotal || 0).toFixed(2) }}</span>
+              <div class="bg-white/95 backdrop-blur-sm rounded-lg px-3 py-1.5 shadow-sm flex-shrink-0">
+                <p class="text-[9px] uppercase tracking-wider font-bold text-slate-500 mb-0.5">Subtotal</p>
+                <p class="text-base font-bold text-slate-900">${{ parseFloat(servicio.subtotal || 0).toFixed(2) }}</p>
               </div>
             </div>
           </div>
 
-          <!-- Métricas del Servicio -->
-          <div class="px-6 py-4 bg-emerald-50 border-b border-emerald-100 dark:bg-emerald-900/20 dark:border-emerald-500/40">
-            <div class="grid grid-cols-4 gap-4">
-              <div class="text-center">
-                <span class="block text-xs font-semibold text-emerald-700 uppercase tracking-wide dark:text-emerald-300">Planeado</span>
-                <p class="text-2xl font-bold text-emerald-800 dark:text-emerald-200">{{ servicio.planeado }}</p>
+          <!-- Métricas del Servicio - Mini Stat Tiles -->
+          <div class="px-5 py-3 bg-slate-50/50 border-b border-slate-200 dark:bg-slate-900/30 dark:border-slate-700">
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+              <!-- Planeado -->
+              <div class="bg-white border-l-3 border-blue-500 rounded-md p-2.5 shadow-sm dark:bg-slate-800/50 dark:border-blue-400">
+                <p class="text-[9px] uppercase tracking-wide font-bold text-slate-500 dark:text-slate-400">Planeado</p>
+                <p class="text-2xl font-extrabold text-slate-900 dark:text-slate-100 leading-none mt-1">{{ servicio.planeado }}</p>
               </div>
-              <div class="text-center">
-                <span class="block text-xs font-semibold text-blue-700 uppercase tracking-wide dark:text-blue-300">Completado</span>
-                <p class="text-2xl font-bold text-blue-800 dark:text-blue-200">{{ servicio.completado }}</p>
+              <!-- Completado -->
+              <div class="bg-white border-l-3 border-emerald-500 rounded-md p-2.5 shadow-sm dark:bg-slate-800/50 dark:border-emerald-400">
+                <p class="text-[9px] uppercase tracking-wide font-bold text-slate-500 dark:text-slate-400">Completado</p>
+                <p class="text-2xl font-extrabold text-slate-900 dark:text-slate-100 leading-none mt-1">{{ servicio.completado }}</p>
               </div>
-              <div class="text-center">
-                <span class="block text-xs font-semibold text-red-700 uppercase tracking-wide dark:text-red-300">Faltante</span>
-                <p class="text-2xl font-bold text-red-800 dark:text-red-200">{{ servicio.faltante }}</p>
+              <!-- Faltante -->
+              <div class="bg-white border-l-3 border-amber-500 rounded-md p-2.5 shadow-sm dark:bg-slate-800/50 dark:border-amber-400">
+                <p class="text-[9px] uppercase tracking-wide font-bold text-slate-500 dark:text-slate-400">Faltante</p>
+                <p class="text-2xl font-extrabold text-slate-900 dark:text-slate-100 leading-none mt-1">{{ servicio.faltante }}</p>
               </div>
-              <div class="text-center">
-                <span class="block text-xs font-semibold text-purple-700 uppercase tracking-wide dark:text-purple-300">Progreso</span>
-                <p class="text-2xl font-bold text-purple-800 dark:text-purple-200">{{ calcularPorcentaje(servicio) }}%</p>
+              <!-- Progreso -->
+              <div class="bg-white border-l-3 border-indigo-500 rounded-md p-2.5 shadow-sm dark:bg-slate-800/50 dark:border-indigo-400">
+                <p class="text-[9px] uppercase tracking-wide font-bold text-slate-500 dark:text-slate-400">Progreso</p>
+                <div class="flex items-center gap-2 mt-1">
+                  <p class="text-2xl font-extrabold text-slate-900 dark:text-slate-100 leading-none">{{ calcularPorcentaje(servicio) }}%</p>
+                  <div class="flex-1 h-1.5 bg-slate-200 rounded-full overflow-hidden dark:bg-slate-700">
+                    <div class="bg-gradient-to-r from-emerald-500 to-teal-500 h-full transition-all duration-500"
+                         :style="{ width: calcularPorcentaje(servicio) + '%' }"></div>
+                  </div>
+                </div>
               </div>
-            </div>
-
-            <!-- Barra de Progreso -->
-            <div class="mt-4 bg-gray-200 rounded-full h-3 overflow-hidden dark:bg-slate-700">
-              <div class="bg-gradient-to-r from-emerald-500 to-teal-500 h-full transition-all duration-500"
-                   :style="{ width: calcularPorcentaje(servicio) + '%' }"></div>
             </div>
           </div>
 
           <!-- Ítems de la Orden -->
-          <div class="p-6 border-b border-gray-200 dark:border-slate-700">
-            <h3 class="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2 dark:text-slate-100">
-              <svg class="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-700">
+            <!-- Section Header Inline -->
+            <div class="flex items-center gap-2 mb-3 pb-2 border-b border-slate-200 dark:border-slate-700">
+              <svg class="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
               </svg>
-              Ítems de la Orden
-            </h3>
+              <h3 class="text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wide">Ítems de la Orden</h3>
+            </div>
             
-            <div v-if="servicio.items && servicio.items.length > 0" class="overflow-x-auto">
+            <div v-if="servicio.items && servicio.items.length > 0" class="overflow-x-auto rounded-md border border-slate-200 dark:border-slate-700">
               <table class="w-full">
                 <thead>
-                  <tr class="bg-gray-100 dark:bg-slate-800">
-                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide dark:text-slate-300">Descripción</th>
-                    <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wide dark:text-slate-300">Planeado</th>
-                    <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wide dark:text-slate-300">Completado</th>
-                    <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wide dark:text-slate-300">Faltante</th>
+                  <tr class="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700">
+                    <th class="px-3 py-2 text-left text-[9px] font-bold text-slate-600 uppercase tracking-wider dark:text-slate-300">Descripción</th>
+                    <th class="px-3 py-2 text-center text-[9px] font-bold text-slate-600 uppercase tracking-wider dark:text-slate-300">Planeado</th>
+                    <th class="px-3 py-2 text-center text-[9px] font-bold text-slate-600 uppercase tracking-wider dark:text-slate-300">Completado</th>
+                    <th class="px-3 py-2 text-center text-[9px] font-bold text-slate-600 uppercase tracking-wider dark:text-slate-300">Faltante</th>
                   </tr>
                 </thead>
-                <tbody class="divide-y divide-gray-200 dark:divide-slate-700">
-                  <tr v-for="item in servicio.items" :key="item.id" class="hover:bg-gray-50 dark:hover:bg-slate-800/50">
-                    <td class="px-4 py-3 text-sm text-gray-800 dark:text-slate-200">{{ item.descripcion_item }}</td>
-                    <td class="px-4 py-3 text-center text-sm font-semibold text-emerald-700 dark:text-emerald-300">{{ item.planeado }}</td>
-                    <td class="px-4 py-3 text-center text-sm font-semibold text-blue-700 dark:text-blue-300">{{ item.completado }}</td>
-                    <td class="px-4 py-3 text-center text-sm font-semibold text-red-700 dark:text-red-300">{{ item.faltante }}</td>
+                <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+                  <tr v-for="item in servicio.items" :key="item.id" class="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
+                    <td class="px-3 py-2 text-sm font-medium text-slate-800 dark:text-slate-200">{{ item.descripcion_item }}</td>
+                    <td class="px-3 py-2 text-center">
+                      <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300">{{ item.planeado }}</span>
+                    </td>
+                    <td class="px-3 py-2 text-center">
+                      <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">{{ item.completado }}</span>
+                    </td>
+                    <td class="px-3 py-2 text-center">
+                      <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">{{ item.faltante }}</span>
+                    </td>
                   </tr>
                 </tbody>
               </table>
@@ -190,34 +205,39 @@ const estatusConfig = computed(() => {
           </div>
 
           <!-- Avances Registrados -->
-          <div class="p-6">
-            <h3 class="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2 dark:text-slate-100">
-              <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div class="px-5 py-4">
+            <!-- Section Header Inline -->
+            <div class="flex items-center gap-2 mb-3 pb-2 border-b border-slate-200 dark:border-slate-700">
+              <svg class="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
               </svg>
-              Avances Registrados
-            </h3>
+              <h3 class="text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wide">Avances Registrados</h3>
+            </div>
 
-            <div v-if="servicio.avances && servicio.avances.length > 0" class="space-y-3">
+            <div v-if="servicio.avances && servicio.avances.length > 0" class="space-y-2.5">
               <div v-for="avance in servicio.avances" :key="avance.id"
-                   class="bg-gray-50 border border-gray-200 rounded-lg p-4 dark:bg-slate-800/50 dark:border-slate-700">
+                   class="bg-slate-50 border border-slate-200 rounded-md p-3 hover:border-slate-300 transition-colors dark:bg-slate-800/30 dark:border-slate-700 dark:hover:border-slate-600">
                 <div class="flex items-start justify-between">
                   <div class="flex-1">
-                    <div class="flex items-center gap-3 mb-2">
-                      <span class="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-bold dark:bg-blue-900/40 dark:text-blue-200">
-                        {{ avance.tarifa || 'Normal' }}
+                    <div class="flex items-center gap-2 mb-2">
+                      <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold"
+                            :class="avance.tarifa === 'NORMAL' ? 'bg-blue-100 text-blue-800 dark:bg-blue-500/20 dark:text-blue-300' : 
+                                    avance.tarifa === 'EXTRA' ? 'bg-orange-100 text-orange-800 dark:bg-orange-500/20 dark:text-orange-300' : 
+                                    'bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-300'">
+                        {{ avance.tarifa || 'NORMAL' }}
                       </span>
-                      <span class="text-sm text-gray-600 dark:text-slate-400">{{ avance.created_at }}</span>
-                      <span class="text-sm text-gray-600 dark:text-slate-400">por {{ avance.created_by }}</span>
+                      <span class="text-[10px] text-slate-500 dark:text-slate-400">{{ avance.created_at }}</span>
+                      <span class="text-[10px] text-slate-500 dark:text-slate-400">• {{ avance.created_by }}</span>
                     </div>
-                    <div class="text-sm text-gray-700 dark:text-slate-300">
-                      <span class="font-semibold">Cantidad registrada:</span> {{ avance.cantidad_registrada }}
-                      <span v-if="avance.precio_unitario_aplicado" class="ml-4">
-                        <span class="font-semibold">Precio aplicado:</span> ${{ parseFloat(avance.precio_unitario_aplicado).toFixed(2) }}
+                    <div class="text-xs text-slate-700 dark:text-slate-300 flex items-center gap-3">
+                      <span><strong class="font-semibold">Cant:</strong> {{ avance.cantidad_registrada }}</span>
+                      <span v-if="avance.precio_unitario_aplicado">
+                        <strong class="font-semibold">P.U.:</strong> 
+                        <span class="font-mono">${{ parseFloat(avance.precio_unitario_aplicado).toFixed(2) }}</span>
                       </span>
                     </div>
-                    <p v-if="avance.comentario" class="text-sm text-gray-600 mt-2 dark:text-slate-400">
-                      💬 {{ avance.comentario }}
+                    <p v-if="avance.comentario" class="text-xs text-slate-600 mt-2 p-1.5 bg-white rounded border-l-2 border-blue-400 dark:bg-slate-900/30 dark:text-slate-400 dark:border-blue-500">
+                      {{ avance.comentario }}
                     </p>
                   </div>
                 </div>
@@ -230,15 +250,15 @@ const estatusConfig = computed(() => {
               <p>No hay avances registrados</p>
             </div>
 
-            <!-- TODO: Botón para registrar nuevo avance -->
-            <div class="mt-4">
+            <!-- Botón para registrar nuevo avance -->
+            <div class="mt-4 flex justify-end">
               <button type="button"
-                      class="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold rounded-xl hover:from-blue-700 hover:to-indigo-700 transition-all duration-200 transform hover:scale-[1.01] shadow-md">
+                      class="w-full md:w-auto py-2.5 px-5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-semibold text-sm rounded-lg transition-colors duration-150 shadow-sm hover:shadow-md focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2">
                 <span class="flex items-center justify-center gap-2">
-                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
                   </svg>
-                  Registrar Avance en este Servicio
+                  <span>Registrar Avance</span>
                 </span>
               </button>
             </div>

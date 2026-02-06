@@ -75,13 +75,23 @@ class OTServicio extends Model
 
     /**
      * Boot para calcular subtotal automáticamente
+     * NOTA: Solo calcula subtotal si no ha sido establecido manualmente
+     * Para servicios con avances, el subtotal se calcula desde el controller
      */
     protected static function boot()
     {
         parent::boot();
 
         static::saving(function ($model) {
-            $model->subtotal = $model->cantidad * $model->precio_unitario;
+            // NO calcular subtotal automático si ya tiene avances registrados
+            // El subtotal debe venir de la suma de los avances
+            $tieneAvances = \App\Models\OTServicioAvance::where('ot_servicio_id', $model->id)->exists();
+            
+            if (!$tieneAvances) {
+                // Solo para servicios nuevos sin avances, calcular subtotal inicial
+                $model->subtotal = $model->cantidad * $model->precio_unitario;
+            }
+            // Si tiene avances, NO tocar el subtotal - viene del controller
         });
     }
 }

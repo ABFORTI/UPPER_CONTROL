@@ -531,10 +531,13 @@ class OrdenController extends Controller
         }
 
         // Log de entrada para diagnóstico en prod (no contiene archivos)
-    Log::info('RegistrarAvance: payload recibido', [
+        $invocationId = uniqid('invoke_', true);
+        Log::info('🔵 INICIO registrarAvance', [
+            'invocation_id' => $invocationId,
             'orden_id' => $orden->id,
             'user_id'  => optional($req->user())->id,
             'items'    => $req->input('items'),
+            'timestamp' => now()->format('Y-m-d H:i:s.u'),
         ]);
 
         // Detectar si es OT multi-servicio ANTES de validar
@@ -607,7 +610,7 @@ class OrdenController extends Controller
 
         $justCompleted = false;
         try {
-        DB::transaction(function () use ($orden, $data, $req, &$justCompleted, $tipoTarifa, $precioManual, $comentarioFinal, $esMultiServicio, $otServicio) {
+        DB::transaction(function () use ($orden, $data, $req, &$justCompleted, $tipoTarifa, $precioManual, $comentarioFinal, $esMultiServicio, $otServicio, $invocationId) {
             $pricing = app(\App\Domain\Servicios\PricingService::class);
             $cantAplicada = [];
             
@@ -657,15 +660,120 @@ class OrdenController extends Controller
                     }
                 }
                 
+                Log::info('RegistrarAvance Multi-Servicio: precio calculado', [
+                    'orden_id' => $orden->id,
+                    'servicio_id' => $otServicio->id,
+                    'tarifa' => $tipoTarifa,
+                    'precio_manual' => $precioManual,
+                    'precio_aplicado' => $precioAplicado,
+                    'cantidad_registrada' => $totalCantidadRegistrada,
+                ]);
+                
                 // Registrar el avance en ot_servicio_avances
                 if ($totalCantidadRegistrada > 0) {
-                    \App\Models\OTServicioAvance::create([
-                        'ot_servicio_id' => $otServicio->id,
+                    // Obtener request_id del frontend (para idempotencia)
+                    $requestId = $req->input('_request_id');
+                    
+                    if (empty($requestId)) {
+                        // Si no viene request_id, generar uno (fallback)
+                        $requestId = uniqid("{$otServicio->id}_", true);
+                        Log::warning('⚠️ Request sin _request_id, generando uno', [
+                            'invocation_id' => $invocationId,
+                            'generated_request_id' => $requestId,
+                        ]);
+                    }
+                    
+                    Log::info('🔥 JUSTO ANTES de firstOrCreate()', [
+                        'invocation_id' => $invocationId,
+                        'request_id' => $requestId,
+                        'servicio_id' => $otServicio->id,
                         'tarifa' => $tipoTarifa,
-                        'precio_unitario_aplicado' => $precioAplicado,
-                        'cantidad_registrada' => $totalCantidadRegistrada,
-                        'comentario' => $comentarioFinal,
-                        'created_by' => Auth::id(),
+                        'cantidad' => $totalCantidadRegistrada,
+                        'timestamp' => now()->format('Y-m-d H:i:s.u'),
+                    ]);
+                    
+                    // Usar firstOrCreate para idempotencia
+                    // Si el request_id ya existe, devuelve el existente sin duplicar
+                    $avanceCreado = \App\Models\OTServicioAvance::firstOrCreate(
+                        [
+                            'ot_servicio_id' => $otServicio->id,
+                            'request_id' => $requestId,
+                        ],
+                        [
+                            'tarifa' => $tipoTarifa,
+                            'precio_unitario_aplicado' => $precioAplicado,
+                            'cantidad_registrada' => $totalCantidadRegistrada,
+                            'comentario' => $comentarioFinal,
+                            'created_by' => Auth::id(),
+                        ]
+                    );
+                    
+                    $wasRecentlyCreated = $avanceCreado->wasRecentlyCreated;
+                    
+                    Log::info('✅ Avance procesado', [
+                        'invocation_id' => $invocationId,
+                        'request_id' => $requestId,
+                        'avance_id' => $avanceCreado->id,
+                        'was_recently_created' => $wasRecentlyCreated,
+                        'servicio_id' => $otServicio->id,
+                        'tarifa' => $tipoTarifa,
+                        'cantidad' => $totalCantidadRegistrada,
+                        'precio' => $precioAplicado,
+                        'timestamp' => now()->format('Y-m-d H:i:s.u'),
+                    ]);
+                    
+                    if (!$wasRecentlyCreated) {
+                        Log::info('ℹ️ Request duplicado detectado por request_id - devolviendo existente', [
+                            'invocation_id' => $invocationId,
+                            'request_id' => $requestId,
+                            'avance_id' => $avanceCreado->id,
+                        ]);
+                    }
+                    
+                    // Recalcular subtotal del servicio sumando TODOS los avances (similar a segmentos tradicionales)
+                    $todosAvances = \App\Models\OTServicioAvance::where('ot_servicio_id', $otServicio->id)->get();
+                    $cantidadTotal = $todosAvances->sum('cantidad_registrada');
+                    $subtotalTotal = 0;
+                    
+                    foreach ($todosAvances as $av) {
+                        $cantidad = (int)$av->cantidad_registrada;
+                        $precio = (float)$av->precio_unitario_aplicado;
+                        $subtotalTotal += round($precio * $cantidad, 2);
+                    }
+                    
+                    Log::info('Recálculo subtotal multi-servicio', [
+                        'servicio_id' => $otServicio->id,
+                        'avances_count' => $todosAvances->count(),
+                        'cantidad_total' => $cantidadTotal,
+                        'subtotal_calculado' => $subtotalTotal,
+                        'subtotal_anterior' => $otServicio->subtotal,
+                    ]);
+                    
+                    // Actualizar servicio con subtotal recalculado
+                    // NO tocar precio_unitario original - mantener precio del catálogo
+                    $otServicio->subtotal = $subtotalTotal;
+                    $otServicio->save();
+                    
+                    Log::info('Subtotal servicio actualizado', [
+                        'servicio_id' => $otServicio->id,
+                        'nuevo_subtotal' => $otServicio->subtotal,
+                    ]);
+                    
+                    // Recalcular totales de la OT completa
+                    $subtotalOT = \App\Models\OTServicio::where('ot_id', $orden->id)->sum('subtotal');
+                    $ivaOT = round($subtotalOT * 0.16, 2);
+                    $totalOT = $subtotalOT + $ivaOT;
+                    
+                    $orden->subtotal = $subtotalOT;
+                    $orden->iva = $ivaOT;
+                    $orden->total = $totalOT;
+                    $orden->total_real = $subtotalOT;
+                    
+                    Log::info('Totales OT actualizados', [
+                        'orden_id' => $orden->id,
+                        'subtotal_ot' => $subtotalOT,
+                        'iva' => $ivaOT,
+                        'total' => $totalOT,
                     ]);
                 }
                 
@@ -867,29 +975,8 @@ class OrdenController extends Controller
                 }
             }
 
-            // Si es OT multi-servicio, registrar también en ot_servicio_avances
-            if ($esMultiServicio && !empty($data['id_servicio'])) {
-                $cantidadTotalAvance = array_sum(array_values($cantAplicada));
-                $precioUnitarioAplicado = $tipoTarifa === 'NORMAL' 
-                    ? $otServicio->precio_unitario 
-                    : ($precioManual ?? $otServicio->precio_unitario);
-                
-                \App\Models\OTServicioAvance::create([
-                    'ot_servicio_id' => $data['id_servicio'],
-                    'tarifa' => $tipoTarifa,
-                    'precio_unitario_aplicado' => $precioUnitarioAplicado,
-                    'cantidad_registrada' => $cantidadTotalAvance,
-                    'comentario' => $comentarioFinal,
-                    'created_by' => Auth::id(),
-                ]);
-                
-                Log::info('✅ Avance multi-servicio registrado', [
-                    'orden_id' => $orden->id,
-                    'ot_servicio_id' => $data['id_servicio'],
-                    'cantidad' => $cantidadTotalAvance,
-                    'tarifa' => $tipoTarifa,
-                ]);
-            }
+            // NOTA: El registro de avances multi-servicio ya se hizo más arriba con firstOrCreate()
+            // (líneas 675-776) para garantizar idempotencia. No duplicar aquí.
 
             // Registrar en activity log
             $this->act('ordenes')
@@ -1064,7 +1151,7 @@ class OrdenController extends Controller
             'evidencias' => fn($q)=>$q->with('usuario')->orderByDesc('id'),
             'otServicios.servicio', // NUEVO: Cargar servicios multi-servicio
             'otServicios.items',
-            'otServicios.avances',
+            'otServicios.avances' => fn($q) => $q->with('createdBy')->orderBy('created_at'),
         ]);
 
         // Flag per-centro: servicio con tamaños SI existe configuración de tamaños en el centro y aún no hay desglose capturado
