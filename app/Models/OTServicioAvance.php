@@ -16,6 +16,7 @@ class OTServicioAvance extends Model
         'cantidad_registrada',
         'comentario',
         'created_by',
+        'request_id',  // Para idempotencia
     ];
 
     protected $casts = [
