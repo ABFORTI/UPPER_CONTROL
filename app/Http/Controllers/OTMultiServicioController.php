@@ -244,6 +244,112 @@ class OTMultiServicioController extends Controller
     }
 
     /**
+     * Registrar faltantes para un servicio específico
+     */
+    public function registrarFaltantesServicio(\Illuminate\Http\Request $request, Orden $orden, $servicioId)
+    {
+        // Verificar autorización
+        $this->authorizeFromCentro($orden->id_centrotrabajo, $orden);
+
+        // Validar entrada
+        $data = $request->validate([
+            'items' => ['required', 'array', 'min:1'],
+            'items.*.id_item' => ['required', 'integer', 'exists:ot_servicio_items,id'],
+            'items.*.faltantes' => ['required', 'integer', 'min:0'],
+            'nota' => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        $resumen = [];
+
+        DB::transaction(function () use ($orden, $servicioId, $data, &$resumen) {
+            // Buscar el servicio
+            $otServicio = OTServicio::where('id', $servicioId)
+                ->where('ot_id', $orden->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            foreach ($data['items'] as $d) {
+                $item = OTServicioItem::where('id', $d['id_item'])
+                    ->where('ot_servicio_id', $otServicio->id)
+                    ->lockForUpdate()
+                    ->firstOrFail();
+
+                $falt = max(0, (int)$d['faltantes']);
+                $pend = max(0, (int)$item->planeado - (int)$item->completado);
+                
+                if ($falt <= 0) continue;
+                if ($falt > $pend) {
+                    $falt = $pend;
+                }
+
+                if ($falt > 0) {
+                    // Acumular faltantes y ajustar plan
+                    $nuevoPlan = (int)$item->planeado - $falt;
+                    // Nunca por debajo de lo ya completado
+                    if ($nuevoPlan < (int)$item->completado) {
+                        $nuevoPlan = (int)$item->completado;
+                    }
+                    
+                    $item->faltante = (int)($item->faltante ?? 0) + (int)$falt;
+                    $item->planeado = $nuevoPlan;
+                    $item->save();
+
+                    $resumen[] = [
+                        'id_item' => $item->id,
+                        'descripcion' => $item->descripcion_item ?: 'Item',
+                        'faltantes' => $falt,
+                    ];
+                }
+            }
+
+            // Registrar comentario de faltantes si se proporcionó
+            if (!empty($data['nota'])) {
+                \App\Models\OTServicioAvance::create([
+                    'ot_servicio_id' => $otServicio->id,
+                    'tarifa' => 'NORMAL',
+                    'precio_unitario_aplicado' => 0,
+                    'cantidad_registrada' => 0,
+                    'comentario' => '[FALTANTES] ' . $data['nota'],
+                    'created_by' => Auth::id(),
+                ]);
+            }
+
+            // Recalcular totales del servicio
+            $totales = $otServicio->calcularTotales();
+            
+            // Actualizar subtotal del servicio basado en completado
+            if ($otServicio->tipo_cobro === 'unidad') {
+                $otServicio->subtotal = $totales['completado'] * $otServicio->precio_unitario;
+                $otServicio->save();
+            }
+
+            // Recalcular totales de la orden
+            $subtotalOT = $orden->otServicios()->sum('subtotal');
+            $iva = round($subtotalOT * 0.16, 2);
+            $total = round($subtotalOT + $iva, 2);
+
+            $orden->update([
+                'subtotal' => $subtotalOT,
+                'iva' => $iva,
+                'total' => $total,
+            ]);
+        });
+
+        // Log de actividad
+        activity()
+            ->performedOn($orden)
+            ->causedBy(Auth::user())
+            ->withProperties([
+                'servicio_id' => $servicioId,
+                'faltantes' => $resumen,
+                'nota' => $data['nota'] ?? null,
+            ])
+            ->log("Faltantes registrados en servicio #{$servicioId} de OT #{$orden->id}");
+
+        return back()->with('ok', 'Faltantes registrados correctamente.');
+    }
+
+    /**
      * Helper: Autorización por centro de trabajo
      */
     private function authorizeFromCentro(?int $centroId, $model = null)

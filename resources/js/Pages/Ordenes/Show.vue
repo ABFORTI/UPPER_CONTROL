@@ -368,6 +368,9 @@ inicializarTamanosServicios()
 const avancesMultiServicio = ref({})
 const avancesFormsServicio = ref({})
 
+// Faltantes para multi-servicio
+const faltantesMultiServicio = ref({})
+
 // Inicializar formularios de avances por servicio
 const inicializarAvancesServicios = () => {
   servicios.value.forEach(servicio => {
@@ -380,6 +383,16 @@ const inicializarAvancesServicios = () => {
         comentario: '',
         tarifa_tipo: 'NORMAL',
         precio_unitario_manual: ''
+      }
+    }
+    // Inicializar faltantes
+    if (!faltantesMultiServicio.value[servicio.id]) {
+      faltantesMultiServicio.value[servicio.id] = {
+        items: (servicio.items || []).map(item => ({
+          id_item: item.id,
+          faltantes: ''
+        })),
+        nota: ''
       }
     }
   })
@@ -428,6 +441,66 @@ function guardarAvanceServicio(servicioId) {
     onError: (errors) => {
       console.error('❌ Error al guardar avance:', errors)
       alert('Error al guardar el avance. Revisa los datos ingresados.')
+    }
+  })
+}
+
+// Calcular restante para un item de servicio
+function restanteServicio(item) {
+  return Math.max(0, (item?.planeado || 0) - (item?.completado || 0))
+}
+
+// Verificar si hay faltantes válidos para un servicio
+function hasFaltantesServicio(servicioId) {
+  const formData = faltantesMultiServicio.value[servicioId]
+  if (!formData) return false
+  
+  return formData.items.some((item, idx) => {
+    const val = Number(item.faltantes || 0)
+    return val > 0
+  })
+}
+
+// Aplicar faltantes para un servicio
+function aplicarFaltantesServicio(servicioId) {
+  const formData = faltantesMultiServicio.value[servicioId]
+  if (!formData) return
+  
+  // Filtrar solo items con faltantes > 0
+  const itemsConFaltantes = formData.items
+    .map(item => ({
+      id_item: item.id_item,
+      faltantes: Number(item.faltantes || 0)
+    }))
+    .filter(item => item.faltantes > 0)
+  
+  if (itemsConFaltantes.length === 0) {
+    alert('Ingresa al menos un faltante mayor a 0')
+    return
+  }
+  
+  const payload = {
+    items: itemsConFaltantes,
+    nota: formData.nota || ''
+  }
+  
+  console.log('📤 Enviando faltantes:', payload)
+  
+  // Construir URL con servicioId
+  const url = `/ot-multi-servicio/${props.orden.id}/servicios/${servicioId}/faltantes`
+  
+  router.post(url, payload, {
+    preserveScroll: true,
+    onSuccess: () => {
+      console.log('✅ Faltantes registrados exitosamente')
+      // Limpiar formulario
+      faltantesMultiServicio.value[servicioId].items.forEach(i => i.faltantes = '')
+      faltantesMultiServicio.value[servicioId].nota = ''
+      router.visit(window.location.href, { replace: true, preserveScroll: true })
+    },
+    onError: (errors) => {
+      console.error('❌ Error al registrar faltantes:', errors)
+      alert('Error al registrar los faltantes. Revisa los datos ingresados.')
     }
   })
 }
@@ -847,6 +920,7 @@ function guardarAvanceServicio(servicioId) {
                       <th class="px-3 py-2 text-center text-[10px] uppercase tracking-wider font-bold text-slate-600 dark:text-slate-400">Completado</th>
                       <th class="px-3 py-2 text-center text-[10px] uppercase tracking-wider font-bold text-slate-600 dark:text-slate-400">Progreso</th>
                       <th v-if="can?.reportarAvance" class="px-3 py-2 text-center text-[10px] uppercase tracking-wider font-bold text-slate-600 dark:text-slate-400">Registrar</th>
+                      <th v-if="can?.reportarAvance" class="px-3 py-2 text-center text-[10px] uppercase tracking-wider font-bold text-indigo-600 dark:text-indigo-400">Faltantes</th>
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-slate-100 dark:divide-slate-800/50">
@@ -886,6 +960,13 @@ function guardarAvanceServicio(servicioId) {
                                v-model.number="avancesMultiServicio[servicio.id].items.find(i => i.id_item === item.id).cantidad"
                                placeholder="0"
                                class="w-16 px-2 py-1 text-center text-xs font-semibold border border-slate-300 dark:border-slate-600 rounded-md focus:border-emerald-500 focus:ring-1 focus:ring-emerald-200 dark:bg-slate-900 dark:text-slate-100 transition-all" />
+                      </td>
+                      <td v-if="can?.reportarAvance" class="px-3 py-2 text-center">
+                        <input type="number" min="0" 
+                               :max="(item.planeado || 0) - (item.completado || 0)" 
+                               v-model.number="faltantesMultiServicio[servicio.id].items.find(i => i.id_item === item.id).faltantes"
+                               placeholder="0"
+                               class="w-16 px-2 py-1 text-center text-xs font-semibold border border-indigo-300 dark:border-indigo-600 rounded-md focus:border-indigo-500 focus:ring-1 focus:ring-indigo-200 dark:bg-slate-900 dark:text-slate-100 transition-all" />
                       </td>
                     </tr>
                   </tbody>
@@ -958,6 +1039,30 @@ function guardarAvanceServicio(servicioId) {
                         </svg>
                         <span class="hidden sm:inline">{{ avancesMultiServicio[servicio.id]?.processing ? 'Guardando...' : 'Guardar' }}</span>
                       </button>
+                    </div>
+                  </div>
+                  
+                  <!-- Sección de Faltantes -->
+                  <div v-if="hasFaltantesServicio(servicio.id)" class="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700">
+                    <div class="grid grid-cols-1 lg:grid-cols-12 gap-3">
+                      <!-- Nota -->
+                      <div class="lg:col-span-10">
+                        <label class="block text-[10px] font-bold text-indigo-600 dark:text-indigo-400 mb-1.5 uppercase tracking-wider">Nota de Faltantes <span class="font-normal text-slate-400">(opcional)</span></label>
+                        <textarea v-model="faltantesMultiServicio[servicio.id].nota" rows="2"
+                                  placeholder="Describe el motivo de los faltantes..."
+                                  class="w-full px-3 py-2 border border-indigo-300 dark:border-indigo-600 rounded-md text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-200 dark:bg-slate-900 dark:text-slate-100 transition-all bg-white resize-none min-h-[3.5rem]"></textarea>
+                      </div>
+                      
+                      <!-- Botón Aplicar Faltantes -->
+                      <div class="lg:col-span-2 flex items-end">
+                        <button @click="aplicarFaltantesServicio(servicio.id)" type="button"
+                                class="w-full px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold text-sm rounded-md transition-all flex items-center justify-center gap-2 shadow hover:shadow-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1">
+                          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                          </svg>
+                          <span class="hidden sm:inline">Aplicar</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>

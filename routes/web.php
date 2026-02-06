@@ -225,6 +225,8 @@ Route::middleware('auth')->group(function () {
         ->name('ot-multi-servicio.store');
     Route::get('/ot-multi-servicio/{orden}', [\App\Http\Controllers\OTMultiServicioController::class, 'show'])
         ->name('ot-multi-servicio.show');
+    Route::post('/ot-multi-servicio/{orden}/servicios/{servicio}/faltantes', [\App\Http\Controllers\OTMultiServicioController::class, 'registrarFaltantesServicio'])
+        ->name('ot-multi-servicio.servicios.faltantes');
 });
 
 /* ==========================
