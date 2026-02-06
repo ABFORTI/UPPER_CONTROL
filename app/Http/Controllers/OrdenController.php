@@ -1179,11 +1179,18 @@ class OrdenController extends Controller
         }
         $canAsignar  = $isAdminOrCoord && $orden->estatus !== 'completada';
 
+        // Inicializar variable para verificar si todos los servicios están completos
+        $todosServiciosCompletos = false;
+
         // Permisos específicos adicionales
         $canCalidad = false; $canClienteAutorizar = false; $canFacturar = false;
         if ($authUser instanceof \App\Models\User) {
-            // Calidad: admin o rol calidad con centro permitido (pivot + principal), OT completada y pendiente
-            if ($orden->estatus === 'completada' && $orden->calidad_resultado === 'pendiente') {
+            // Calidad: admin o rol calidad con centro permitido (pivot + principal)
+            // NUEVA REGLA: Habilitar cuando todos los servicios estén al 100% (progreso = 100)
+            // O cuando la OT esté completada (para compatibilidad con OTs no multi-servicio)
+            $progresoCompleto = $todosServiciosCompletos || $orden->estatus === 'completada';
+            
+            if ($progresoCompleto && $orden->calidad_resultado === 'pendiente') {
                 if ($authUser->hasRole('admin')) {
                     $canCalidad = true;
                 } elseif ($authUser->hasRole('calidad')) {
@@ -1353,6 +1360,76 @@ class OrdenController extends Controller
                 'servicios_con_tamanos' => $serviciosConTamanos,
                 'count' => count($serviciosConTamanos),
             ]);
+        }
+
+        // Preparar datos de servicios con totales calculados (para multi-servicio)
+        $todosServiciosCompletos = false;
+        if ($orden->otServicios()->exists()) {
+            $serviciosData = $orden->otServicios->map(function ($otServicio) {
+                $totales = $otServicio->calcularTotales();
+                
+                return [
+                    'id' => $otServicio->id,
+                    'servicio' => $otServicio->servicio->only(['id', 'nombre']),
+                    'tipo_cobro' => $otServicio->tipo_cobro,
+                    'cantidad' => $otServicio->cantidad,
+                    'precio_unitario' => $otServicio->precio_unitario,
+                    'subtotal' => $otServicio->subtotal,
+                    'planeado' => $totales['planeado'],
+                    'completado' => $totales['completado'],
+                    'faltantes_registrados' => $totales['faltantes_registrados'],
+                    'pendiente' => $totales['pendiente'],
+                    'progreso' => $totales['progreso'],
+                    'total' => $totales['total'],
+                    'items' => $otServicio->items->map(function ($item) {
+                        $planeado = (int)$item->planeado;
+                        $completado = (int)$item->completado;
+                        $faltantesRegistrados = (int)$item->faltante;
+                        $pendiente = max(0, $planeado - ($completado + $faltantesRegistrados));
+                        $progreso = $planeado > 0 
+                            ? round((($completado + $faltantesRegistrados) / $planeado) * 100) 
+                            : 0;
+                        
+                        return [
+                            'id' => $item->id,
+                            'descripcion_item' => $item->descripcion_item,
+                            'planeado' => $planeado,
+                            'completado' => $completado,
+                            'faltantes_registrados' => $faltantesRegistrados,
+                            'pendiente' => $pendiente,
+                            'progreso' => $progreso,
+                        ];
+                    })->toArray(),
+                    'avances' => $otServicio->avances->map(function ($avance) {
+                        return [
+                            'id' => $avance->id,
+                            'tarifa' => $avance->tarifa,
+                            'precio_unitario_aplicado' => $avance->precio_unitario_aplicado,
+                            'cantidad_registrada' => $avance->cantidad_registrada,
+                            'comentario' => $avance->comentario,
+                            'created_by' => $avance->createdBy->name ?? 'N/A',
+                            'created_at' => $avance->created_at->format('Y-m-d H:i'),
+                        ];
+                    })->toArray(),
+                ];
+            });
+            
+            // Reemplazar la relación otServicios en el modelo orden con los datos enriquecidos
+            $orden->setRelation('otServicios', $serviciosData);
+            
+            // Verificar si TODOS los servicios tienen progreso = 100%
+            $todosServiciosCompletos = $serviciosData->every(function ($servicio) {
+                return $servicio['progreso'] >= 100;
+            });
+            
+            // Si todos los servicios están completos Y la orden NO ha avanzado más allá de 'completada', actualizarla
+            // No sobrescribir estatus más avanzados: autorizada_cliente, facturada, etc.
+            $estatusQueNoSobrescribir = ['autorizada_cliente', 'facturada', 'entregada'];
+            if ($todosServiciosCompletos && !in_array($orden->estatus, $estatusQueNoSobrescribir) && $orden->estatus !== 'completada') {
+                $orden->estatus = 'completada';
+                $orden->save();
+                \Log::info("Orden {$orden->id} actualizada a COMPLETADA automáticamente (todos los servicios al 100%)");
+            }
         }
 
         return Inertia::render('Ordenes/Show', [

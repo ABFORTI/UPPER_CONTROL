@@ -15,6 +15,7 @@ class OTServicioItem extends Model
         'tamano',
         'planeado',
         'completado',
+        'faltante',
         'precio_unitario',
         'subtotal',
     ];
@@ -22,6 +23,7 @@ class OTServicioItem extends Model
     protected $casts = [
         'planeado' => 'integer',
         'completado' => 'integer',
+        'faltante' => 'integer',
         'precio_unitario' => 'decimal:2',
         'subtotal' => 'decimal:2',
     ];
@@ -32,13 +34,5 @@ class OTServicioItem extends Model
     public function otServicio(): BelongsTo
     {
         return $this->belongsTo(OTServicio::class, 'ot_servicio_id');
-    }
-
-    /**
-     * Calcular cantidad faltante
-     */
-    public function getFaltanteAttribute(): int
-    {
-        return max(0, $this->planeado - $this->completado);
     }
 }
