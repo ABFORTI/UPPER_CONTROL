@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { router, useForm } from '@inertiajs/vue3'
+import { route } from 'ziggy-js'
 import FilePreview from '@/Components/FilePreview.vue'
 
 const props = defineProps({
@@ -486,8 +487,8 @@ function aplicarFaltantesServicio(servicioId) {
   
   console.log('📤 Enviando faltantes:', payload)
   
-  // Construir URL con servicioId
-  const url = `/ot-multi-servicio/${props.orden.id}/servicios/${servicioId}/faltantes`
+  // Construir URL con route helper de Ziggy
+  const url = route('ot-multi-servicio.servicios.faltantes', { orden: props.orden.id, servicio: servicioId })
   
   router.post(url, payload, {
     preserveScroll: true,
@@ -876,29 +877,35 @@ function aplicarFaltantesServicio(servicioId) {
               <div class="px-4 sm:px-5 py-4 space-y-4">
               
               <!-- KPIs Mini Stat Tiles -->
-              <div class="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+              <div class="grid grid-cols-2 md:grid-cols-5 gap-2.5">
                 <!-- Planeado -->
                 <div class="relative bg-gradient-to-br from-blue-50 to-blue-50/50 border-l-4 border-blue-500 rounded-lg p-2.5 shadow-sm ring-1 ring-slate-900/5 dark:from-blue-950/40 dark:to-blue-950/20 dark:border-blue-400 dark:ring-blue-500/20">
                   <p class="text-[10px] uppercase tracking-wider font-extrabold text-blue-600 dark:text-blue-400 leading-none">Planeado</p>
-                  <p class="text-2xl font-black text-blue-900 dark:text-blue-100 leading-none mt-1.5">{{ servicio.items?.reduce((sum, i) => sum + (i.planeado || 0), 0) || servicio.cantidad }}</p>
+                  <p class="text-2xl font-black text-blue-900 dark:text-blue-100 leading-none mt-1.5">{{ servicio.planeado || 0 }}</p>
                 </div>
                 
                 <!-- Completado -->
                 <div class="relative bg-gradient-to-br from-emerald-50 to-emerald-50/50 border-l-4 border-emerald-500 rounded-lg p-2.5 shadow-sm ring-1 ring-slate-900/5 dark:from-emerald-950/40 dark:to-emerald-950/20 dark:border-emerald-400 dark:ring-emerald-500/20">
                   <p class="text-[10px] uppercase tracking-wider font-extrabold text-emerald-600 dark:text-emerald-400 leading-none">Completado</p>
-                  <p class="text-2xl font-black text-emerald-900 dark:text-emerald-100 leading-none mt-1.5">{{ servicio.items?.reduce((sum, i) => sum + (i.completado || 0), 0) || 0 }}</p>
+                  <p class="text-2xl font-black text-emerald-900 dark:text-emerald-100 leading-none mt-1.5">{{ servicio.completado || 0 }}</p>
                 </div>
                 
-                <!-- Faltante -->
+                <!-- Faltantes Registrados -->
                 <div class="relative bg-gradient-to-br from-amber-50 to-amber-50/50 border-l-4 border-amber-500 rounded-lg p-2.5 shadow-sm ring-1 ring-slate-900/5 dark:from-amber-950/40 dark:to-amber-950/20 dark:border-amber-400 dark:ring-amber-500/20">
-                  <p class="text-[10px] uppercase tracking-wider font-extrabold text-amber-600 dark:text-amber-400 leading-none">Faltante</p>
-                  <p class="text-2xl font-black text-amber-900 dark:text-amber-100 leading-none mt-1.5">{{ (servicio.items?.reduce((sum, i) => sum + (i.planeado || 0), 0) || servicio.cantidad) - (servicio.items?.reduce((sum, i) => sum + (i.completado || 0), 0) || 0) }}</p>
+                  <p class="text-[10px] uppercase tracking-wider font-extrabold text-amber-600 dark:text-amber-400 leading-none">Faltantes</p>
+                  <p class="text-2xl font-black text-amber-900 dark:text-amber-100 leading-none mt-1.5">{{ servicio.faltantes_registrados || 0 }}</p>
+                </div>
+                
+                <!-- Pendiente -->
+                <div class="relative bg-gradient-to-br from-purple-50 to-purple-50/50 border-l-4 border-purple-500 rounded-lg p-2.5 shadow-sm ring-1 ring-slate-900/5 dark:from-purple-950/40 dark:to-purple-950/20 dark:border-purple-400 dark:ring-purple-500/20">
+                  <p class="text-[10px] uppercase tracking-wider font-extrabold text-purple-600 dark:text-purple-400 leading-none">Pendiente</p>
+                  <p class="text-2xl font-black text-purple-900 dark:text-purple-100 leading-none mt-1.5">{{ servicio.pendiente || 0 }}</p>
                 </div>
                 
                 <!-- Total -->
                 <div class="relative bg-gradient-to-br from-slate-50 to-slate-50/50 border-l-4 border-slate-400 rounded-lg p-2.5 shadow-sm ring-1 ring-slate-900/5 dark:from-slate-800/40 dark:to-slate-800/20 dark:border-slate-500 dark:ring-slate-500/20">
                   <p class="text-[10px] uppercase tracking-wider font-extrabold text-slate-600 dark:text-slate-400 leading-none">Total</p>
-                  <p class="text-2xl font-black text-slate-900 dark:text-slate-100 leading-none mt-1.5">{{ servicio.items?.reduce((sum, i) => sum + (i.planeado || 0), 0) || servicio.cantidad }}</p>
+                  <p class="text-2xl font-black text-slate-900 dark:text-slate-100 leading-none mt-1.5">{{ servicio.total || servicio.planeado || 0 }}</p>
                 </div>
               </div>
               
@@ -918,6 +925,8 @@ function aplicarFaltantesServicio(servicioId) {
                       <th class="px-3 py-2 text-left text-[10px] uppercase tracking-wider font-bold text-slate-600 dark:text-slate-400">Descripción</th>
                       <th class="px-3 py-2 text-center text-[10px] uppercase tracking-wider font-bold text-slate-600 dark:text-slate-400">Planeado</th>
                       <th class="px-3 py-2 text-center text-[10px] uppercase tracking-wider font-bold text-slate-600 dark:text-slate-400">Completado</th>
+                      <th class="px-3 py-2 text-center text-[10px] uppercase tracking-wider font-bold text-amber-600 dark:text-amber-400">Faltantes</th>
+                      <th class="px-3 py-2 text-center text-[10px] uppercase tracking-wider font-bold text-purple-600 dark:text-purple-400">Pendiente</th>
                       <th class="px-3 py-2 text-center text-[10px] uppercase tracking-wider font-bold text-slate-600 dark:text-slate-400">Progreso</th>
                       <th v-if="can?.reportarAvance" class="px-3 py-2 text-center text-[10px] uppercase tracking-wider font-bold text-slate-600 dark:text-slate-400">Registrar</th>
                       <th v-if="can?.reportarAvance" class="px-3 py-2 text-center text-[10px] uppercase tracking-wider font-bold text-indigo-600 dark:text-indigo-400">Faltantes</th>
@@ -942,28 +951,39 @@ function aplicarFaltantesServicio(servicioId) {
                           {{ item.completado || 0 }}
                         </span>
                       </td>
+                      <td class="px-3 py-2 text-center">
+                        <span v-if="(item.faltantes_registrados || 0) > 0" class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300">
+                          {{ item.faltantes_registrados || 0 }}
+                        </span>
+                        <span v-else class="text-slate-400 text-xs">—</span>
+                      </td>
+                      <td class="px-3 py-2 text-center">
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold"
+                              :class="(item.pendiente || 0) > 0 ? 'bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-300' : 'bg-slate-100 text-slate-500 dark:bg-slate-500/20 dark:text-slate-400'">
+                          {{ item.pendiente || 0 }}
+                        </span>
+                      </td>
                       <td class="px-3 py-2">
                         <div class="flex items-center gap-2">
                           <div class="flex-1 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-                            <div class="h-full rounded-full transition-all"
-                                 :class="(item.completado || 0) >= (item.planeado || 0) ? 'bg-emerald-500' : 'bg-amber-500'"
-                                 :style="{ width: Math.min(100, ((item.completado || 0) / (item.planeado || 1)) * 100) + '%' }"></div>
+                            <div class="h-full rounded-full transition-all bg-emerald-500"
+                                 :style="{ width: Math.min(100, item.progreso || 0) + '%' }"></div>
                           </div>
                           <span class="text-[10px] font-bold text-slate-600 dark:text-slate-400 min-w-[2.5rem] text-right">
-                            {{ Math.round(((item.completado || 0) / (item.planeado || 1)) * 100) }}%
+                            {{ item.progreso || 0 }}%
                           </span>
                         </div>
                       </td>
                       <td v-if="can?.reportarAvance" class="px-3 py-2 text-center">
                         <input type="number" min="0" 
-                               :max="(item.planeado || 0) - (item.completado || 0)" 
+                               :max="item.pendiente || 0" 
                                v-model.number="avancesMultiServicio[servicio.id].items.find(i => i.id_item === item.id).cantidad"
                                placeholder="0"
                                class="w-16 px-2 py-1 text-center text-xs font-semibold border border-slate-300 dark:border-slate-600 rounded-md focus:border-emerald-500 focus:ring-1 focus:ring-emerald-200 dark:bg-slate-900 dark:text-slate-100 transition-all" />
                       </td>
                       <td v-if="can?.reportarAvance" class="px-3 py-2 text-center">
                         <input type="number" min="0" 
-                               :max="(item.planeado || 0) - (item.completado || 0)" 
+                               :max="item.pendiente || 0" 
                                v-model.number="faltantesMultiServicio[servicio.id].items.find(i => i.id_item === item.id).faltantes"
                                placeholder="0"
                                class="w-16 px-2 py-1 text-center text-xs font-semibold border border-indigo-300 dark:border-indigo-600 rounded-md focus:border-indigo-500 focus:ring-1 focus:ring-indigo-200 dark:bg-slate-900 dark:text-slate-100 transition-all" />

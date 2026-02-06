@@ -60,16 +60,31 @@ class OTServicio extends Model
     /**
      * Calcular totales del servicio basados en items
      */
+    /**
+     * Calcula los totales del servicio basándose en los items
+     * REGLA: Todos los cálculos desde los items cargados en memoria
+     */
     public function calcularTotales(): array
     {
-        $planeado = $this->items()->sum('planeado');
-        $completado = $this->items()->sum('completado');
-        $faltante = $planeado - $completado;
+        // Usar la colección cargada si existe, sino hacer query
+        $items = $this->relationLoaded('items') ? $this->items : $this->items()->get();
+        
+        $planeado = (int)$items->sum('planeado');
+        $completado = (int)$items->sum('completado');
+        $faltantesRegistrados = (int)$items->sum('faltante');
+        
+        $pendiente = max(0, $planeado - ($completado + $faltantesRegistrados));
+        $progreso = $planeado > 0 
+            ? round((($completado + $faltantesRegistrados) / $planeado) * 100) 
+            : 0;
 
         return [
             'planeado' => $planeado,
             'completado' => $completado,
-            'faltante' => $faltante,
+            'faltantes_registrados' => $faltantesRegistrados,
+            'pendiente' => $pendiente,
+            'progreso' => $progreso,
+            'total' => $planeado, // Total siempre igual a planeado
         ];
     }
 

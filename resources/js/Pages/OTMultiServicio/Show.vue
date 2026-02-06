@@ -1,9 +1,20 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 
 const props = defineProps({
   orden: Object,
   servicios: Array,
+})
+
+// DEBUG: Ver qué datos llegan
+onMounted(() => {
+  console.log('=== DATOS RECIBIDOS ===')
+  console.log('Servicios:', props.servicios)
+  if (props.servicios && props.servicios.length > 0) {
+    console.log('Primer servicio:', props.servicios[0])
+    console.log('Planeado:', props.servicios[0].planeado)
+    console.log('Completado:', props.servicios[0].completado)
+  }
 })
 
 // Calcular el porcentaje de completitud por servicio
@@ -130,30 +141,40 @@ const estatusConfig = computed(() => {
 
           <!-- Métricas del Servicio - Mini Stat Tiles -->
           <div class="px-5 py-3 bg-slate-50/50 border-b border-slate-200 dark:bg-slate-900/30 dark:border-slate-700">
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+            <!-- DEBUG INFO -->
+            <div class="mb-2 p-2 bg-red-100 border border-red-300 rounded text-xs">
+              <strong>DEBUG:</strong> servicio.planeado={{ servicio.planeado }}, servicio.completado={{ servicio.completado }}, servicio.id={{ servicio.id }}
+            </div>
+            
+            <div class="grid grid-cols-2 md:grid-cols-5 gap-2.5">
               <!-- Planeado -->
               <div class="bg-white border-l-3 border-blue-500 rounded-md p-2.5 shadow-sm dark:bg-slate-800/50 dark:border-blue-400">
                 <p class="text-[9px] uppercase tracking-wide font-bold text-slate-500 dark:text-slate-400">Planeado</p>
-                <p class="text-2xl font-extrabold text-slate-900 dark:text-slate-100 leading-none mt-1">{{ servicio.planeado }}</p>
+                <p class="text-2xl font-extrabold text-slate-900 dark:text-slate-100 leading-none mt-1">{{ servicio.planeado || 0 }}</p>
               </div>
               <!-- Completado -->
               <div class="bg-white border-l-3 border-emerald-500 rounded-md p-2.5 shadow-sm dark:bg-slate-800/50 dark:border-emerald-400">
                 <p class="text-[9px] uppercase tracking-wide font-bold text-slate-500 dark:text-slate-400">Completado</p>
-                <p class="text-2xl font-extrabold text-slate-900 dark:text-slate-100 leading-none mt-1">{{ servicio.completado }}</p>
+                <p class="text-2xl font-extrabold text-slate-900 dark:text-slate-100 leading-none mt-1">{{ servicio.completado || 0 }}</p>
               </div>
-              <!-- Faltante -->
+              <!-- Faltantes Registrados -->
               <div class="bg-white border-l-3 border-amber-500 rounded-md p-2.5 shadow-sm dark:bg-slate-800/50 dark:border-amber-400">
-                <p class="text-[9px] uppercase tracking-wide font-bold text-slate-500 dark:text-slate-400">Faltante</p>
-                <p class="text-2xl font-extrabold text-slate-900 dark:text-slate-100 leading-none mt-1">{{ servicio.faltante }}</p>
+                <p class="text-[9px] uppercase tracking-wide font-bold text-slate-500 dark:text-slate-400">Faltantes</p>
+                <p class="text-2xl font-extrabold text-slate-900 dark:text-slate-100 leading-none mt-1">{{ servicio.faltantes_registrados || 0 }}</p>
+              </div>
+              <!-- Pendiente -->
+              <div class="bg-white border-l-3 border-purple-500 rounded-md p-2.5 shadow-sm dark:bg-slate-800/50 dark:border-purple-400">
+                <p class="text-[9px] uppercase tracking-wide font-bold text-slate-500 dark:text-slate-400">Pendiente</p>
+                <p class="text-2xl font-extrabold text-slate-900 dark:text-slate-100 leading-none mt-1">{{ servicio.pendiente || 0 }}</p>
               </div>
               <!-- Progreso -->
               <div class="bg-white border-l-3 border-indigo-500 rounded-md p-2.5 shadow-sm dark:bg-slate-800/50 dark:border-indigo-400">
                 <p class="text-[9px] uppercase tracking-wide font-bold text-slate-500 dark:text-slate-400">Progreso</p>
                 <div class="flex items-center gap-2 mt-1">
-                  <p class="text-2xl font-extrabold text-slate-900 dark:text-slate-100 leading-none">{{ calcularPorcentaje(servicio) }}%</p>
+                  <p class="text-2xl font-extrabold text-slate-900 dark:text-slate-100 leading-none">{{ servicio.progreso || 0 }}%</p>
                   <div class="flex-1 h-1.5 bg-slate-200 rounded-full overflow-hidden dark:bg-slate-700">
                     <div class="bg-gradient-to-r from-emerald-500 to-teal-500 h-full transition-all duration-500"
-                         :style="{ width: calcularPorcentaje(servicio) + '%' }"></div>
+                         :style="{ width: (servicio.progreso || 0) + '%' }"></div>
                   </div>
                 </div>
               </div>

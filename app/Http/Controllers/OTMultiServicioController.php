@@ -201,14 +201,28 @@ class OTMultiServicioController extends Controller
                 'subtotal' => $otServicio->subtotal,
                 'planeado' => $totales['planeado'],
                 'completado' => $totales['completado'],
-                'faltante' => $totales['faltante'],
+                'faltantes_registrados' => $totales['faltantes_registrados'],
+                'pendiente' => $totales['pendiente'],
+                'progreso' => $totales['progreso'],
+                'total' => $totales['total'],
                 'items' => $otServicio->items->map(function ($item) {
+                    // Calcular valores individuales de cada item
+                    $planeado = (int)$item->planeado;
+                    $completado = (int)$item->completado;
+                    $faltantesRegistrados = (int)$item->faltante;
+                    $pendiente = max(0, $planeado - ($completado + $faltantesRegistrados));
+                    $progreso = $planeado > 0 
+                        ? round((($completado + $faltantesRegistrados) / $planeado) * 100) 
+                        : 0;
+                    
                     return [
                         'id' => $item->id,
                         'descripcion_item' => $item->descripcion_item,
-                        'planeado' => $item->planeado,
-                        'completado' => $item->completado,
-                        'faltante' => $item->faltante,
+                        'planeado' => $planeado,
+                        'completado' => $completado,
+                        'faltantes_registrados' => $faltantesRegistrados,
+                        'pendiente' => $pendiente,
+                        'progreso' => $progreso,
                     ];
                 }),
                 'avances' => $otServicio->avances->map(function ($avance) {
@@ -224,6 +238,20 @@ class OTMultiServicioController extends Controller
                 }),
             ];
         });
+        
+        // Verificar si TODOS los servicios tienen progreso = 100%
+        $todosServiciosCompletos = $serviciosData->every(function ($servicio) {
+            return $servicio['progreso'] >= 100;
+        });
+        
+        // Si todos los servicios están completos Y la orden NO ha avanzado más allá de 'completada', actualizarla
+        // No sobrescribir estatus más avanzados: autorizada_cliente, facturada, etc.
+        $estatusQueNoSobrescribir = ['autorizada_cliente', 'facturada', 'entregada'];
+        if ($todosServiciosCompletos && !in_array($orden->estatus, $estatusQueNoSobrescribir) && $orden->estatus !== 'completada') {
+            $orden->estatus = 'completada';
+            $orden->save();
+            \Log::info("Orden {$orden->id} actualizada a COMPLETADA automáticamente (todos los servicios al 100%)");
+        }
 
         return Inertia::render('OTMultiServicio/Show', [
             'orden' => [
@@ -275,45 +303,64 @@ class OTMultiServicioController extends Controller
                     ->firstOrFail();
 
                 $falt = max(0, (int)$d['faltantes']);
-                $pend = max(0, (int)$item->planeado - (int)$item->completado);
                 
                 if ($falt <= 0) continue;
-                if ($falt > $pend) {
-                    $falt = $pend;
+                
+                // Validar que no exceda lo planeado
+                $nuevoTotal = (int)$item->completado + (int)($item->faltante ?? 0) + $falt;
+                if ($nuevoTotal > (int)$item->planeado) {
+                    $pendiente = max(0, (int)$item->planeado - (int)$item->completado - (int)($item->faltante ?? 0));
+                    return response()->json([
+                        'message' => "No se pueden registrar {$falt} faltantes para '{$item->descripcion_item}'. Solo quedan {$pendiente} unidades pendientes.",
+                        'errors' => [
+                            'items' => ["El item '{$item->descripcion_item}' excede lo planeado."]
+                        ]
+                    ], 422);
                 }
 
-                if ($falt > 0) {
-                    // Acumular faltantes y ajustar plan
-                    $nuevoPlan = (int)$item->planeado - $falt;
-                    // Nunca por debajo de lo ya completado
-                    if ($nuevoPlan < (int)$item->completado) {
-                        $nuevoPlan = (int)$item->completado;
-                    }
-                    
-                    $item->faltante = (int)($item->faltante ?? 0) + (int)$falt;
-                    $item->planeado = $nuevoPlan;
-                    $item->save();
+                // Acumular faltantes SIN modificar el planeado
+                $item->faltante = (int)($item->faltante ?? 0) + (int)$falt;
+                $item->save();
 
-                    $resumen[] = [
-                        'id_item' => $item->id,
-                        'descripcion' => $item->descripcion_item ?: 'Item',
-                        'faltantes' => $falt,
-                    ];
-                }
-            }
-
-            // Registrar comentario de faltantes si se proporcionó
-            if (!empty($data['nota'])) {
+                // Registrar avance individual por cada item con faltantes
                 \App\Models\OTServicioAvance::create([
                     'ot_servicio_id' => $otServicio->id,
                     'tarifa' => 'NORMAL',
                     'precio_unitario_aplicado' => 0,
-                    'cantidad_registrada' => 0,
-                    'comentario' => '[FALTANTES] ' . $data['nota'],
+                    'cantidad_registrada' => $falt, // Cantidad de faltantes para este item
+                    'comentario' => "[FALTANTES] {$item->descripcion_item}: {$falt} faltante(s)" . (!empty($data['nota']) ? " | Nota: {$data['nota']}" : ''),
                     'created_by' => Auth::id(),
                 ]);
+
+                $resumen[] = [
+                    'id_item' => $item->id,
+                    'descripcion' => $item->descripcion_item ?: 'Item',
+                    'faltantes' => $falt,
+                ];
             }
 
+            // NO crear un avance global, ya se crearon individuales arriba
+            // Comentado el código antiguo que creaba un solo avance
+            /*
+            // Registrar avance con faltantes en el historial
+            $resumenTexto = collect($resumen)->map(function($r) {
+                return "{$r['descripcion']}: {$r['faltantes']} faltante(s)";
+            })->join(', ');
+            
+            $comentarioFaltantes = '[FALTANTES] ' . $resumenTexto;
+            if (!empty($data['nota'])) {
+                $comentarioFaltantes .= ' | Nota: ' . $data['nota'];
+            }
+            
+            \App\Models\OTServicioAvance::create([
+                'ot_servicio_id' => $otServicio->id,
+                'tarifa' => 'NORMAL',
+                'precio_unitario_aplicado' => 0,
+                'cantidad_registrada' => 0,
+                'comentario' => $comentarioFaltantes,
+                'created_by' => Auth::id(),
+            ]);
+            */
             // Recalcular totales del servicio
             $totales = $otServicio->calcularTotales();
             
