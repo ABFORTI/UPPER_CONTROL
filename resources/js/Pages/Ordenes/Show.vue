@@ -859,45 +859,71 @@ function aplicarFaltantesServicio(servicioId) {
                       </button>
                     </div>
                   </div>
+                  
                   <p v-if="avForm.errors.items" class="mt-2 text-xs text-red-600 dark:text-red-400">{{ avForm.errors.items }}</p>
                 </div>
               </div>
-
-              <!-- Sección: Registrar Faltantes (Tradicionales) -->
-              <div v-if="can?.reportarAvance" class="-mx-4 sm:-mx-5 px-4 sm:px-5 py-3.5 bg-slate-50/80 dark:bg-slate-800/30 border-t border-slate-200 dark:border-slate-700">
-                <!-- Título inline con divider -->
-                <div class="flex items-center gap-2.5 mb-3">
-                  <svg class="w-4 h-4 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+              
+              <!-- Avances Registrados dentro de la misma card -->
+              <div v-if="avances && avances.length > 0" class="-mx-4 sm:-mx-5 px-4 sm:px-5 py-3.5 bg-white dark:bg-slate-900/50 border-t border-slate-200 dark:border-slate-700">
+                <div class="flex items-center gap-2 mb-3">
+                  <svg class="w-4 h-4 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
                   </svg>
-                  <h4 class="font-bold text-xs uppercase tracking-wider text-slate-700 dark:text-slate-300">Registrar Faltantes</h4>
+                  <h5 class="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">Avances Registrados</h5>
+                  <span class="text-xs text-slate-500 dark:text-slate-400">{{ avances.length }} registro(s)</span>
                 </div>
                 
-                <div class="bg-white dark:bg-slate-900/50 rounded-lg p-3 ring-1 ring-slate-200 dark:ring-slate-700">
-                  <div class="grid grid-cols-1 lg:grid-cols-12 gap-3">
-                    <!-- Nota -->
-                    <div class="lg:col-span-10">
-                      <label class="block text-[10px] font-bold text-slate-600 dark:text-slate-400 mb-1.5 uppercase tracking-wider">Nota <span class="font-normal text-slate-400">(opcional)</span></label>
-                      <textarea v-model="faltForm.nota" rows="2" placeholder="Describe el motivo de los faltantes..."
-                                class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-200 dark:bg-slate-900 dark:text-slate-100 transition-all bg-white resize-none min-h-[4rem]"></textarea>
-                    </div>
-                    
-                    <!-- Botón -->
-                    <div class="lg:col-span-2 flex items-end">
-                      <button @click="aplicarFaltantes" type="button"
-                              :disabled="faltForm.processing" 
-                              class="w-full px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold rounded-lg shadow-md hover:shadow-lg hover:scale-105 transform transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:scale-100 text-sm dark:from-indigo-500 dark:to-purple-500">
-                        <span v-if="faltForm.processing">Guardando...</span>
-                        <span v-else>⚠ Guardar Faltantes</span>
-                      </button>
+                <div class="space-y-2.5">
+                  <div v-for="(a, idx) in avances" :key="a?.id || idx"
+                       class="bg-slate-50 border border-slate-200 rounded-md p-3 hover:border-slate-300 transition-colors dark:bg-slate-800/30 dark:border-slate-700 dark:hover:border-slate-600">
+                    <div class="flex items-start justify-between">
+                      <div class="flex-1">
+                        <!-- Badges y fecha -->
+                        <div class="flex items-center gap-2 mb-2 flex-wrap">
+                          <span v-if="isRechazoComentario(a?.comentario)" class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-300">
+                            RECHAZO
+                          </span>
+                          <span v-else-if="isFaltantesComentario(a?.comentario)" class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-500/20 dark:text-rose-300">
+                            FALTANTES
+                          </span>
+                          <span v-else-if="(a?.isCorregido || a?.es_corregido)" class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300">
+                            CORREGIDO
+                          </span>
+                          <span v-else class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 dark:bg-blue-500/20 dark:text-blue-300">
+                            NORMAL
+                          </span>
+                          <span class="text-[10px] text-slate-500 dark:text-slate-400">{{ fmtDate(a?.created_at) }}</span>
+                          <span class="text-[10px] text-slate-500 dark:text-slate-400">• {{ a?.usuario?.name || 'Usuario' }}</span>
+                        </div>
+                        
+                        <!-- Cantidad e info -->
+                        <div class="text-xs text-slate-700 dark:text-slate-300 flex items-center gap-3">
+                          <span><strong class="font-semibold">Cant:</strong> {{ a?.cantidad_registrada || a?.cantidad || 0 }}</span>
+                          <span v-if="a?.precio_unitario_aplicado">
+                            <strong class="font-semibold">P.U.:</strong> 
+                            <span class="font-mono">${{ parseFloat(a.precio_unitario_aplicado).toFixed(2) }}</span>
+                          </span>
+                        </div>
+                        
+                        <!-- Comentario (solo si no es faltantes) -->
+                        <div v-if="a?.comentario && !isFaltantesComentario(a?.comentario)" class="text-xs text-slate-600 dark:text-slate-400 mt-1 italic">
+                          "{{ isRechazoComentario(a?.comentario) ? extractRechazoComentario(a.comentario) : a.comentario }}"
+                        </div>
+                        
+                        <!-- Faltantes separados -->
+                        <div v-if="isFaltantesComentario(a?.comentario)" class="text-xs text-slate-600 dark:text-slate-400 mt-1">
+                          {{ a.comentario }}
+                        </div>
+                      </div>
                     </div>
                   </div>
-                  <p v-if="faltForm.errors.items" class="mt-2 text-xs text-red-600 dark:text-red-400">{{ faltForm.errors.items }}</p>
                 </div>
               </div>
             </div>
           </div>
           
+
           <!-- Servicios Multi-Servicio -->
           <div v-else-if="esMultiServicio && servicios.length > 0" class="space-y-6">
             <div v-for="(servicio, idx) in servicios" :key="servicio.id" 
@@ -1225,73 +1251,6 @@ function aplicarFaltantesServicio(servicioId) {
             </div>
           </div>
 
-          <!-- Segmentos de Producción -->
-          <div v-if="itemsConSegs.length > 0" class="bg-white rounded-2xl shadow-lg border-2 border-fuchsia-100 overflow-hidden dark:bg-slate-900/80 dark:border-fuchsia-500/40">
-            <div class="bg-gradient-to-r from-fuchsia-600 to-purple-600 px-4 py-2 dark:from-fuchsia-500 dark:to-purple-500">
-              <h3 class="text-base font-bold text-white flex items-center gap-1.5 leading-tight">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/>
-                </svg>
-                Segmentos de Producción
-              </h3>
-            </div>
-            <div class="p-5 space-y-5">
-              <div v-for="it in itemsConSegs" :key="'seg-'+it.id" class="border-2 border-fuchsia-100 rounded-2xl overflow-hidden dark:border-fuchsia-500/30">
-                <div class="px-4 py-3 bg-gradient-to-r from-fuchsia-50 to-purple-50 dark:from-fuchsia-500/10 dark:to-purple-500/10">
-                  <div class="font-bold text-gray-800 dark:text-slate-100">
-                    Ítem #{{ it.id }} — {{ it.tamano || it.descripcion || 'Sin descripción' }}
-                  </div>
-                  <div class="text-xs text-gray-600 dark:text-slate-400">
-                    Planeado: {{ it.cantidad_planeada }} · Producido (segmentos): {{ (segsOf(it) || []).reduce((a,s)=>a+Number(s.cantidad||0),0) }}
-                  </div>
-                </div>
-                <div class="overflow-x-auto">
-                  <table class="min-w-full text-sm">
-                    <thead class="bg-white dark:bg-slate-900/60">
-                      <tr>
-                        <th class="px-4 py-3 text-left font-bold text-gray-700 dark:text-slate-200">Tipo</th>
-                        <th class="px-4 py-3 text-center font-bold text-gray-700 dark:text-slate-200">Cantidad</th>
-                        <th class="px-4 py-3 text-right font-bold text-gray-700 dark:text-slate-200">PU</th>
-                        <th class="px-4 py-3 text-right font-bold text-gray-700 dark:text-slate-200">Subtotal</th>
-                        <th class="px-4 py-3 text-left font-bold text-gray-700 dark:text-slate-200">Usuario</th>
-                        <th class="px-4 py-3 text-left font-bold text-gray-700 dark:text-slate-200">Fecha</th>
-                        <th v-if="canEditSegmentPrices" class="px-4 py-3 text-left font-bold text-gray-700 dark:text-slate-200">Editar</th>
-                      </tr>
-                    </thead>
-                    <tbody class="divide-y divide-gray-100 dark:divide-slate-800/80">
-                      <tr v-for="seg in segsOf(it)" :key="seg.id" class="hover:bg-fuchsia-50/50 dark:hover:bg-fuchsia-500/10">
-                        <td class="px-4 py-3 font-semibold text-gray-800 dark:text-slate-100">{{ segLabel(seg.tipo_tarifa) }}</td>
-                        <td class="px-4 py-3 text-center text-gray-700 dark:text-slate-200">{{ seg.cantidad }}</td>
-                        <td class="px-4 py-3 text-right text-gray-700 dark:text-slate-200">{{ Number(seg.precio_unitario || 0).toFixed(4) }}</td>
-                        <td class="px-4 py-3 text-right font-bold text-gray-800 dark:text-slate-100">{{ Number(seg.subtotal || 0).toFixed(2) }}</td>
-                        <td class="px-4 py-3 text-gray-700 dark:text-slate-200">{{ seg.usuario?.name || '—' }}</td>
-                        <td class="px-4 py-3 text-gray-600 dark:text-slate-400">{{ fmtDate(seg.created_at) }}</td>
-                        <td v-if="canEditSegmentPrices" class="px-4 py-3">
-                          <div v-if="canEditSegmentPrices && (seg.tipo_tarifa === 'EXTRA' || seg.tipo_tarifa === 'FIN_DE_SEMANA')" class="flex flex-col gap-2">
-                            <input type="number" min="0" step="0.0001" inputmode="decimal"
-                                   :value="(segPriceDraft[seg.id] ?? seg.precio_unitario)"
-                                   @input="(e)=>{ segPriceDraft[seg.id]=e.target.value }"
-                                   class="w-40 px-3 py-2 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-fuchsia-300 focus:border-fuchsia-400 text-right font-semibold dark:bg-slate-900/60 dark:border-slate-700 dark:text-slate-100" />
-                            <input type="text" maxlength="500"
-                                   :value="(segNotaDraft[seg.id] ?? seg.nota ?? '')"
-                                   @input="(e)=>{ segNotaDraft[seg.id]=e.target.value }"
-                                   placeholder="Nota (opcional)"
-                                   class="w-64 px-3 py-2 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-fuchsia-300 focus:border-fuchsia-400 dark:bg-slate-900/60 dark:border-slate-700 dark:text-slate-100" />
-                            <button @click="updateSegmento(seg)"
-                                    class="w-40 px-4 py-2 bg-gradient-to-r from-fuchsia-600 to-purple-600 text-white font-bold rounded-lg shadow hover:shadow-md transition-all duration-200 dark:from-fuchsia-500 dark:to-purple-500">
-                              Guardar
-                            </button>
-                          </div>
-                          <div v-else class="text-xs text-gray-500 dark:text-slate-500">—</div>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          </div>
-
           <!-- Subir Evidencias -->
           <div v-if="can?.reportarAvance" class="bg-white rounded-2xl shadow-lg border-2 border-orange-100 overflow-hidden dark:bg-slate-900/80 dark:border-orange-500/40">
             <div class="bg-gradient-to-r from-orange-600 to-amber-600 px-4 py-2 dark:from-orange-500 dark:to-amber-500">
@@ -1473,123 +1432,6 @@ function aplicarFaltantesServicio(servicioId) {
             </div>
           </div>
 
-          <!-- Historial de Avances -->
-          <div class="bg-white rounded-2xl shadow-lg border-2 border-cyan-100 overflow-hidden dark:bg-slate-900/80 dark:border-cyan-500/40">
-            <div class="bg-gradient-to-r from-cyan-600 to-blue-600 px-4 py-2 dark:from-cyan-500 dark:to-blue-500">
-              <div class="flex items-center justify-between">
-                <h3 class="text-base font-bold text-white flex items-center gap-1.5 leading-tight">
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                  </svg>
-                  Historial de Avances
-                </h3>
-                <span v-if="avances && avances.length > 0" class="px-3 py-1 bg-white bg-opacity-20 rounded-full text-white text-sm font-bold">
-                  {{ avances.length }}
-                </span>
-              </div>
-            </div>
-            <div v-if="avances && avances.length > 0" class="p-5">
-              <div class="space-y-3">
-       <div v-for="(a, idx) in avances" :key="a?.id || idx" 
-         :class="['flex items-start gap-4 p-4 rounded-xl border transition-all duration-150', 
-            isRechazoComentario(a?.comentario)
-              ? 'bg-red-50 border-2 border-red-300 dark:bg-rose-500/10 dark:border-rose-500/40'
-              : (isFaltantesComentario(a?.comentario)
-                  ? 'bg-rose-50 border-2 border-rose-300 dark:bg-rose-500/10 dark:border-rose-500/40'
-                  : ((a?.isCorregido || a?.es_corregido)
-                      ? 'bg-emerald-50 border-2 border-emerald-300 dark:bg-emerald-500/10 dark:border-emerald-500/40'
-                      : 'bg-gradient-to-r from-cyan-50 to-blue-50 border-cyan-100 dark:from-slate-900/60 dark:to-blue-500/10 dark:border-cyan-500/40')) ]">
-                  
-                  <!-- Icon -->
-                  <div :class="['p-2 rounded-full flex-shrink-0',
-                               isRechazoComentario(a?.comentario)
-                                 ? 'bg-red-500'
-                                 : (isFaltantesComentario(a?.comentario)
-                                     ? 'bg-red-500'
-                                     : ((a?.isCorregido || a?.es_corregido) ? 'bg-emerald-500' : 'bg-cyan-500')) ]">
-                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                    </svg>
-                  </div>
-                  
-                  <!-- Content -->
-                  <div class="flex-1">
-                    <!-- Badge RECHAZO / CORREGIDO (si aplica) -->
-                    <div v-if="isRechazoComentario(a?.comentario)" 
-                         class="inline-flex items-center gap-1 px-3 py-1 bg-red-500 text-white text-xs font-bold rounded-full mb-2">
-                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.36 6.64a9 9 0 11-12.73 0 9 9 0 0112.73 0z"/>
-                      </svg>
-                      RECHAZO
-                    </div>
-        <div v-else-if="isFaltantesComentario(a?.comentario)" 
-             class="inline-flex items-center gap-1 px-3 py-1 bg-red-500 text-white text-xs font-bold rounded-full mb-2">
-                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3"/>
-                      </svg>
-                      FALTANTES
-                    </div>
-        <div v-else-if="(a?.isCorregido || a?.es_corregido)" 
-          class="inline-flex items-center gap-1 px-3 py-1 bg-emerald-500 text-white text-xs font-bold rounded-full mb-2">
-                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
-                      </svg>
-                      CORREGIDO
-                    </div>
-                    
-                    <!-- Cantidad y nombre del Item -->
-                    <div class="flex items-center gap-2 mb-1 flex-wrap">
-                      <span class="font-bold text-cyan-700 dark:text-cyan-200">+{{ a?.cantidad || 0 }}</span>
-                      <span v-if="a?.id_item" class="px-2 py-0.5 bg-cyan-200 text-cyan-800 rounded text-xs font-medium dark:bg-cyan-500/20 dark:text-cyan-200">
-                        Ítem #{{ a.id_item }}
-                      </span>
-                      <span v-if="a?.item" class="text-sm font-semibold text-gray-700 dark:text-slate-200">
-                        {{ a.item.tamano || a.item.descripcion || 'Sin descripción' }}
-                      </span>
-                    </div>
-                    
-                    <!-- Comentario -->
-                    <div v-if="a?.comentario" class="text-sm mb-2">
-                      <template v-if="isRechazoComentario(a?.comentario)">
-                        <div class="text-xs text-red-800 font-semibold mb-1 dark:text-rose-300">RECHAZO POR CALIDAD</div>
-                        <div class="italic text-gray-700 dark:text-slate-200">"{{ extractRechazoComentario(a.comentario) }}"</div>
-                      </template>
-                      <template v-else-if="(a?.isCorregido || a?.es_corregido)">
-                        <div class="text-xs text-emerald-800 font-semibold mb-1 dark:text-emerald-300">CORREGIDO</div>
-                        <div class="italic text-gray-700 dark:text-slate-200">"{{ a.comentario }}"</div>
-                      </template>
-                      <template v-else>
-                        <div class="italic text-gray-700 dark:text-slate-200">"{{ a.comentario }}"</div>
-                      </template>
-                    </div>
-                    
-                    <!-- Usuario -->
-                    <div class="text-sm text-gray-600 flex items-center gap-2 dark:text-slate-400">
-                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
-                      </svg>
-                      {{ a?.usuario?.name || 'Usuario' }}
-                    </div>
-                    
-                    <!-- Fecha -->
-                    <div class="text-xs text-gray-500 mt-1 flex items-center gap-1 dark:text-slate-500">
-                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-                      </svg>
-                      {{ fmtDate(a?.created_at) }}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div v-else class="p-8 text-center text-gray-500 dark:text-slate-400">
-              <svg class="w-16 h-16 mx-auto mb-4 text-gray-300 dark:text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
-              </svg>
-              <p class="font-semibold mb-1 dark:text-slate-200">No hay avances registrados</p>
-              <p class="text-sm dark:text-slate-400">Los avances aparecerán aquí cuando se reporten</p>
-            </div>
-          </div>
         </div>
 
         <!-- Right Column: Acciones -->
