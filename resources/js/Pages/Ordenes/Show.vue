@@ -864,6 +864,40 @@ function aplicarFaltantesServicio(servicioId) {
                 </div>
               </div>
               
+              <!-- Sección: Registrar Faltantes (Tradicionales) -->
+              <div v-if="can?.reportarAvance && hasFaltantes" class="-mx-4 sm:-mx-5 px-4 sm:px-5 py-3.5 bg-rose-50/50 dark:bg-rose-900/20 border-t border-rose-200 dark:border-rose-700">
+                <!-- Título inline con divider -->
+                <div class="flex items-center gap-2.5 mb-3">
+                  <svg class="w-4 h-4 text-rose-600 dark:text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                  </svg>
+                  <h4 class="font-bold text-xs uppercase tracking-wider text-rose-700 dark:text-rose-300">Registrar Faltantes</h4>
+                </div>
+                
+                <div class="bg-white dark:bg-slate-900/50 rounded-lg p-3 ring-1 ring-rose-200 dark:ring-rose-700">
+                  <div class="grid grid-cols-1 lg:grid-cols-12 gap-3">
+                    <!-- Nota -->
+                    <div class="lg:col-span-10">
+                      <label class="block text-[10px] font-bold text-slate-600 dark:text-slate-400 mb-1.5 uppercase tracking-wider">Nota <span class="font-normal text-slate-400">(opcional)</span></label>
+                      <textarea v-model="faltForm.nota" rows="2" placeholder="Describe el motivo de los faltantes..."
+                                class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md text-sm focus:border-rose-500 focus:ring-1 focus:ring-rose-200 dark:bg-slate-900 dark:text-slate-100 transition-all bg-white resize-none min-h-[4rem]"></textarea>
+                    </div>
+                    
+                    <!-- Botón -->
+                    <div class="lg:col-span-2 flex items-end">
+                      <button @click="aplicarFaltantes" type="button"
+                              :disabled="faltForm.processing" 
+                              class="w-full px-4 py-2 bg-gradient-to-r from-rose-600 to-pink-600 text-white font-bold rounded-lg shadow-md hover:shadow-lg hover:scale-105 transform transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:scale-100 text-sm dark:from-rose-500 dark:to-pink-500">
+                        <span v-if="faltForm.processing">Guardando...</span>
+                        <span v-else>⚠ Guardar</span>
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <p v-if="faltForm.errors.items" class="mt-2 text-xs text-red-600 dark:text-red-400">{{ faltForm.errors.items }}</p>
+                </div>
+              </div>
+              
               <!-- Avances Registrados dentro de la misma card -->
               <div v-if="avances && avances.length > 0" class="-mx-4 sm:-mx-5 px-4 sm:px-5 py-3.5 bg-white dark:bg-slate-900/50 border-t border-slate-200 dark:border-slate-700">
                 <div class="flex items-center gap-2 mb-3">
