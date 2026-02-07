@@ -656,188 +656,243 @@ function aplicarFaltantesServicio(servicioId) {
 
           <!-- Ítems de la OT - OT Tradicionales -->
           <div v-if="items.length" class="bg-white rounded-2xl shadow-lg border-2 border-emerald-100 overflow-hidden dark:bg-slate-900/80 dark:border-emerald-500/30">
-            <div class="bg-gradient-to-r from-emerald-600 to-teal-600 px-4 py-2 dark:from-emerald-500 dark:to-teal-500">
-              <h2 class="text-base font-bold text-white flex items-center gap-1.5 leading-tight">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
-                </svg>
-                Ítems de la Orden
-              </h2>
-            </div>
-            <div class="px-4 sm:px-6 py-5 space-y-5">
-              <!-- Resumen de unidades -->
-              <div class="flex flex-wrap gap-3">
-                <div class="px-3 py-2 bg-blue-50 border-2 border-blue-200 rounded-full text-blue-800 text-sm font-bold dark:bg-blue-500/10 dark:border-blue-500/40 dark:text-blue-200">
-                  Planeado: <span class="ml-1">{{ unidades?.planeado ?? 0 }}</span>
+            <!-- Header Compacto -->
+            <div class="bg-emerald-600 px-4 py-2.5 border-b-2 border-emerald-700/30 dark:bg-emerald-700 dark:border-emerald-800">
+              <div class="flex items-center justify-between gap-3">
+                <div class="flex items-center gap-2.5 min-w-0 flex-1">
+                  <div class="w-7 h-7 rounded-lg bg-white/15 backdrop-blur-sm flex items-center justify-center flex-shrink-0 ring-1 ring-white/20">
+                    <span class="text-white font-bold text-sm">1</span>
+                  </div>
+                  <div class="min-w-0 flex-1">
+                    <div class="flex items-baseline gap-2 flex-wrap">
+                      <h2 class="text-base font-bold text-white leading-none tracking-tight truncate">
+                        {{ orden?.servicio?.nombre || 'Servicio' }}
+                      </h2>
+                      <span class="text-emerald-50/70 text-[11px] font-medium leading-none whitespace-nowrap">
+                        {{ unidades?.planeado ?? 0 }} uds.
+                      </span>
+                    </div>
+                  </div>
                 </div>
-                <div class="px-3 py-2 bg-emerald-50 border-2 border-emerald-200 rounded-full text-emerald-800 text-sm font-bold dark:bg-emerald-500/10 dark:border-emerald-500/40 dark:text-emerald-200">
-                  Completado: <span class="ml-1">{{ unidades?.completado ?? 0 }}</span>
-                </div>
-                <div class="px-3 py-2 bg-rose-50 border-2 border-rose-300 rounded-full text-rose-700 text-sm font-bold dark:bg-rose-500/10 dark:border-rose-500/40 dark:text-rose-200">
-                  Faltante: <span class="ml-1">{{ unidades?.faltante ?? 0 }}</span>
-                </div>
-                <div class="px-3 py-2 bg-indigo-50 border-2 border-indigo-200 rounded-full text-indigo-800 text-sm font-bold dark:bg-indigo-500/10 dark:border-indigo-500/40 dark:text-indigo-200">
-                  Total: <span class="ml-1">{{ unidades?.total ?? 0 }}</span>
+                <div class="bg-white/95 backdrop-blur-sm rounded-md px-2.5 py-1 shadow-sm ring-1 ring-emerald-900/5 flex-shrink-0">
+                  <p class="text-[9px] uppercase tracking-wider font-extrabold text-slate-500 leading-none">Subtotal</p>
+                  <p class="text-sm font-bold text-slate-900 leading-none mt-0.5">{{ money(orden.subtotal) }}</p>
                 </div>
               </div>
+            </div>
 
-              <div class="hidden lg:block overflow-x-auto">
-                <table class="min-w-full">
-                  <thead class="bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-500/10 dark:to-teal-500/10">
+            <!-- Contenido -->
+            <div class="px-4 sm:px-5 py-4 space-y-4">
+            
+              <!-- KPIs Mini Stat Tiles -->
+              <div class="grid grid-cols-2 md:grid-cols-5 gap-2.5">
+                <!-- Planeado -->
+                <div class="relative bg-gradient-to-br from-blue-50 to-blue-50/50 border-l-4 border-blue-500 rounded-lg p-2.5 shadow-sm ring-1 ring-slate-900/5 dark:from-blue-950/40 dark:to-blue-950/20 dark:border-blue-400 dark:ring-blue-500/20">
+                  <p class="text-[10px] uppercase tracking-wider font-extrabold text-blue-600 dark:text-blue-400 leading-none">Planeado</p>
+                  <p class="text-2xl font-black text-blue-900 dark:text-blue-100 leading-none mt-1.5">{{ unidades?.planeado ?? 0 }}</p>
+                </div>
+                
+                <!-- Completado -->
+                <div class="relative bg-gradient-to-br from-emerald-50 to-emerald-50/50 border-l-4 border-emerald-500 rounded-lg p-2.5 shadow-sm ring-1 ring-slate-900/5 dark:from-emerald-950/40 dark:to-emerald-950/20 dark:border-emerald-400 dark:ring-emerald-500/20">
+                  <p class="text-[10px] uppercase tracking-wider font-extrabold text-emerald-600 dark:text-emerald-400 leading-none">Completado</p>
+                  <p class="text-2xl font-black text-emerald-900 dark:text-emerald-100 leading-none mt-1.5">{{ unidades?.completado ?? 0 }}</p>
+                </div>
+                
+                <!-- Faltantes -->
+                <div class="relative bg-gradient-to-br from-amber-50 to-amber-50/50 border-l-4 border-amber-500 rounded-lg p-2.5 shadow-sm ring-1 ring-slate-900/5 dark:from-amber-950/40 dark:to-amber-950/20 dark:border-amber-400 dark:ring-amber-500/20">
+                  <p class="text-[10px] uppercase tracking-wider font-extrabold text-amber-600 dark:text-amber-400 leading-none">Faltantes</p>
+                  <p class="text-2xl font-black text-amber-900 dark:text-amber-100 leading-none mt-1.5">{{ unidades?.faltante ?? 0 }}</p>
+                </div>
+                
+                <!-- Pendiente -->
+                <div class="relative bg-gradient-to-br from-purple-50 to-purple-50/50 border-l-4 border-purple-500 rounded-lg p-2.5 shadow-sm ring-1 ring-slate-900/5 dark:from-purple-950/40 dark:to-purple-950/20 dark:border-purple-400 dark:ring-purple-500/20">
+                  <p class="text-[10px] uppercase tracking-wider font-extrabold text-purple-600 dark:text-purple-400 leading-none">Pendiente</p>
+                  <p class="text-2xl font-black text-purple-900 dark:text-purple-100 leading-none mt-1.5">{{ (unidades?.planeado ?? 0) - ((unidades?.completado ?? 0) + (unidades?.faltante ?? 0)) }}</p>
+                </div>
+                
+                <!-- Total -->
+                <div class="relative bg-gradient-to-br from-slate-50 to-slate-50/50 border-l-4 border-slate-400 rounded-lg p-2.5 shadow-sm ring-1 ring-slate-900/5 dark:from-slate-800/40 dark:to-slate-800/20 dark:border-slate-500 dark:ring-slate-500/20">
+                  <p class="text-[10px] uppercase tracking-wider font-extrabold text-slate-600 dark:text-slate-400 leading-none">Total</p>
+                  <p class="text-2xl font-black text-slate-900 dark:text-slate-100 leading-none mt-1.5">{{ unidades?.total ?? 0 }}</p>
+                </div>
+              </div>
+              
+              <!-- Tabla de distribución / progreso -->
+              <div v-if="items && items.length > 0">
+                <!-- Divider con título inline -->
+                <div class="flex items-center gap-3 pb-2.5 border-b border-slate-200 dark:border-slate-700">
+                  <svg class="w-4 h-4 text-slate-500 dark:text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+                  </svg>
+                  <h5 class="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">Distribución por Producto</h5>
+                </div>
+                <div class="overflow-x-auto mt-2.5">
+                <table class="w-full text-sm">
+                  <thead class="bg-slate-100/60 dark:bg-slate-800/60">
                     <tr>
-                      <th class="px-6 py-4 text-left text-sm font-bold text-emerald-700 uppercase tracking-wider dark:text-emerald-200">Descripción</th>
-                      <th class="px-6 py-4 text-center text-sm font-bold text-emerald-700 uppercase tracking-wider dark:text-emerald-200">Planeado</th>
-                      <th class="px-6 py-4 text-center text-sm font-bold text-emerald-700 uppercase tracking-wider dark:text-emerald-200">Completado</th>
-                      <th class="px-6 py-4 text-center text-sm font-bold text-emerald-700 uppercase tracking-wider dark:text-emerald-200">Progreso</th>
-                      <th v-if="can?.reportarAvance" class="px-6 py-4 text-center text-sm font-bold text-emerald-700 uppercase tracking-wider dark:text-emerald-200">Registrar</th>
-                      <th v-if="can?.reportarAvance" class="px-6 py-4 text-center text-sm font-bold text-emerald-700 uppercase tracking-wider dark:text-emerald-200">Faltantes</th>
+                      <th class="px-3 py-2 text-left text-[10px] uppercase tracking-wider font-bold text-slate-600 dark:text-slate-400">Descripción</th>
+                      <th class="px-3 py-2 text-center text-[10px] uppercase tracking-wider font-bold text-slate-600 dark:text-slate-400">Planeado</th>
+                      <th class="px-3 py-2 text-center text-[10px] uppercase tracking-wider font-bold text-slate-600 dark:text-slate-400">Completado</th>
+                      <th class="px-3 py-2 text-center text-[10px] uppercase tracking-wider font-bold text-slate-600 dark:text-slate-400">Progreso</th>
+                      <th v-if="can?.reportarAvance" class="px-3 py-2 text-center text-[10px] uppercase tracking-wider font-bold text-slate-600 dark:text-slate-400">Registrar</th>
+                      <th v-if="can?.reportarAvance" class="px-3 py-2 text-center text-[10px] uppercase tracking-wider font-bold text-indigo-600 dark:text-indigo-400">Faltantes</th>
                     </tr>
                   </thead>
-                  <tbody class="divide-y divide-gray-100 dark:divide-slate-800/80">
-                    <tr v-for="(it, idx) in items" :key="it.id" class="hover:bg-emerald-50 transition-colors duration-150 dark:hover:bg-emerald-500/10">
-                      <td class="px-6 py-4">
-                        <div class="flex items-center gap-3">
-                          <div class="bg-emerald-100 p-2 rounded-lg dark:bg-emerald-500/20">
-                            <svg class="w-5 h-5 text-emerald-600 dark:text-emerald-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/>
-                            </svg>
-                          </div>
-                          <div>
-                            <div class="font-semibold text-gray-800 dark:text-slate-100">
-                              <span v-if="it?.tamano">{{ it.tamano }}</span>
-                              <span v-else>{{ it?.descripcion || 'Sin descripción' }}</span>
-                            </div>
-                            <div v-if="it?.tamano && it?.descripcion" class="text-sm text-gray-500 mt-1 dark:text-slate-400">{{ it.descripcion }}</div>
-                          </div>
+                  <tbody class="divide-y divide-slate-100 dark:divide-slate-800/50">
+                    <tr v-for="(it, idx) in items" :key="it.id" 
+                        :class="idx % 2 === 0 ? 'bg-white dark:bg-slate-900/20' : 'bg-slate-50/50 dark:bg-slate-800/20'" 
+                        class="hover:bg-blue-50/40 dark:hover:bg-blue-950/20 transition-colors">
+                      <td class="px-3 py-2">
+                        <div class="flex items-center gap-1.5">
+                          <div class="w-1 h-1 rounded-full bg-slate-400 dark:bg-slate-500"></div>
+                          <span class="font-medium text-slate-900 dark:text-slate-100 text-xs">
+                            <span v-if="it?.tamano">{{ it.tamano }}</span>
+                            <span v-else>{{ it?.descripcion || 'Sin descripción' }}</span>
+                          </span>
                         </div>
                       </td>
-                      <td class="px-6 py-4 text-center">
-                        <span class="px-3 py-1 bg-blue-100 text-blue-800 rounded-full font-bold text-sm dark:bg-blue-500/20 dark:text-blue-200">
-                          {{ it?.cantidad_planeada }}
-                        </span>
+                      <td class="px-3 py-2 text-center">
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300">{{ it?.cantidad_planeada || 0 }}</span>
                       </td>
-                      <td class="px-6 py-4 text-center">
-                        <span class="px-3 py-1 rounded-full font-bold text-sm"
-                          :class="(it?.cantidad_real || 0) >= (it?.cantidad_planeada || 0) ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-200' : 'bg-orange-100 text-orange-800 dark:bg-orange-500/20 dark:text-orange-200'">
+                      <td class="px-3 py-2 text-center">
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold"
+                              :class="(it?.cantidad_real || 0) >= (it?.cantidad_planeada || 0) ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300'">
                           {{ it?.cantidad_real || 0 }}
                         </span>
                       </td>
-                      <td class="px-6 py-4">
-                        <div class="flex items-center gap-3">
-                          <div class="flex-1 bg-gray-200 rounded-full h-3 overflow-hidden dark:bg-slate-700">
-                            <div class="h-full rounded-full transition-all duration-500"
-                                 :class="(it?.cantidad_real || 0) >= (it?.cantidad_planeada || 0) ? 'bg-gradient-to-r from-emerald-500 to-teal-500' : 'bg-gradient-to-r from-orange-500 to-amber-500'"
-                                 :style="{ width: Math.min(100, ((it?.cantidad_real || 0) / (it?.cantidad_planeada || 1)) * 100) + '%' }">
-                            </div>
+                      <td class="px-3 py-2">
+                        <div class="flex items-center gap-2">
+                          <div class="flex-1 bg-slate-200 rounded-full h-1.5 overflow-hidden dark:bg-slate-700">
+                            <div class="h-full rounded-full transition-all"
+                                 :class="(it?.cantidad_real || 0) >= (it?.cantidad_planeada || 0) ? 'bg-gradient-to-r from-emerald-500 to-teal-500' : 'bg-gradient-to-r from-amber-500 to-orange-500'"
+                                 :style="{ width: Math.min(100, ((it?.cantidad_real || 0) / (it?.cantidad_planeada || 1)) * 100) + '%' }"></div>
                           </div>
-                          <span class="text-sm font-bold text-gray-700 min-w-[3rem] text-right dark:text-slate-200">
+                          <span class="text-[11px] font-bold text-slate-700 dark:text-slate-300 min-w-[2.5rem] text-right">
                             {{ Math.round(((it?.cantidad_real || 0) / (it?.cantidad_planeada || 1)) * 100) }}%
                           </span>
                         </div>
                       </td>
-
                       <!-- Captura de avance -->
-                      <td v-if="can?.reportarAvance" class="px-6 py-4">
-                            <div class="flex flex-col items-center gap-2">
+                      <td v-if="can?.reportarAvance" class="px-3 py-2">
+                        <div class="flex items-center justify-center">
                           <input type="number" min="0" step="1" inputmode="numeric" pattern="[0-9]*"
-                               :max="restante(it)"
-                               v-model.number="avForm.items[idx].cantidad"
-                               placeholder="0"
-                               @focus="if(avForm.items[idx].cantidad===0 || avForm.items[idx].cantidad===''){ avForm.items[idx].cantidad=''; }"
-                               @input="avForm.clearErrors('items')"
-                             class="w-24 px-3 py-2 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400 text-center font-semibold dark:bg-slate-900/60 dark:border-slate-700 dark:text-slate-100" />
-                           <span class="text-xs text-gray-500 dark:text-slate-400">máx: {{ restante(it) }}</span>
+                                 :max="restante(it)"
+                                 v-model.number="avForm.items[idx].cantidad"
+                                 placeholder="0"
+                                 @focus="if(avForm.items[idx].cantidad===0 || avForm.items[idx].cantidad===''){ avForm.items[idx].cantidad=''; }"
+                                 @input="avForm.clearErrors('items')"
+                                 class="w-16 px-2 py-1 border border-slate-300 dark:border-slate-600 rounded-md text-center text-xs font-semibold focus:ring-1 focus:ring-emerald-300 focus:border-emerald-400 dark:bg-slate-900/60 dark:text-slate-100" />
                         </div>
                       </td>
                       <!-- Captura de faltantes -->
-                      <td v-if="can?.reportarAvance" class="px-6 py-4">
-                           <div class="flex flex-col items-center gap-2">
+                      <td v-if="can?.reportarAvance" class="px-3 py-2">
+                        <div class="flex items-center justify-center">
                           <input type="number" min="0" step="1" inputmode="numeric" pattern="[0-9]*"
                                  :max="restante(it)"
                                  v-model.number="faltForm.items[idx].faltantes"
                                  placeholder="0"
                                  @focus="if(faltForm.items[idx].faltantes===0 || faltForm.items[idx].faltantes===''){ faltForm.items[idx].faltantes=''; }"
                                  @input="faltForm.clearErrors('items')"
-                               class="w-24 px-3 py-2 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 text-center font-semibold dark:bg-slate-900/60 dark:border-slate-700 dark:text-slate-100" />
-                             <span class="text-xs text-gray-500 dark:text-slate-400">máx: {{ restante(it) }}</span>
+                                 class="w-16 px-2 py-1 border border-slate-300 dark:border-slate-600 rounded-md text-center text-xs font-semibold focus:ring-1 focus:ring-indigo-300 focus:border-indigo-400 dark:bg-slate-900/60 dark:text-slate-100" />
                         </div>
                       </td>
                     </tr>
                   </tbody>
                 </table>
+                </div>
+              </div>
+                  
+              <!-- Sección: Registrar Avance (Tradicionales) -->
+              <div v-if="can?.reportarAvance" class="-mx-4 sm:-mx-5 px-4 sm:px-5 py-3.5 bg-slate-50/80 dark:bg-slate-800/30 border-t border-slate-200 dark:border-slate-700">
+                <!-- Título inline con divider -->
+                <div class="flex items-center gap-2.5 mb-3">
+                  <svg class="w-4 h-4 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                  </svg>
+                  <h4 class="font-bold text-xs uppercase tracking-wider text-slate-700 dark:text-slate-300">Registrar Avance</h4>
+                </div>
+                
+                <div class="bg-white dark:bg-slate-900/50 rounded-lg p-3 ring-1 ring-slate-200 dark:ring-slate-700">
+                  <div class="grid grid-cols-1 lg:grid-cols-12 gap-3">
+                    <!-- Tarifa -->
+                    <div class="lg:col-span-3">
+                      <label class="block text-[10px] font-bold text-slate-600 dark:text-slate-400 mb-1.5 uppercase tracking-wider">Tarifa</label>
+                      <div class="relative">
+                        <select v-model="avForm.tarifa_tipo" class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md text-sm font-semibold focus:border-emerald-500 focus:ring-1 focus:ring-emerald-200 dark:bg-slate-900 dark:text-slate-100 transition-all bg-white appearance-none">
+                          <option value="NORMAL">🕐 NORMAL</option>
+                          <option value="EXTRA">⚡ EXTRA</option>
+                          <option value="FIN_DE_SEMANA">🌅 FIN SEMANA</option>
+                        </select>
+                        <svg class="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                        </svg>
+                      </div>
+                    </div>
+                    
+                    <!-- Precio Unitario (solo si tarifa != NORMAL) -->
+                    <div v-if="avForm.tarifa_tipo !== 'NORMAL'" class="lg:col-span-2">
+                      <label class="block text-[10px] font-bold text-orange-600 dark:text-orange-400 mb-1.5 uppercase tracking-wider">Precio</label>
+                      <div class="relative">
+                        <span class="absolute left-2.5 top-1/2 -translate-y-1/2 text-orange-600 dark:text-orange-400 font-bold text-xs">$</span>
+                        <input type="number" step="0.01" min="0" v-model.number="avForm.precio_unitario_manual" placeholder="12.50"
+                               class="w-full pl-7 pr-2.5 py-2 border rounded-md text-sm font-bold transition-all
+                                      border-orange-300 bg-orange-50/50 text-orange-900 placeholder:text-orange-400/60
+                                      dark:border-orange-600 dark:bg-orange-950/30 dark:text-orange-100
+                                      focus:border-orange-500 focus:ring-1 focus:ring-orange-200" />
+                      </div>
+                    </div>
+                    
+                    <!-- Comentario -->
+                    <div :class="avForm.tarifa_tipo !== 'NORMAL' ? 'lg:col-span-5' : 'lg:col-span-7'">
+                      <label class="block text-[10px] font-bold text-slate-600 dark:text-slate-400 mb-1.5 uppercase tracking-wider">Comentario <span class="font-normal text-slate-400">(opcional)</span></label>
+                      <textarea v-model="avForm.comentario" rows="2" placeholder="Describe el progreso..."
+                                class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-200 dark:bg-slate-900 dark:text-slate-100 transition-all bg-white resize-none min-h-[4rem]"></textarea>
+                    </div>
+                    
+                    <!-- Botón -->
+                    <div class="lg:col-span-2 flex items-end">
+                      <button @click="registrarAvance" type="button"
+                              :disabled="avForm.processing" 
+                              class="w-full px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold rounded-lg shadow-md hover:shadow-lg hover:scale-105 transform transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:scale-100 text-sm dark:from-emerald-500 dark:to-teal-500">
+                        <span v-if="avForm.processing">Guardando...</span>
+                        <span v-else>✓ Guardar</span>
+                      </button>
+                    </div>
+                  </div>
+                  <p v-if="avForm.errors.items" class="mt-2 text-xs text-red-600 dark:text-red-400">{{ avForm.errors.items }}</p>
+                </div>
               </div>
 
-              <div class="lg:hidden space-y-4">
-                <div v-for="(it, idx) in items" :key="`m-${it.id}`" class="border border-emerald-100 rounded-2xl p-4 bg-white shadow-sm dark:bg-slate-900/60 dark:border-emerald-500/30">
-                  <div class="flex items-start gap-3">
-                    <div class="bg-emerald-100 p-2 rounded-lg dark:bg-emerald-500/20">
-                      <svg class="w-5 h-5 text-emerald-600 dark:text-emerald-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/>
-                      </svg>
+              <!-- Sección: Registrar Faltantes (Tradicionales) -->
+              <div v-if="can?.reportarAvance" class="-mx-4 sm:-mx-5 px-4 sm:px-5 py-3.5 bg-slate-50/80 dark:bg-slate-800/30 border-t border-slate-200 dark:border-slate-700">
+                <!-- Título inline con divider -->
+                <div class="flex items-center gap-2.5 mb-3">
+                  <svg class="w-4 h-4 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                  </svg>
+                  <h4 class="font-bold text-xs uppercase tracking-wider text-slate-700 dark:text-slate-300">Registrar Faltantes</h4>
+                </div>
+                
+                <div class="bg-white dark:bg-slate-900/50 rounded-lg p-3 ring-1 ring-slate-200 dark:ring-slate-700">
+                  <div class="grid grid-cols-1 lg:grid-cols-12 gap-3">
+                    <!-- Nota -->
+                    <div class="lg:col-span-10">
+                      <label class="block text-[10px] font-bold text-slate-600 dark:text-slate-400 mb-1.5 uppercase tracking-wider">Nota <span class="font-normal text-slate-400">(opcional)</span></label>
+                      <textarea v-model="faltForm.nota" rows="2" placeholder="Describe el motivo de los faltantes..."
+                                class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-200 dark:bg-slate-900 dark:text-slate-100 transition-all bg-white resize-none min-h-[4rem]"></textarea>
                     </div>
-                    <div>
-                      <div class="font-semibold text-gray-800 dark:text-slate-100">
-                        <span v-if="it?.tamano">{{ it.tamano }}</span>
-                        <span v-else>{{ it?.descripcion || 'Sin descripción' }}</span>
-                      </div>
-                      <div v-if="it?.tamano && it?.descripcion" class="text-xs text-gray-500 mt-1 dark:text-slate-400">{{ it.descripcion }}</div>
-                    </div>
-                  </div>
-
-                  <div class="mt-3 grid grid-cols-2 gap-3 text-sm">
-                    <div>
-                      <div class="text-[11px] uppercase tracking-wide text-blue-500 font-semibold dark:text-blue-200">Planeado</div>
-                      <div class="mt-1 inline-flex px-2 py-1 bg-blue-100 text-blue-800 rounded-full font-bold text-sm dark:bg-blue-500/20 dark:text-blue-200">{{ it?.cantidad_planeada }}</div>
-                    </div>
-                    <div>
-                      <div class="text-[11px] uppercase tracking-wide text-emerald-600 font-semibold dark:text-emerald-200">Completado</div>
-                        <div class="mt-1 inline-flex px-2 py-1 rounded-full font-bold text-sm"
-                          :class="(it?.cantidad_real || 0) >= (it?.cantidad_planeada || 0) ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-200' : 'bg-orange-100 text-orange-800 dark:bg-orange-500/20 dark:text-orange-200'">
-                        {{ it?.cantidad_real || 0 }}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div class="mt-4">
-                    <div class="flex items-center justify-between text-[11px] font-semibold text-gray-500 mb-2 dark:text-slate-400">
-                      <span>Progreso</span>
-                      <span class="text-gray-700 dark:text-slate-200">{{ Math.round(((it?.cantidad_real || 0) / (it?.cantidad_planeada || 1)) * 100) }}%</span>
-                    </div>
-                    <div class="h-2 bg-gray-200 rounded-full overflow-hidden dark:bg-slate-700">
-                      <div class="h-full rounded-full transition-all duration-500"
-                           :class="(it?.cantidad_real || 0) >= (it?.cantidad_planeada || 0) ? 'bg-gradient-to-r from-emerald-500 to-teal-500' : 'bg-gradient-to-r from-orange-500 to-amber-500'"
-                           :style="{ width: Math.min(100, ((it?.cantidad_real || 0) / (it?.cantidad_planeada || 1)) * 100) + '%' }"></div>
+                    
+                    <!-- Botón -->
+                    <div class="lg:col-span-2 flex items-end">
+                      <button @click="aplicarFaltantes" type="button"
+                              :disabled="faltForm.processing" 
+                              class="w-full px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold rounded-lg shadow-md hover:shadow-lg hover:scale-105 transform transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:scale-100 text-sm dark:from-indigo-500 dark:to-purple-500">
+                        <span v-if="faltForm.processing">Guardando...</span>
+                        <span v-else>⚠ Guardar Faltantes</span>
+                      </button>
                     </div>
                   </div>
-
-                  <div v-if="can?.reportarAvance" class="mt-4 space-y-4">
-                    <div>
-                      <label class="text-xs font-semibold text-gray-600 uppercase dark:text-slate-300">Registrar avance</label>
-                      <div class="mt-2 flex flex-col gap-2">
-                        <input type="number" min="0" step="1" inputmode="numeric" pattern="[0-9]*"
-                               :max="restante(it)"
-                               v-model.number="avForm.items[idx].cantidad"
-                               placeholder="0"
-                               @focus="if(avForm.items[idx].cantidad===0 || avForm.items[idx].cantidad===''){ avForm.items[idx].cantidad=''; }"
-                               @input="avForm.clearErrors('items')"
-                                 class="w-full px-3 py-2 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400 text-center font-semibold dark:bg-slate-900/60 dark:border-slate-700 dark:text-slate-100" />
-                               <span class="text-xs text-gray-500 text-center dark:text-slate-400">máx: {{ restante(it) }}</span>
-                      </div>
-                    </div>
-                    <div>
-                      <label class="text-xs font-semibold text-gray-600 uppercase dark:text-slate-300">Registrar faltantes</label>
-                      <div class="mt-2 flex flex-col gap-2">
-                        <input type="number" min="0" step="1" inputmode="numeric" pattern="[0-9]*"
-                               :max="restante(it)"
-                               v-model.number="faltForm.items[idx].faltantes"
-                               placeholder="0"
-                               @focus="if(faltForm.items[idx].faltantes===0 || faltForm.items[idx].faltantes===''){ faltForm.items[idx].faltantes=''; }"
-                               @input="faltForm.clearErrors('items')"
-                                 class="w-full px-3 py-2 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 text-center font-semibold dark:bg-slate-900/60 dark:border-slate-700 dark:text-slate-100" />
-                               <span class="text-xs text-gray-500 text-center dark:text-slate-400">máx: {{ restante(it) }}</span>
-                      </div>
-                    </div>
-                  </div>
+                  <p v-if="faltForm.errors.items" class="mt-2 text-xs text-red-600 dark:text-red-400">{{ faltForm.errors.items }}</p>
                 </div>
               </div>
             </div>
