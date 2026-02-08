@@ -125,6 +125,18 @@ const notaJustificacion = ref('')
 const procesandoServicio = ref(false)
 const erroresServicio = ref({ servicio_id: null, nota: null })
 
+// IDs de servicios ya asignados en esta OT
+const serviciosYaAsignados = computed(() => {
+  return (props.orden?.ot_servicios ?? []).map(s => parseInt(s.id_servicio))
+})
+
+// Verificar si un servicio ya está asignado
+const servicioYaAsignado = computed(() => {
+  if (!servicioSeleccionado.value) return false
+  const idSeleccionado = parseInt(servicioSeleccionado.value)
+  return serviciosYaAsignados.value.includes(idSeleccionado)
+})
+
 function agregarServicioAdicional() {
   console.log('🚀 Iniciando submit de servicio adicional')
   console.log('📋 Estado DIRECTO:', {
@@ -590,7 +602,7 @@ function aplicarFaltantesServicio(servicioId) {
               </div>
               <div>
                 <h1 class="text-2xl sm:text-3xl font-bold text-white leading-tight">OT #{{ orden?.id }}</h1>
-                <p class="text-indigo-100 text-sm sm:text-base mt-0.5">{{ orden?.servicio?.nombre }}</p>
+                <p class="text-indigo-100 text-sm sm:text-base mt-0.5">{{ orden?.solicitud?.descripcion || orden?.servicio?.nombre || 'Sin descripción' }}</p>
               </div>
             </div>
             
@@ -672,6 +684,12 @@ function aplicarFaltantesServicio(servicioId) {
               </svg>
               <span class="text-gray-700 dark:text-slate-200"><strong>Área:</strong> {{ orden.area.nombre }}</span>
             </div>
+            <div v-if="orden?.solicitud?.descripcion" class="flex items-center gap-1.5">
+              <svg class="w-4 h-4 text-indigo-600 dark:text-indigo-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/>
+              </svg>
+              <span class="text-gray-700 dark:text-slate-200"><strong>Producto:</strong> {{ orden.solicitud.descripcion }}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -718,81 +736,6 @@ function aplicarFaltantesServicio(servicioId) {
                 {{ tlForm.errors.team_leader_id }}
               </p>
             </div>
-          </div>
-
-          <!-- Agregar Servicio Adicional (Coordinador/Team Leader) -->
-          <div v-if="can?.agregar_servicio_adicional" class="bg-white rounded-2xl shadow-lg border-2 border-amber-100 overflow-hidden dark:bg-slate-900/80 dark:border-amber-500/30">
-            <div class="bg-gradient-to-r from-amber-600 to-orange-600 px-4 py-2 dark:from-amber-500 dark:to-orange-500">
-              <h2 class="text-base font-bold text-white flex items-center gap-1.5 leading-tight">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
-                </svg>
-                Agregar Servicio Adicional
-              </h2>
-            </div>
-            <form @submit.prevent="agregarServicioAdicional" class="p-6 space-y-4">
-              <div class="bg-amber-50 border-2 border-amber-200 rounded-xl p-3 dark:bg-amber-500/10 dark:border-amber-500/40">
-                <p class="text-sm text-amber-800 dark:text-amber-200">
-                  <strong>Importante:</strong> Al agregar un servicio adicional, esta OT se convertirá automáticamente a multi-servicio.
-                </p>
-              </div>
-              
-              <div>
-                <label for="servicio_adicional_select" class="block text-sm font-semibold text-gray-700 mb-2 dark:text-slate-200">Servicio *</label>
-                <div class="relative">
-                  <select 
-                    id="servicio_adicional_select"
-                    v-model.number="servicioSeleccionado"
-                    @change="console.log('🔄 Select changed:', servicioSeleccionado, typeof servicioSeleccionado, 'opciones:', servicios_disponibles.map(s => s.id))"
-                    required
-                    class="w-full px-4 py-3 pr-10 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-amber-100 focus:border-amber-400 transition-all duration-200 appearance-none bg-white text-gray-800 font-medium dark:bg-slate-900/60 dark:border-slate-700 dark:text-slate-100 dark:focus:ring-amber-400/40 dark:focus:border-amber-400/60"
-                    :class="{ 'border-red-500 dark:border-red-500': erroresServicio.servicio_id }">
-                    <option value="">— Selecciona un servicio —</option>
-                    <option v-for="servicio in servicios_disponibles" :key="'serv-'+servicio.id" :value="String(servicio.id)">
-                      {{ servicio.nombre }}
-                    </option>
-                  </select>
-                  <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-400 dark:text-slate-500">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-                    </svg>
-                  </div>
-                </div>
-                <p v-if="erroresServicio.servicio_id" class="mt-2 text-sm text-red-600">
-                  {{ erroresServicio.servicio_id }}
-                </p>
-              </div>
-              
-              <div class="bg-blue-50 border-2 border-blue-200 rounded-xl p-3 dark:bg-blue-500/10 dark:border-blue-500/40">
-                <p class="text-sm text-blue-800 dark:text-blue-200">
-                  <strong>Cantidad:</strong> Se usará automáticamente la cantidad planeada de esta OT ({{ orden.total_planeado || 1 }} unidades)
-                </p>
-              </div>
-              
-              <div>
-                <label for="justificacion_textarea" class="block text-sm font-semibold text-gray-700 mb-2 dark:text-slate-200">Justificación *</label>
-                <textarea 
-                  id="justificacion_textarea"
-                  v-model="notaJustificacion"
-                  @input="console.log('📝 Textarea input. servicio_id ahora es:', servicioSeleccionado, typeof servicioSeleccionado)"
-                  required
-                  minlength="10"
-                  rows="3" 
-                  class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-amber-100 focus:border-amber-400 transition-all duration-200 bg-white text-gray-800 dark:bg-slate-900/60 dark:border-slate-700 dark:text-slate-100 dark:focus:ring-amber-400/40 dark:focus:border-amber-400/60 resize-none"
-                  :class="{ 'border-red-500 dark:border-red-500': erroresServicio.nota }"
-                  placeholder="Explica por qué se realizó este servicio adicional no solicitado (mínimo 10 caracteres)..."></textarea>
-                <p v-if="erroresServicio.nota" class="mt-2 text-sm text-red-600">
-                  {{ erroresServicio.nota }}
-                </p>
-              </div>
-              
-              <button 
-                type="submit"
-                :disabled="procesandoServicio || !servicioSeleccionado || servicioSeleccionado === '' || notaJustificacion.length < 10"
-                class="w-full px-6 py-3 bg-gradient-to-r from-amber-600 to-orange-600 text-white font-bold rounded-xl shadow-lg hover:shadow-xl hover:scale-105 transform transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:scale-100 dark:from-amber-500 dark:to-orange-500">
-                {{ procesandoServicio ? 'Agregando...' : '✓ Agregar Servicio' }}
-              </button>
-            </form>
           </div>
 
           <!-- Ítems de la OT - OT Tradicionales -->
@@ -1624,6 +1567,89 @@ function aplicarFaltantesServicio(servicioId) {
               </svg>
               <p>No hay evidencias registradas</p>
             </div>
+          </div>
+
+          <!-- Agregar Servicio Adicional (Coordinador/Team Leader) -->
+          <div v-if="can?.agregar_servicio_adicional" class="bg-white rounded-2xl shadow-lg border-2 border-amber-100 overflow-hidden dark:bg-slate-900/80 dark:border-amber-500/30">
+            <div class="bg-gradient-to-r from-amber-600 to-orange-600 px-4 py-2 dark:from-amber-500 dark:to-orange-500">
+              <h2 class="text-base font-bold text-white flex items-center gap-1.5 leading-tight">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+                </svg>
+                Agregar Servicio Adicional
+              </h2>
+            </div>
+            <form @submit.prevent="agregarServicioAdicional" class="p-6 space-y-4">
+              <div class="bg-amber-50 border-2 border-amber-200 rounded-xl p-3 dark:bg-amber-500/10 dark:border-amber-500/40">
+                <p class="text-sm text-amber-800 dark:text-amber-200">
+                  <strong>Importante:</strong> Al agregar un servicio adicional, esta OT se convertirá automáticamente a multi-servicio.
+                </p>
+              </div>
+              
+              <div>
+                <label for="servicio_adicional_select" class="block text-sm font-semibold text-gray-700 mb-2 dark:text-slate-200">Servicio *</label>
+                <div class="relative">
+                  <select 
+                    id="servicio_adicional_select"
+                    v-model.number="servicioSeleccionado"
+                    @change="console.log('🔄 Select changed:', servicioSeleccionado, typeof servicioSeleccionado, 'opciones:', servicios_disponibles.map(s => s.id))"
+                    required
+                    class="w-full px-4 py-3 pr-10 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-amber-100 focus:border-amber-400 transition-all duration-200 appearance-none bg-white text-gray-800 font-medium dark:bg-slate-900/60 dark:border-slate-700 dark:text-slate-100 dark:focus:ring-amber-400/40 dark:focus:border-amber-400/60"
+                    :class="{ 'border-red-500 dark:border-red-500': erroresServicio.servicio_id }">
+                    <option value="">— Selecciona un servicio —</option>
+                    <option v-for="servicio in servicios_disponibles" :key="'serv-'+servicio.id" :value="String(servicio.id)" :disabled="serviciosYaAsignados.includes(servicio.id)">
+                      {{ servicio.nombre }}{{ serviciosYaAsignados.includes(servicio.id) ? ' (Ya asignado)' : '' }}
+                    </option>
+                  </select>
+                  <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-400 dark:text-slate-500">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                    </svg>
+                  </div>
+                </div>
+                <p v-if="erroresServicio.servicio_id" class="mt-2 text-sm text-red-600">
+                  {{ erroresServicio.servicio_id }}
+                </p>
+                <p v-if="servicioYaAsignado" class="mt-2 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-2 flex items-center gap-2">
+                  <svg class="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
+                  </svg>
+                  <span><strong>Este servicio ya está asignado a esta OT.</strong> Por favor selecciona otro servicio.</span>
+                </p>
+              </div>
+              
+              <div class="bg-blue-50 border-2 border-blue-200 rounded-xl p-3 dark:bg-blue-500/10 dark:border-blue-500/40">
+                <p class="text-sm text-blue-800 dark:text-blue-200">
+                  <strong>Cantidad:</strong> Se usará automáticamente la cantidad planeada de esta OT ({{ orden.total_planeado || 1 }} unidades)
+                </p>
+              </div>
+              
+              <div>
+                <label for="justificacion_textarea" class="block text-sm font-semibold text-gray-700 mb-2 dark:text-slate-200">Justificación *</label>
+                <textarea 
+                  id="justificacion_textarea"
+                  v-model="notaJustificacion"
+                  @input="console.log('📝 Textarea input. servicio_id ahora es:', servicioSeleccionado, typeof servicioSeleccionado)"
+                  required
+                  minlength="10"
+                  rows="3" 
+                  class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-amber-100 focus:border-amber-400 transition-all duration-200 bg-white text-gray-800 dark:bg-slate-900/60 dark:border-slate-700 dark:text-slate-100 dark:focus:ring-amber-400/40 dark:focus:border-amber-400/60 resize-none"
+                  :class="{ 'border-red-500 dark:border-red-500': erroresServicio.nota }"
+                  placeholder="Explica por qué se realizó este servicio adicional no solicitado (mínimo 10 caracteres)..."></textarea>
+                <p v-if="erroresServicio.nota" class="mt-2 text-sm text-red-600">
+                  {{ erroresServicio.nota }}
+                </p>
+              </div>
+              
+              <button 
+                type="submit"
+                :disabled="procesandoServicio || !servicioSeleccionado || servicioSeleccionado === '' || notaJustificacion.length < 10 || servicioYaAsignado"
+                class="w-full px-6 py-3 bg-gradient-to-r from-amber-600 to-orange-600 text-white font-bold rounded-xl shadow-lg hover:shadow-xl hover:scale-105 transform transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:scale-100 dark:from-amber-500 dark:to-orange-500">
+                <span v-if="servicioYaAsignado">⚠️ Servicio ya asignado a esta OT</span>
+                <span v-else-if="procesandoServicio">Agregando...</span>
+                <span v-else>✓ Agregar Servicio</span>
+              </button>
+            </form>
           </div>
 
         </div>
