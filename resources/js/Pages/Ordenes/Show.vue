@@ -830,7 +830,7 @@ function aplicarFaltantesServicio(servicioId) {
                         <div class="flex items-center gap-1.5">
                           <div class="w-1 h-1 rounded-full bg-slate-400 dark:bg-slate-500"></div>
                           <span class="font-medium text-slate-900 dark:text-slate-100 text-xs">
-                            <span v-if="it?.tamano">{{ it.tamano }}</span>
+                            <span v-if="it?.tamano">{{ it.tamano.toUpperCase() }}</span>
                             <span v-else>{{ it?.descripcion || 'Sin descripción' }}</span>
                           </span>
                         </div>
@@ -1157,7 +1157,7 @@ function aplicarFaltantesServicio(servicioId) {
                       <td class="px-3 py-2">
                         <div class="flex items-center gap-1.5">
                           <div class="w-1 h-1 rounded-full bg-slate-400 dark:bg-slate-500"></div>
-                          <span class="font-medium text-slate-900 dark:text-slate-100 text-xs">{{ item.descripcion || (item.tamano ? item.tamano.toUpperCase() : 'Distribución') }}</span>
+                          <span class="font-medium text-slate-900 dark:text-slate-100 text-xs">{{ item.tamano ? item.tamano.toUpperCase() : (item.descripcion_item || item.descripcion || 'Distribución') }}</span>
                         </div>
                       </td>
                       <td class="px-3 py-2 text-center">
