@@ -1149,9 +1149,10 @@ class OrdenController extends Controller
             'items.segmentosProduccion' => fn($q) => $q->with('usuario')->orderBy('created_at'),
             'avances' => fn($q) => $q->with(['usuario', 'item'])->orderByDesc('created_at'),
             'evidencias' => fn($q)=>$q->with('usuario')->orderByDesc('id'),
-            'otServicios.servicio', // NUEVO: Cargar servicios multi-servicio
+            'otServicios.servicio',
             'otServicios.items',
             'otServicios.avances' => fn($q) => $q->with('createdBy')->orderBy('created_at'),
+            'otServicios.addedBy', // Cargar usuario que agregó servicio adicional
         ]);
 
         // Flag per-centro: servicio con tamaños SI existe configuración de tamaños en el centro y aún no hay desglose capturado
@@ -1441,6 +1442,7 @@ class OrdenController extends Controller
                 'cliente_autorizar'  => $canClienteAutorizar,
                 'facturar'           => $canFacturar,
                 'definir_tamanos'    => Gate::allows('definirTamanos', $orden),
+                'agregar_servicio_adicional' => $authUser && $authUser->hasAnyRole(['admin', 'coordinador', 'team_leader']),
             ],
             'debug' => [
                 'orden_team_leader_id' => (int)$orden->team_leader_id,
@@ -1470,11 +1472,13 @@ class OrdenController extends Controller
                 'evidencias_store'  => route('evidencias.store', $orden),
                 'evidencias_destroy'=> route('evidencias.destroy', 0),
                 'definir_tamanos'   => route('ordenes.definirTamanos', $orden),
+                'agregar_servicio_adicional' => route('ordenes.agregarServicioAdicional', $orden),
             ],
             'flags' => [ 'pendiente_tamanos' => $pendienteTamanos ],
             'precios_tamano' => $preciosTamaño,
             'servicios_con_tamanos' => $serviciosConTamanos,
             'precios_por_servicio' => $preciosPorServicio,
+            'servicios_disponibles' => $this->getServiciosDisponibles($orden->id_centrotrabajo),
         ]);
     }
 
@@ -2000,6 +2004,157 @@ class OrdenController extends Controller
         $primary = (int)($u->centro_trabajo_id ?? 0);
         if ($primary) $ids[] = $primary;
         return array_values(array_unique(array_filter($ids)));
+    }
+
+    /**
+     * Agregar servicio adicional a una OT existente
+     * Solo permitido para Coordinador y Team Leader
+     */
+    public function agregarServicioAdicional(Request $request, Orden $orden)
+    {
+        // Verificar permisos
+        $user = $request->user();
+        if (!$user->hasAnyRole(['admin', 'coordinador', 'team_leader'])) {
+            abort(403, 'No tienes permiso para agregar servicios adicionales');
+        }
+
+        $this->authorize('view', $orden);
+        $this->authorizeFromCentro($orden->id_centrotrabajo, $orden);
+
+        // Validar datos
+        $validated = $request->validate([
+            'servicio_id' => 'required|exists:servicios_empresa,id',
+            'nota' => 'required|string|max:1000',
+        ]);
+
+        // Usar la cantidad planeada de la OT original
+        $cantidadPlaneada = $orden->total_planeado ?: 1;
+
+        DB::beginTransaction();
+        try {
+            // Si la OT es tradicional (no tiene servicios en pivot), migrar el servicio original
+            if ($orden->otServicios()->count() === 0 && $orden->id_servicio) {
+                \Log::info('🔄 Migrando OT tradicional a multiservicio', [
+                    'ot_id' => $orden->id,
+                    'servicio_original' => $orden->id_servicio,
+                ]);
+
+                // Obtener precio del servicio original
+                $pricing = app(\App\Domain\Servicios\PricingService::class);
+                $precioUnitario = $pricing->precioUnitario(
+                    $orden->id_centrotrabajo,
+                    $orden->id_servicio,
+                    null // sin tamaño específico para servicio tradicional
+                );
+
+                // Crear registro para el servicio original como "SOLICITADO"
+                $servicioOriginal = \App\Models\OTServicio::create([
+                    'ot_id' => $orden->id,
+                    'servicio_id' => $orden->id_servicio,
+                    'tipo_cobro' => 'pieza',
+                    'cantidad' => $orden->total_planeado ?: 1,
+                    'precio_unitario' => $precioUnitario,
+                    'subtotal' => $precioUnitario * ($orden->total_planeado ?: 1),
+                    'origen' => 'SOLICITADO',
+                ]);
+
+                // Migrar items existentes al nuevo servicio
+                if ($orden->items()->exists()) {
+                    foreach ($orden->items as $item) {
+                        \App\Models\OTServicioItem::create([
+                            'ot_servicio_id' => $servicioOriginal->id,
+                            'descripcion_item' => $item->descripcion ?: 'Item migrado',
+                            'tamano' => $item->tamano,
+                            'planeado' => $item->cantidad_planeada,
+                            'completado' => $item->cantidad_real,
+                            'faltante' => $item->faltante ?: 0,
+                            'precio_unitario' => $item->precio_unitario,
+                            'subtotal' => $item->subtotal,
+                        ]);
+                    }
+                }
+
+                \Log::info('✅ Servicio original migrado a ot_servicios', [
+                    'ot_servicio_id' => $servicioOriginal->id,
+                ]);
+            }
+
+            // Obtener precio del nuevo servicio
+            $pricing = app(\App\Domain\Servicios\PricingService::class);
+            $precioUnitario = $pricing->precioUnitario(
+                $orden->id_centrotrabajo,
+                $validated['servicio_id'],
+                null
+            );
+
+            // Crear el servicio adicional
+            $servicioAdicional = \App\Models\OTServicio::create([
+                'ot_id' => $orden->id,
+                'servicio_id' => $validated['servicio_id'],
+                'tipo_cobro' => 'pieza',
+                'cantidad' => $cantidadPlaneada,
+                'precio_unitario' => $precioUnitario,
+                'subtotal' => $precioUnitario * $cantidadPlaneada,
+                'origen' => 'ADICIONAL',
+                'added_by_user_id' => $user->id,
+                'nota' => $validated['nota'],
+            ]);
+
+            // Crear item por defecto para el servicio adicional
+            \App\Models\OTServicioItem::create([
+                'ot_servicio_id' => $servicioAdicional->id,
+                'descripcion_item' => 'Servicio adicional',
+                'planeado' => $cantidadPlaneada,
+                'completado' => 0,
+                'faltante' => 0,
+            ]);
+
+            // Recalcular totales de la OT
+            $orden->recalcTotals();
+
+            // Log de actividad
+            $this->act('ordenes')
+                ->performedOn($orden)
+                ->event('servicio_adicional')
+                ->withProperties([
+                    'servicio_id' => $validated['servicio_id'],
+                    'unidades' => $cantidadPlaneada,
+                    'nota' => $validated['nota'],
+                ])
+                ->log("OT #{$orden->id}: servicio adicional agregado por {$user->name}");
+
+            DB::commit();
+
+            return back()->with('success', 'Servicio adicional agregado exitosamente');
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            \Log::error('❌ Error al agregar servicio adicional', [
+                'ot_id' => $orden->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return back()->withErrors(['error' => 'Error al agregar servicio adicional: ' . $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Obtener servicios disponibles para un centro de trabajo
+     */
+    private function getServiciosDisponibles(int $centroId): array
+    {
+        return \App\Models\ServicioCentro::where('id_centrotrabajo', $centroId)
+            ->with('servicio')
+            ->get()
+            ->map(function ($servicioCentro) {
+                return [
+                    'id' => $servicioCentro->id_servicio, // Corregido: era servicio_id
+                    'nombre' => $servicioCentro->servicio->nombre,
+                    'precio_base' => $servicioCentro->precio_base,
+                ];
+            })
+            ->toArray();
     }
 
     private function buildFolioOT(int $centroId): string

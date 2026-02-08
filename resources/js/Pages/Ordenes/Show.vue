@@ -6,14 +6,15 @@ import FilePreview from '@/Components/FilePreview.vue'
 
 const props = defineProps({
   orden:       { type: Object, required: true },
-  urls:        { type: Object, required: true },   // { asignar_tl, avances_store, evidencias_store, evidencias_destroy, calidad_validar, calidad_rechazar, cliente_autorizar, facturar, pdf }
-  can:         { type: Object, default: () => ({}) }, // { reportarAvance:bool, asignar_tl:bool }
+  urls:        { type: Object, required: true },   // { asignar_tl, avances_store, evidencias_store, evidencias_destroy, calidad_validar, calidad_rechazar, cliente_autorizar, facturar, pdf, agregar_servicio_adicional }
+  can:         { type: Object, default: () => ({}) }, // { reportarAvance:bool, asignar_tl:bool, agregar_servicio_adicional:bool }
   teamLeaders: { type: Array,  default: () => [] },
   cotizacion:  { type: Object, default: () => ({}) },
   precios_tamano: { type: Object, default: () => null },
   unidades: { type: Object, default: () => ({ planeado:0, completado:0, faltante:0, total:0 }) },
   servicios_con_tamanos: { type: Object, default: () => ({}) },
   precios_por_servicio: { type: Object, default: () => ({}) },
+  servicios_disponibles: { type: Array, default: () => [] },
 })
 
 // Alias para acceder fácilmente en el template
@@ -116,6 +117,71 @@ const autorizarCliente = () => router.post(props.urls.cliente_autorizar)
 // ----- Asignar TL -----
 const tlForm = useForm({ team_leader_id: props.orden?.team_leader_id ?? null })
 function asignarTL () { tlForm.patch(props.urls.asignar_tl, { preserveScroll: true }) }
+
+// ----- Agregar servicio adicional -----
+// Usar ref directo en lugar de useForm para evitar problemas de reactividad
+const servicioSeleccionado = ref('')
+const notaJustificacion = ref('')
+const procesandoServicio = ref(false)
+const erroresServicio = ref({ servicio_id: null, nota: null })
+
+function agregarServicioAdicional() {
+  console.log('🚀 Iniciando submit de servicio adicional')
+  console.log('📋 Estado DIRECTO:', {
+    servicio: servicioSeleccionado.value,
+    nota_length: notaJustificacion.value?.length || 0
+  })
+  
+  // Limpiar errores
+  erroresServicio.value = { servicio_id: null, nota: null }
+  
+  // Validación
+  if (!servicioSeleccionado.value || servicioSeleccionado.value === '') {
+    erroresServicio.value.servicio_id = 'Debes seleccionar un servicio'
+    return
+  }
+  
+  if (!notaJustificacion.value || notaJustificacion.value.length < 10) {
+    erroresServicio.value.nota = 'La justificación debe tener al menos 10 caracteres'
+    return
+  }
+  
+  const servicioId = parseInt(servicioSeleccionado.value, 10)
+  
+  if (isNaN(servicioId)) {
+    erroresServicio.value.servicio_id = 'ID de servicio inválido'
+    return
+  }
+  
+  const payload = {
+    servicio_id: servicioId,
+    nota: notaJustificacion.value.trim()
+  }
+  
+  console.log('📤 Enviando payload:', payload)
+  
+  procesandoServicio.value = true
+  
+  router.post(props.urls.agregar_servicio_adicional, payload, {
+    preserveScroll: true,
+    onSuccess: () => {
+      console.log('✅ Servicio adicional guardado exitosamente')
+      servicioSeleccionado.value = ''
+      notaJustificacion.value = ''
+      erroresServicio.value = { servicio_id: null, nota: null }
+      // Recargar página para mostrar el nuevo servicio
+      router.visit(window.location.href, { replace: true, preserveScroll: true })
+    },
+    onError: (errors) => {
+      console.error('❌ Error al guardar:', errors)
+      erroresServicio.value = errors
+    },
+    onFinish: () => {
+      console.log('🏁 Request finalizada')
+      procesandoServicio.value = false
+    }
+  })
+}
 
 // ----- Registrar avances -----
 const avForm = useForm({
@@ -654,8 +720,83 @@ function aplicarFaltantesServicio(servicioId) {
             </div>
           </div>
 
+          <!-- Agregar Servicio Adicional (Coordinador/Team Leader) -->
+          <div v-if="can?.agregar_servicio_adicional" class="bg-white rounded-2xl shadow-lg border-2 border-amber-100 overflow-hidden dark:bg-slate-900/80 dark:border-amber-500/30">
+            <div class="bg-gradient-to-r from-amber-600 to-orange-600 px-4 py-2 dark:from-amber-500 dark:to-orange-500">
+              <h2 class="text-base font-bold text-white flex items-center gap-1.5 leading-tight">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+                </svg>
+                Agregar Servicio Adicional
+              </h2>
+            </div>
+            <form @submit.prevent="agregarServicioAdicional" class="p-6 space-y-4">
+              <div class="bg-amber-50 border-2 border-amber-200 rounded-xl p-3 dark:bg-amber-500/10 dark:border-amber-500/40">
+                <p class="text-sm text-amber-800 dark:text-amber-200">
+                  <strong>Importante:</strong> Al agregar un servicio adicional, esta OT se convertirá automáticamente a multi-servicio.
+                </p>
+              </div>
+              
+              <div>
+                <label for="servicio_adicional_select" class="block text-sm font-semibold text-gray-700 mb-2 dark:text-slate-200">Servicio *</label>
+                <div class="relative">
+                  <select 
+                    id="servicio_adicional_select"
+                    v-model.number="servicioSeleccionado"
+                    @change="console.log('🔄 Select changed:', servicioSeleccionado, typeof servicioSeleccionado, 'opciones:', servicios_disponibles.map(s => s.id))"
+                    required
+                    class="w-full px-4 py-3 pr-10 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-amber-100 focus:border-amber-400 transition-all duration-200 appearance-none bg-white text-gray-800 font-medium dark:bg-slate-900/60 dark:border-slate-700 dark:text-slate-100 dark:focus:ring-amber-400/40 dark:focus:border-amber-400/60"
+                    :class="{ 'border-red-500 dark:border-red-500': erroresServicio.servicio_id }">
+                    <option value="">— Selecciona un servicio —</option>
+                    <option v-for="servicio in servicios_disponibles" :key="'serv-'+servicio.id" :value="String(servicio.id)">
+                      {{ servicio.nombre }}
+                    </option>
+                  </select>
+                  <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-400 dark:text-slate-500">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                    </svg>
+                  </div>
+                </div>
+                <p v-if="erroresServicio.servicio_id" class="mt-2 text-sm text-red-600">
+                  {{ erroresServicio.servicio_id }}
+                </p>
+              </div>
+              
+              <div class="bg-blue-50 border-2 border-blue-200 rounded-xl p-3 dark:bg-blue-500/10 dark:border-blue-500/40">
+                <p class="text-sm text-blue-800 dark:text-blue-200">
+                  <strong>Cantidad:</strong> Se usará automáticamente la cantidad planeada de esta OT ({{ orden.total_planeado || 1 }} unidades)
+                </p>
+              </div>
+              
+              <div>
+                <label for="justificacion_textarea" class="block text-sm font-semibold text-gray-700 mb-2 dark:text-slate-200">Justificación *</label>
+                <textarea 
+                  id="justificacion_textarea"
+                  v-model="notaJustificacion"
+                  @input="console.log('📝 Textarea input. servicio_id ahora es:', servicioSeleccionado, typeof servicioSeleccionado)"
+                  required
+                  minlength="10"
+                  rows="3" 
+                  class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-amber-100 focus:border-amber-400 transition-all duration-200 bg-white text-gray-800 dark:bg-slate-900/60 dark:border-slate-700 dark:text-slate-100 dark:focus:ring-amber-400/40 dark:focus:border-amber-400/60 resize-none"
+                  :class="{ 'border-red-500 dark:border-red-500': erroresServicio.nota }"
+                  placeholder="Explica por qué se realizó este servicio adicional no solicitado (mínimo 10 caracteres)..."></textarea>
+                <p v-if="erroresServicio.nota" class="mt-2 text-sm text-red-600">
+                  {{ erroresServicio.nota }}
+                </p>
+              </div>
+              
+              <button 
+                type="submit"
+                :disabled="procesandoServicio || !servicioSeleccionado || servicioSeleccionado === '' || notaJustificacion.length < 10"
+                class="w-full px-6 py-3 bg-gradient-to-r from-amber-600 to-orange-600 text-white font-bold rounded-xl shadow-lg hover:shadow-xl hover:scale-105 transform transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:scale-100 dark:from-amber-500 dark:to-orange-500">
+                {{ procesandoServicio ? 'Agregando...' : '✓ Agregar Servicio' }}
+              </button>
+            </form>
+          </div>
+
           <!-- Ítems de la OT - OT Tradicionales -->
-          <div v-if="items.length" class="bg-white rounded-2xl shadow-lg border-2 border-emerald-100 overflow-hidden dark:bg-slate-900/80 dark:border-emerald-500/30">
+          <div v-if="!esMultiServicio && items.length" class="bg-white rounded-2xl shadow-lg border-2 border-emerald-100 overflow-hidden dark:bg-slate-900/80 dark:border-emerald-500/30">
             <!-- Header Compacto -->
             <div class="bg-emerald-600 px-4 py-2.5 border-b-2 border-emerald-700/30 dark:bg-emerald-700 dark:border-emerald-800">
               <div class="flex items-center justify-between gap-3">
@@ -959,7 +1100,7 @@ function aplicarFaltantesServicio(servicioId) {
           
 
           <!-- Servicios Multi-Servicio -->
-          <div v-else-if="esMultiServicio && servicios.length > 0" class="space-y-6">
+          <div v-if="esMultiServicio && servicios.length > 0" class="space-y-6">
             <div v-for="(servicio, idx) in servicios" :key="servicio.id" 
                  class="bg-white rounded-2xl shadow-lg border-2 border-emerald-100 overflow-hidden dark:bg-slate-900/80 dark:border-emerald-500/30">
               
@@ -975,8 +1116,27 @@ function aplicarFaltantesServicio(servicioId) {
                         <h2 class="text-base font-bold text-white leading-none tracking-tight truncate">
                           {{ servicio.servicio?.nombre || 'Servicio' }}
                         </h2>
+                        
+                        <!-- Badge de origen -->
+                        <span v-if="servicio.origen === 'ADICIONAL'" class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-400 text-amber-900 shadow-sm">
+                          ⚡ ADICIONAL
+                        </span>
+                        <span v-else class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-white/20 text-white border border-white/30">
+                          SOLICITADO
+                        </span>
+                        
                         <span class="text-emerald-50/70 text-[11px] font-medium leading-none whitespace-nowrap">
                           {{ servicio.items?.reduce((sum, i) => sum + (i.planeado || 0), 0) || servicio.cantidad }} uds.
+                        </span>
+                      </div>
+                      
+                      <!-- Info de quien agregó el servicio adicional -->
+                      <div v-if="servicio.origen === 'ADICIONAL' && servicio.added_by" class="flex items-center gap-1.5 mt-1">
+                        <svg class="w-3 h-3 text-white/70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                        </svg>
+                        <span class="text-[10px] text-white/70 font-medium">
+                          Agregado por {{ servicio.added_by.name }} — {{ fmtDate(servicio.created_at) }}
                         </span>
                       </div>
                     </div>

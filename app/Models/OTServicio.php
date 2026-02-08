@@ -17,6 +17,9 @@ class OTServicio extends Model
         'cantidad',
         'precio_unitario',
         'subtotal',
+        'origen',
+        'added_by_user_id',
+        'nota',
     ];
 
     protected $casts = [
@@ -55,6 +58,14 @@ class OTServicio extends Model
     public function avances(): HasMany
     {
         return $this->hasMany(OTServicioAvance::class, 'ot_servicio_id');
+    }
+
+    /**
+     * Relación con el Usuario que agregó el servicio adicional
+     */
+    public function addedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'added_by_user_id');
     }
 
     /**
