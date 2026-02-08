@@ -23,6 +23,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'role_or_permission' => \Spatie\Permission\Middleware\RoleOrPermissionMiddleware::class,
             'check.servicios' => \App\Http\Middleware\CheckServiciosAccess::class,
             'check.areas' => \App\Http\Middleware\CheckAreasAccess::class,
+            'cedim.only' => \App\Http\Middleware\RestrictToCedim::class,
         ]);
         //
     })

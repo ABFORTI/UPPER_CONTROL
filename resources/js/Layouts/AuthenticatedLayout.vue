@@ -45,6 +45,7 @@ const isOnlyControlOrComercial = computed(() => {
   if (rs.length === 0) return false
   return rs.every(r => r === 'control' || r === 'comercial')
 })
+const isCedim = computed(() => isAdmin.value || user.value?.centro_trabajo_id === 1)
 
 const unread = computed(() => page.props.auth?.user?.unread_count || 0)
 function markAll () {
@@ -149,8 +150,8 @@ function closeMobile () {
               </Link>
             </li>
 
-            <!-- Cotizaciones: coordinador + clientes + admin + gerente_upper + facturacion (solo lectura) -->
-            <li v-if="!isOnlyCalidad && !isOnlyControlOrComercial && (isAdmin || isCoord || roles.includes('Cliente_Supervisor') || roles.includes('Cliente_Gerente') || isGerente || roles.includes('facturacion'))">
+            <!-- Cotizaciones: coordinador + clientes + admin + gerente_upper + facturacion (solo lectura) - SOLO CEDIM -->
+            <li v-if="isCedim && !isOnlyCalidad && !isOnlyControlOrComercial && (isAdmin || isCoord || roles.includes('Cliente_Supervisor') || roles.includes('Cliente_Gerente') || isGerente || roles.includes('facturacion'))">
               <Link :href="route('cotizaciones.index')" :class="[
                 'flex items-center p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all',
                 navArrangementClasses,

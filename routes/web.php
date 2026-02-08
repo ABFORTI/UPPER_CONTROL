@@ -126,7 +126,7 @@ Route::middleware('auth')->group(function () {
 /* ===============
  |  COTIZACIONES
  * =============== */
-Route::middleware('auth')->group(function () {
+Route::middleware(['auth', 'cedim.only'])->group(function () {
     Route::get('/cotizaciones', [CotizacionController::class, 'index'])->name('cotizaciones.index');
     Route::get('/cotizaciones/create', [CotizacionController::class, 'create'])
         ->middleware('role:coordinador|admin')
