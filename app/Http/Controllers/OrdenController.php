@@ -2027,6 +2027,17 @@ class OrdenController extends Controller
             'nota' => 'required|string|max:1000',
         ]);
 
+        // Validar que el servicio no esté ya asignado a esta OT
+        $servicioYaAsignado = \App\Models\OTServicio::where('ot_id', $orden->id)
+            ->where('servicio_id', $validated['servicio_id'])
+            ->exists();
+
+        if ($servicioYaAsignado) {
+            return back()->withErrors([
+                'servicio_id' => 'Este servicio ya está asignado a esta OT. Por favor selecciona un servicio diferente.'
+            ])->withInput();
+        }
+
         // Usar la cantidad planeada de la OT original
         $cantidadPlaneada = $orden->total_planeado ?: 1;
 
