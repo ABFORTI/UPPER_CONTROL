@@ -24,6 +24,15 @@ const props = defineProps({
 // Control para múltiples servicios
 const multipleServicios = ref(false)
 
+function servicioMultipleVacio() {
+  return {
+    id_servicio: '',
+    cantidad: null,
+    tipo_tarifa: 'NORMAL',
+    precio_unitario: null,
+  }
+}
+
 const form = useForm({
 id_centrotrabajo: null,
 id_servicio: '',
@@ -40,6 +49,9 @@ id_marca: null,
 serviciosMultiples: [
   {
     id_servicio: '',
+    cantidad: null,
+    tipo_tarifa: 'NORMAL',
+    precio_unitario: null,
   }
 ],
 })
@@ -165,14 +177,14 @@ function toggleMultipleServicios() {
   
   if (multipleServicios.value) {
     // Activar modo múltiple: inicializar con un servicio vacío
-    form.serviciosMultiples = [{ id_servicio: '' }]
+    form.serviciosMultiples = [servicioMultipleVacio()]
     form.id_servicio = ''
     form.cantidad = 1
   }
 }
 
 function agregarServicio() {
-  form.serviciosMultiples.push({ id_servicio: '' })
+  form.serviciosMultiples.push(servicioMultipleVacio())
 }
 
 function eliminarServicio(index) {
@@ -213,13 +225,13 @@ const preciosMultiples = computed(() => {
       return { subtotal: 0, iva: 0, total: 0, nombre, usaTamanos: true }
     }
     
-    const precioBase = Number(precioData?.precio_base || 0)
-    const cantidad = Number(form.cantidad || 0)
+    const precioBase = Number((s.precio_unitario ?? precioData?.precio_base) || 0)
+    const cantidad = Number((s.cantidad ?? form.cantidad) || 0)
     const subtotal = precioBase * cantidad
     const iva = subtotal * (props.iva || 0)
     const total = subtotal + iva
     
-    return { subtotal, iva, total, nombre, usaTamanos: false, precioBase }
+    return { subtotal, iva, total, nombre, usaTamanos: false, precioBase, cantidad, tipo_tarifa: s.tipo_tarifa || 'NORMAL' }
   })
 })
 
@@ -249,7 +261,7 @@ id_area: form.id_area,
 if (multipleServicios.value) {
   payload.servicios = form.serviciosMultiples.map(s => ({
     id_servicio: s.id_servicio,
-    cantidad: +form.cantidad || 1,
+    cantidad: +(s.cantidad ?? form.cantidad) || 1,
   }))
   payload.cantidad = +form.cantidad || 1
   
@@ -336,8 +348,8 @@ function findMatchId(list, text, getLabel) {
 }
 
 // Handler para precarga desde Excel
-function handlePrefillLoaded({ prefill, archivo, warnings }) {
-  console.log('📋 Datos precargados desde Excel:', prefill, archivo, warnings)
+function handlePrefillLoaded({ prefill, archivo, servicios, is_multi, warnings }) {
+  console.log('📋 Datos precargados desde Excel:', { prefill, archivo, servicios, is_multi, warnings })
   
   // Mostrar warnings si los hay
   if (warnings.length > 0) {
@@ -378,6 +390,44 @@ function handlePrefillLoaded({ prefill, archivo, warnings }) {
   if (prefill.cantidad !== undefined && prefill.cantidad !== null) {
     const n = Number(prefill.cantidad)
     if (Number.isFinite(n) && n > 0) form.cantidad = n
+  }
+
+  // Servicios detectados desde Excel
+  const list = Array.isArray(servicios) ? servicios : []
+  const multi = !!is_multi || list.length >= 2
+
+  if (list.length > 0) {
+    if (multi) {
+      // Activar modo múltiples servicios
+      multipleServicios.value = true
+      form.id_servicio = ''
+
+      // Limpiar y rellenar
+      form.serviciosMultiples = list.map(s => ({
+        id_servicio: s.id_servicio ? String(s.id_servicio) : '',
+        cantidad: s.cantidad ?? null,
+        tipo_tarifa: s.tipo_tarifa || 'NORMAL',
+        precio_unitario: s.precio_unitario ?? null,
+      }))
+
+      // Si no viene cantidad global, usar la del primer servicio como referencia
+      if (!(prefill.cantidad > 0) && list[0]?.cantidad) {
+        const n = Number(list[0].cantidad)
+        if (Number.isFinite(n) && n > 0) form.cantidad = n
+      }
+
+      alert(`Se detectaron ${list.length} servicios en el Excel. Se activó Múltiples Servicios.`)
+    } else {
+      // Modo tradicional
+      multipleServicios.value = false
+      form.serviciosMultiples = [servicioMultipleVacio()]
+      const s0 = list[0]
+      if (s0?.id_servicio) form.id_servicio = s0.id_servicio
+      if (s0?.cantidad) {
+        const n = Number(s0.cantidad)
+        if (Number.isFinite(n) && n > 0) form.cantidad = n
+      }
+    }
   }
   
   console.log('✅ Formulario actualizado con datos del Excel')
@@ -669,6 +719,27 @@ function handlePrefillLoaded({ prefill, archivo, warnings }) {
                         <p v-if="form.errors[`servicios.${index}.id_servicio`]" class="text-red-600 text-xs mt-1">
                           {{ form.errors[`servicios.${index}.id_servicio`] }}
                         </p>
+
+                        <div class="mt-2 text-[11px] text-gray-600 flex flex-wrap gap-x-4 gap-y-1">
+                          <span v-if="servicio.cantidad !== null && servicio.cantidad !== undefined">
+                            Cantidad: <span class="font-semibold text-gray-800">{{ servicio.cantidad }}</span>
+                          </span>
+                          <span v-else>
+                            Cantidad: <span class="font-semibold text-gray-800">{{ form.cantidad }}</span>
+                          </span>
+
+                          <span v-if="servicio.tipo_tarifa">
+                            Tarifa: <span class="font-semibold text-gray-800">{{ servicio.tipo_tarifa }}</span>
+                          </span>
+
+                          <span>
+                            P. Unitario: <span class="font-semibold text-gray-800">
+                              {{ (servicio.precio_unitario !== null && servicio.precio_unitario !== undefined)
+                                ? ('$' + Number(servicio.precio_unitario).toFixed(2))
+                                : 'Catálogo' }}
+                            </span>
+                          </span>
+                        </div>
                       </div>
                     </div>
 

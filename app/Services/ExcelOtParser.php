@@ -34,6 +34,29 @@ class ExcelOtParser
             throw new \Exception("Error al leer el archivo Excel: " . $e->getMessage());
         }
     }
+
+    /**
+     * Variante que además detecta una lista de servicios.
+     *
+     * @return array{datos: array, servicios: array<int, array{nombre_servicio: string, cantidad: mixed, tipo_tarifa: string, precio_unitario: mixed}>}
+     */
+    public function parseWithServicios(string $filePath): array
+    {
+        try {
+            $spreadsheet = IOFactory::load($filePath);
+            $sheet = $spreadsheet->getActiveSheet();
+
+            $datos = $this->extraerDatos($sheet);
+            $servicios = $this->extraerServicios($sheet, $datos);
+
+            return [
+                'datos' => $datos,
+                'servicios' => $servicios,
+            ];
+        } catch (\Exception $e) {
+            throw new \Exception("Error al leer el archivo Excel: " . $e->getMessage());
+        }
+    }
     
     /**
      * Extraer datos del Excel buscando etiquetas/encabezados conocidos
@@ -118,6 +141,133 @@ class ExcelOtParser
         }
         
         return $datos;
+    }
+
+    /**
+     * Extrae una lista de servicios desde una tabla horizontal (encabezados) o desde el campo 'servicio'.
+     */
+    private function extraerServicios(Worksheet $sheet, array $datos): array
+    {
+        // 1) Intentar por tabla (encabezados tipo: "Tipo de Servicio", "Cantidad", "Precio Unitario")
+        $fromTable = $this->extraerServiciosDesdeTabla($sheet);
+        if (count($fromTable) > 0) {
+            return $fromTable;
+        }
+
+        // 2) Fallback: usar el dato simple detectado (puede traer múltiples líneas)
+        $raw = $datos['servicio'] ?? null;
+        if (empty($raw)) return [];
+
+        $qty = $datos['cantidad'] ?? null;
+        $names = $this->splitServicios($raw);
+
+        return array_values(array_filter(array_map(function ($name) use ($qty) {
+            $name = trim((string) $name);
+            if ($name === '') return null;
+            return [
+                'nombre_servicio' => $name,
+                'cantidad' => $qty,
+                'tipo_tarifa' => 'NORMAL',
+                'precio_unitario' => null,
+            ];
+        }, $names)));
+    }
+
+    private function extraerServiciosDesdeTabla(Worksheet $sheet): array
+    {
+        $highestRow = min($sheet->getHighestRow(), 200);
+        $highestColumnIndex = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::columnIndexFromString($sheet->getHighestColumn());
+
+        $serviceCol = null;
+        $qtyCol = null;
+        $priceCol = null;
+        $tarifaCol = null;
+        $headerRow = null;
+
+        // Buscar encabezados en primeras filas
+        for ($row = 1; $row <= min($highestRow, 30); $row++) {
+            $foundService = null;
+            $foundQty = null;
+            $foundPrice = null;
+            $foundTarifa = null;
+
+            for ($col = 1; $col <= min($highestColumnIndex, 40); $col++) {
+                $v = $sheet->getCellByColumnAndRow($col, $row)->getValue();
+                if ($v === null || trim((string) $v) === '') continue;
+                $n = $this->normalizar($v);
+
+                if ($foundService === null && (Str::contains($n, 'tipo de servicio') || $n === 'servicio' || Str::contains($n, 'servicio'))) {
+                    $foundService = $col;
+                }
+                if ($foundQty === null && (Str::contains($n, 'cantidad') || $n === 'pzs' || Str::contains($n, 'piezas'))) {
+                    $foundQty = $col;
+                }
+                if ($foundPrice === null && (Str::contains($n, 'precio unitario') || Str::contains($n, 'precio'))) {
+                    $foundPrice = $col;
+                }
+                if ($foundTarifa === null && (Str::contains($n, 'tarifa') || Str::contains($n, 'tipo tarifa'))) {
+                    $foundTarifa = $col;
+                }
+            }
+
+            if ($foundService !== null) {
+                $headerRow = $row;
+                $serviceCol = $foundService;
+                $qtyCol = $foundQty;
+                $priceCol = $foundPrice;
+                $tarifaCol = $foundTarifa;
+                break;
+            }
+        }
+
+        if ($headerRow === null || $serviceCol === null) {
+            return [];
+        }
+
+        $servicios = [];
+        $emptyStreak = 0;
+        for ($row = $headerRow + 1; $row <= $highestRow; $row++) {
+            $sv = $sheet->getCellByColumnAndRow($serviceCol, $row)->getValue();
+            $svStr = trim((string) $sv);
+            if ($svStr === '') {
+                $emptyStreak++;
+                if ($emptyStreak >= 5) break;
+                continue;
+            }
+            $emptyStreak = 0;
+
+            $qv = $qtyCol ? $sheet->getCellByColumnAndRow($qtyCol, $row)->getValue() : null;
+            $pv = $priceCol ? $sheet->getCellByColumnAndRow($priceCol, $row)->getValue() : null;
+            $tv = $tarifaCol ? $sheet->getCellByColumnAndRow($tarifaCol, $row)->getValue() : null;
+
+            $names = $this->splitServicios($svStr);
+            $qtyLines = $this->splitServicios($qv);
+            $priceLines = $this->splitServicios($pv);
+
+            foreach ($names as $i => $name) {
+                $name = trim((string) $name);
+                if ($name === '') continue;
+
+                $servicios[] = [
+                    'nombre_servicio' => $name,
+                    'cantidad' => $qtyLines[$i] ?? $qv,
+                    'tipo_tarifa' => $tv ? trim((string) $tv) : 'NORMAL',
+                    'precio_unitario' => $priceLines[$i] ?? $pv,
+                ];
+            }
+        }
+
+        return $servicios;
+    }
+
+    private function splitServicios($value): array
+    {
+        if ($value === null) return [];
+        if (!is_string($value)) $value = (string) $value;
+        $value = str_replace(["\r\n", "\r"], "\n", $value);
+        $parts = preg_split('/\n+/u', $value);
+        $parts = array_map(fn($p) => trim((string) $p), $parts ?: []);
+        return array_values(array_filter($parts, fn($p) => $p !== ''));
     }
 
     private function buscarPrimerValorAbajo(Worksheet $sheet, int $col, int $row, int $maxLookahead = 10)
