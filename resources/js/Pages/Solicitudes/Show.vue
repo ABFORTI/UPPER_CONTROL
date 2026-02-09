@@ -272,6 +272,27 @@ function canPreview(mime) {
             </div>
           </div>
 
+          <!-- Excel Origen (precarga) -->
+          <div v-if="urls?.excel_origen" class="bg-white dark:bg-slate-900 rounded-2xl shadow-lg border-2 border-indigo-100 dark:border-slate-800 overflow-hidden hover:shadow-xl transition-shadow duration-300">
+            <div class="px-6 py-4 bg-[#1E1C8F]">
+              <h2 class="text-xl font-bold text-white flex items-center gap-2">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1"/>
+                </svg>
+                Excel Origen
+              </h2>
+            </div>
+            <div class="p-4">
+              <a :href="urls.excel_origen"
+                 class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#1E1C8F] text-white font-medium hover:opacity-95 shadow-md hover:shadow-lg transform hover:scale-105 transition-all duration-200">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                </svg>
+                Descargar Excel origen
+              </a>
+            </div>
+          </div>
+
           <!-- Archivos Adjuntos -->
           <div v-if="solicitud.archivos?.length" class="bg-white dark:bg-slate-900 rounded-2xl shadow-lg border-2 border-indigo-100 dark:border-slate-800 overflow-hidden hover:shadow-xl transition-shadow duration-300">
             <div class="px-6 py-4 bg-[#1E1C8F]">

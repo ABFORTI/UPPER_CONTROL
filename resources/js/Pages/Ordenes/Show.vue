@@ -1443,6 +1443,27 @@ function aplicarFaltantesServicio(servicioId) {
             </div>
           </div>
 
+          <!-- Excel Origen (precarga de Solicitud) -->
+          <div v-if="urls?.excel_origen" class="bg-white rounded-2xl shadow-lg border-2 border-orange-100 overflow-hidden dark:bg-slate-900/80 dark:border-orange-500/40">
+            <div class="bg-gradient-to-r from-orange-600 to-amber-600 px-4 py-2 dark:from-orange-500 dark:to-amber-500">
+              <h3 class="text-base font-bold text-white flex items-center gap-1.5 leading-tight">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                </svg>
+                Excel Origen
+              </h3>
+            </div>
+            <div class="p-4">
+              <a :href="urls.excel_origen"
+                 class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-orange-600 to-amber-600 text-white font-medium hover:from-orange-700 hover:to-amber-700 shadow-md hover:shadow-lg transform hover:scale-105 transition-all duration-200 dark:from-orange-500 dark:to-amber-500 dark:hover:from-orange-400 dark:hover:to-amber-400">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                </svg>
+                Descargar Excel origen
+              </a>
+            </div>
+          </div>
+
           <!-- Archivos de la Solicitud -->
           <div v-if="orden?.solicitud?.archivos?.length" class="bg-white rounded-2xl shadow-lg border-2 border-orange-100 overflow-hidden dark:bg-slate-900/80 dark:border-orange-500/40">
             <div class="bg-gradient-to-r from-orange-600 to-amber-600 px-4 py-2 dark:from-orange-500 dark:to-amber-500">

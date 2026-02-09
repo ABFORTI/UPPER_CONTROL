@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Services\ExcelOtParser;
+use App\Models\Orden;
+use App\Models\Solicitud;
 use App\Models\ServicioEmpresa;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -118,6 +120,7 @@ class SolicitudExcelController extends Controller
                 'success' => true,
                 'archivo' => [
                     'nombre' => $originalName,
+                    'stored_name' => $storedName,
                     'ruta' => route('solicitudes.excel.download', ['archivo' => $storedName], false),
                 ],
                 'prefill' => $prefill,
@@ -210,5 +213,37 @@ class SolicitudExcelController extends Controller
         abort_unless(Storage::exists($path), 404);
 
         return Storage::download($path, $archivo);
+    }
+
+    public function downloadBySolicitud(Solicitud $solicitud)
+    {
+        $this->authorize('view', $solicitud);
+
+        $stored = basename((string)($solicitud->archivo_excel_stored_name ?? ''));
+        if ($stored === '') {
+            abort(404, 'No hay archivo Excel asociado a esta solicitud');
+        }
+
+        $path = 'solicitudes_excel/' . $stored;
+        abort_unless(Storage::exists($path), 404);
+
+        $downloadName = $solicitud->archivo_excel_nombre_original ?: $stored;
+        $downloadName = basename($downloadName);
+
+        return Storage::download($path, $downloadName);
+    }
+
+    public function downloadOrigenFromOrden(Orden $orden)
+    {
+        $this->authorize('view', $orden);
+
+        $orden->loadMissing('solicitud');
+        $solicitud = $orden->solicitud;
+        if (!$solicitud) {
+            abort(404, 'La OT no tiene solicitud asociada');
+        }
+
+        // Reusar el método por solicitud (incluye authorize view solicitud)
+        return $this->downloadBySolicitud($solicitud);
     }
 }

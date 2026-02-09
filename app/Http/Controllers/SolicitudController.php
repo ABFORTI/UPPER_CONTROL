@@ -14,6 +14,7 @@ use App\Models\SolicitudTamano;
 use Illuminate\Support\Facades\Auth;
 use App\Domain\Servicios\PricingService;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 
 class SolicitudController extends Controller
 {
@@ -317,6 +318,21 @@ class SolicitudController extends Controller
             $areaId = (int)$area->id;
         }
 
+        // Excel origen (subido previamente para precarga): guardar referencia si viene
+        $excelStoredName = trim((string) $req->input('excel_stored_name', ''));
+        $excelStoredName = $excelStoredName !== '' ? basename($excelStoredName) : null;
+        $excelOriginalName = trim((string) $req->input('excel_nombre_original', ''));
+        $excelOriginalName = $excelOriginalName !== '' ? basename($excelOriginalName) : null;
+
+        if ($excelStoredName) {
+            if (!preg_match('/^[A-Za-z0-9._-]+\.(xlsx|xls)$/i', $excelStoredName)) {
+                return back()->withErrors(['excel_stored_name' => 'Nombre de archivo Excel inválido.'])->withInput();
+            }
+            if (!Storage::exists('solicitudes_excel/' . $excelStoredName)) {
+                return back()->withErrors(['excel_stored_name' => 'El archivo Excel asociado no existe o expiró.'])->withInput();
+            }
+        }
+
         // NUEVO: Si es modo múltiple servicios, crear UNA solicitud con múltiples servicios asociados
         if ($esMultipleServicios) {
             DB::beginTransaction();
@@ -339,6 +355,10 @@ class SolicitudController extends Controller
                     'total'            => 0,
                     'notas'            => $req->notas,
                     'estatus'          => 'pendiente',
+                    'archivo_excel_stored_name' => $excelStoredName,
+                    'archivo_excel_nombre_original' => $excelOriginalName,
+                    'archivo_excel_subido_por' => $excelStoredName ? (int)$u->id : null,
+                    'archivo_excel_subido_at' => $excelStoredName ? now() : null,
                 ]);
                 
                 $pricing = app(\App\Domain\Servicios\PricingService::class);
@@ -454,6 +474,10 @@ class SolicitudController extends Controller
                         'tamanos_json'     => null,
                         'notas'            => $req->notas,
                         'estatus'          => 'pendiente',
+                        'archivo_excel_stored_name' => $excelStoredName,
+                        'archivo_excel_nombre_original' => $excelOriginalName,
+                        'archivo_excel_subido_por' => $excelStoredName ? (int)$u->id : null,
+                        'archivo_excel_subido_at' => $excelStoredName ? now() : null,
                     ]);
         } else {
             $req->validate([
@@ -480,6 +504,10 @@ class SolicitudController extends Controller
                         'total'            => $totalImporte,
                         'notas'            => $req->notas,
                         'estatus'          => 'pendiente',
+                        'archivo_excel_stored_name' => $excelStoredName,
+                        'archivo_excel_nombre_original' => $excelOriginalName,
+                        'archivo_excel_subido_por' => $excelStoredName ? (int)$u->id : null,
+                        'archivo_excel_subido_at' => $excelStoredName ? now() : null,
                     ]);
                 }
 
@@ -667,6 +695,9 @@ class SolicitudController extends Controller
                 'aprobar'    => route('solicitudes.aprobar', $solicitud),
                 'rechazar'   => route('solicitudes.rechazar', $solicitud),
                 'generar_ot' => route('ordenes.createFromSolicitud', $solicitud),
+                'excel_origen' => $solicitud->archivo_excel_stored_name
+                    ? route('solicitudes.excel.origen', $solicitud)
+                    : null,
             ],
             'flags' => [
                 'tiene_ot' => $solicitud->ordenes->count() > 0,
