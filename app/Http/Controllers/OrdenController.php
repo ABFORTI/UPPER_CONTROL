@@ -122,7 +122,30 @@ class OrdenController extends Controller
                 }
 
         // Fallback: generar al vuelo (por si el worker aún no corrió)
-        $orden->load(['servicio','centro','teamLeader','items']);
+        // Eager loading completo para evitar N+1 queries
+        $orden->load([
+            'servicio',
+            'centro',
+            'teamLeader',
+            'area',
+            'items',
+            'solicitud.cliente',
+            'solicitud.marca',
+            'aprobaciones.usuario',
+            // Cargar servicios de la OT con todas sus relaciones necesarias
+            'otServicios' => function($query) {
+                $query->with([
+                    'servicio',             // Información del servicio
+                    'addedBy',              // Usuario que agregó servicio adicional
+                    'items',                // Items del servicio (para totales)
+                    'avances' => function($q) {
+                        $q->with('createdBy') // Usuario que creó el avance
+                          ->orderBy('created_at', 'asc');
+                    }
+                ])->orderBy('created_at', 'asc');
+            }
+        ]);
+        
         $pdf = PDF::loadView('pdf.orden', ['orden'=>$orden])->setPaper('letter');
         return $pdf->stream("OT_{$orden->id}.pdf");
     }
