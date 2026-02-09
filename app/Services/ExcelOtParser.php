@@ -157,7 +157,16 @@ class ExcelOtParser
             if (count($folios) === 1) {
                 return $fromOtIndex[$folios[0]];
             }
-            // Si hay múltiples folios, no intentamos construir una única solicitud automáticamente
+
+            // Si hay múltiples folios, elegir el folio más frecuente (mayor número de filas)
+            $counts = array_map(fn($arr) => count($arr), $fromOtIndex);
+            arsort($counts);
+            $top = array_key_first($counts);
+            if ($top !== null && isset($fromOtIndex[$top])) {
+                return $fromOtIndex[$top];
+            }
+
+            // Fallback: devolver vacío para no mezclar servicios de folios distintos
             return [];
         }
 
