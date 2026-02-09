@@ -89,6 +89,27 @@ class ExcelOtParserTest extends TestCase
         $this->assertEquals('KPI 01', $datos['centro_costos']);
     }
 
+    /** @test */
+    public function puede_extraer_servicios_desde_excel_facturacion_export_agrupando_por_ot_id()
+    {
+        $this->tempFile = $this->crearExcelPrueba([
+            ['Cliente', 'Fecha de elaboración', 'Periodo', 'Centro', 'Centro de costos', 'Cantidad', 'Precio', 'DATOS DE LA ORDEN DE TRABAJO', 'Fecha de entrega'],
+            ['ACME', '01/02/2026', 'S6', 'INGCEDIM', 'KPI 01', 10, 5.5, 'Almacenaje OT: 55', '03/02/2026'],
+            ['ACME', '01/02/2026', 'S6', 'INGCEDIM', 'KPI 01', 2,  9.0, 'Distribución OT: 55', '03/02/2026'],
+        ]);
+
+        $parsed = $this->parser->parseWithServicios($this->tempFile);
+
+        $this->assertArrayHasKey('servicios', $parsed);
+        $this->assertCount(2, $parsed['servicios']);
+        $this->assertEquals('Almacenaje', $parsed['servicios'][0]['nombre_servicio']);
+        $this->assertEquals(10, $parsed['servicios'][0]['cantidad']);
+        $this->assertEquals(5.5, (float) $parsed['servicios'][0]['precio_unitario']);
+        $this->assertEquals('Distribución', $parsed['servicios'][1]['nombre_servicio']);
+        $this->assertEquals(2, $parsed['servicios'][1]['cantidad']);
+        $this->assertEquals(9.0, (float) $parsed['servicios'][1]['precio_unitario']);
+    }
+
     /** @test *
     public function mapper_puede_encontrar_centro_trabajo_por_nombre()
     {
