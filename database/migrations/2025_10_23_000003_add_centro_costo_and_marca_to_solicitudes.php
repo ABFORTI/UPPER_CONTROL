@@ -72,37 +72,58 @@ return new class extends Migration
         }
 
         // 4) Hacer NOT NULL el id_centrocosto ahora que todo tiene valor válido
-        try {
-            DB::statement('ALTER TABLE `solicitudes` MODIFY `id_centrocosto` BIGINT UNSIGNED NOT NULL');
-        } catch (\Throwable $e) {
-            // si ya es NOT NULL o el motor no permite modificar sin soltar FK, ignorar
+        $driver = DB::connection()->getDriverName();
+        if ($driver === 'mysql') {
+            try {
+                DB::statement('ALTER TABLE `solicitudes` MODIFY `id_centrocosto` BIGINT UNSIGNED NOT NULL');
+            } catch (\Throwable $e) {
+                // si ya es NOT NULL o el motor no permite modificar sin soltar FK, ignorar
+            }
+        } else {
+            // Para SQLite, usar Schema::table con change()
+            try {
+                Schema::table('solicitudes', function (Blueprint $table) {
+                    $table->unsignedBigInteger('id_centrocosto')->nullable(false)->change();
+                });
+            } catch (\Throwable $e) {}
         }
 
         // 5) Agregar índices y llaves foráneas si no existen aún (después del backfill)
-        $db = DB::getDatabaseName();
-        $hasFkCC = DB::table('information_schema.REFERENTIAL_CONSTRAINTS')
-            ->where('CONSTRAINT_SCHEMA', $db)
-            ->where('CONSTRAINT_NAME', 'solicitudes_id_centrocosto_foreign')
-            ->exists();
-        $hasFkMarca = DB::table('information_schema.REFERENTIAL_CONSTRAINTS')
-            ->where('CONSTRAINT_SCHEMA', $db)
-            ->where('CONSTRAINT_NAME', 'solicitudes_id_marca_foreign')
-            ->exists();
-        $hasIdxCC = DB::table('information_schema.STATISTICS')
-            ->where('TABLE_SCHEMA', $db)
-            ->where('TABLE_NAME', 'solicitudes')
-            ->where('INDEX_NAME', 'solicitudes_id_centrocosto_index')
-            ->exists();
-        $hasIdxMarca = DB::table('information_schema.STATISTICS')
-            ->where('TABLE_SCHEMA', $db)
-            ->where('TABLE_NAME', 'solicitudes')
-            ->where('INDEX_NAME', 'solicitudes_id_marca_index')
-            ->exists();
+        $hasFkCC = false;
+        $hasFkMarca = false;
+        $hasIdxCC = false;
+        $hasIdxMarca = false;
+        
+        if ($driver === 'mysql') {
+            $db = DB::getDatabaseName();
+            $hasFkCC = DB::table('information_schema.REFERENTIAL_CONSTRAINTS')
+                ->where('CONSTRAINT_SCHEMA', $db)
+                ->where('CONSTRAINT_NAME', 'solicitudes_id_centrocosto_foreign')
+                ->exists();
+            $hasFkMarca = DB::table('information_schema.REFERENTIAL_CONSTRAINTS')
+                ->where('CONSTRAINT_SCHEMA', $db)
+                ->where('CONSTRAINT_NAME', 'solicitudes_id_marca_foreign')
+                ->exists();
+            $hasIdxCC = DB::table('information_schema.STATISTICS')
+                ->where('TABLE_SCHEMA', $db)
+                ->where('TABLE_NAME', 'solicitudes')
+                ->where('INDEX_NAME', 'solicitudes_id_centrocosto_index')
+                ->exists();
+            $hasIdxMarca = DB::table('information_schema.STATISTICS')
+                ->where('TABLE_SCHEMA', $db)
+                ->where('TABLE_NAME', 'solicitudes')
+                ->where('INDEX_NAME', 'solicitudes_id_marca_index')
+                ->exists();
+        }
 
         Schema::table('solicitudes', function (Blueprint $table) use ($hasFkCC, $hasFkMarca, $hasIdxCC, $hasIdxMarca) {
             if (!Schema::hasColumn('solicitudes','id_centrocosto')) return; // safety
-            if (!$hasIdxCC) { $table->index(['id_centrocosto']); }
-            if (!$hasIdxMarca) { $table->index(['id_marca']); }
+            if (!$hasIdxCC) {
+                try { $table->index(['id_centrocosto']); } catch (\Throwable $e) {}
+            }
+            if (!$hasIdxMarca) {
+                try { $table->index(['id_marca']); } catch (\Throwable $e) {}
+            }
             if (!$hasFkCC) {
                 try {
                     $table->foreign('id_centrocosto')

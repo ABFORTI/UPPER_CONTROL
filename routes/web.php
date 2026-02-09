@@ -8,6 +8,8 @@ use App\Http\Controllers\{
     SolicitudController,
     CotizacionController,
     OrdenController,
+    OrdenExcelController,
+    SolicitudExcelController,
     CalidadController,
     ClienteController,
     FacturaController,
@@ -110,6 +112,13 @@ Route::middleware('auth')->group(function () {
     Route::get('/solicitudes/create', [SolicitudController::class,'create'])->name('solicitudes.create');
     Route::post('/solicitudes', [SolicitudController::class,'store'])->name('solicitudes.store');
     Route::get('/solicitudes/{solicitud}', [SolicitudController::class,'show'])->name('solicitudes.show');
+
+    // Excel: subir, guardar y parsear (sesión web)
+    Route::post('/solicitudes/parse-excel', [SolicitudExcelController::class, 'parseExcel'])
+        ->name('solicitudes.parse-excel');
+    Route::get('/solicitudes/excel/{archivo}', [SolicitudExcelController::class, 'download'])
+        ->where('archivo', '[A-Za-z0-9._-]+')
+        ->name('solicitudes.excel.download');
 
     Route::post('/solicitudes/{solicitud}/aprobar', [SolicitudController::class,'aprobar'])
         ->middleware('role:coordinador|admin')->name('solicitudes.aprobar');
@@ -214,6 +223,10 @@ Route::middleware('auth')->group(function () {
 
     // PDFs
     Route::get('/ordenes/{orden}/pdf',  [OrdenController::class,'pdf'])->name('ordenes.pdf');
+
+    // Archivo Excel: upload y download
+    Route::post('/ordenes/{orden}/archivo', [OrdenExcelController::class,'upload'])->name('ordenes.archivo.upload');
+    Route::get('/ordenes/{orden}/archivo', [OrdenExcelController::class,'download'])->name('ordenes.archivo.download');
 
     // Evidencias
     Route::post('/ordenes/{orden}/evidencias', [EvidenciaController::class,'store'])->name('evidencias.store');
