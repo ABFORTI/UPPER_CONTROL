@@ -148,6 +148,19 @@ class ExcelOtParser
      */
     private function extraerServicios(Worksheet $sheet, array $datos): array
     {
+        // Caso especial: si el Excel es el export generado por OT index (filas OT x Servicio)
+        // detectamos encabezado con 'folio' y 'servicio' y agrupamos por folio.
+        $fromOtIndex = $this->extraerServiciosDesdeTablaOtIndex($sheet);
+        if (count($fromOtIndex) > 0) {
+            // Si todas las filas pertenecen al mismo folio/OT, devolver la lista de servicios
+            $folios = array_keys($fromOtIndex);
+            if (count($folios) === 1) {
+                return $fromOtIndex[$folios[0]];
+            }
+            // Si hay múltiples folios, no intentamos construir una única solicitud automáticamente
+            return [];
+        }
+
         // 1) Intentar por tabla (encabezados tipo: "Tipo de Servicio", "Cantidad", "Precio Unitario")
         $fromTable = $this->extraerServiciosDesdeTabla($sheet);
         if (count($fromTable) > 0) {
@@ -258,6 +271,82 @@ class ExcelOtParser
         }
 
         return $servicios;
+    }
+
+    /**
+     * Detecta y extrae filas de un Excel export tipo "OT x Servicio" (export de órdenes)
+     * Agrupa por columna Folio/OT y devuelve array folio => servicios[]
+     */
+    private function extraerServiciosDesdeTablaOtIndex(Worksheet $sheet): array
+    {
+        $highestRow = min($sheet->getHighestRow(), 2000);
+        $highestColumnIndex = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::columnIndexFromString($sheet->getHighestColumn());
+
+        $headerRow = null;
+        $folioCol = null;
+        $serviceCol = null;
+        $qtyCol = null;
+        $priceCol = null;
+
+        // Buscar encabezado que contenga 'folio' y 'servicio'
+        for ($row = 1; $row <= min($highestRow, 20); $row++) {
+            $foundFolio = null; $foundService = null; $foundQty = null; $foundPrice = null;
+            for ($col = 1; $col <= min($highestColumnIndex, 40); $col++) {
+                $v = $sheet->getCellByColumnAndRow($col, $row)->getValue();
+                if ($v === null || trim((string) $v) === '') continue;
+                $n = $this->normalizar($v);
+                if ($foundFolio === null && (Str::contains($n, 'folio') || Str::contains($n, 'folio/ot') || Str::contains($n, 'ot')) ) {
+                    $foundFolio = $col;
+                }
+                if ($foundService === null && (Str::contains($n, 'proceso') || Str::contains($n, 'servicio') || Str::contains($n, 'proceso/servicio'))) {
+                    $foundService = $col;
+                }
+                if ($foundQty === null && (Str::contains($n, 'cantidad') || Str::contains($n, 'pzs') || Str::contains($n, 'piezas'))) {
+                    $foundQty = $col;
+                }
+                if ($foundPrice === null && (Str::contains($n, 'costo unitario') || Str::contains($n, 'costo unitario') || Str::contains($n, 'precio unitario') || Str::contains($n, 'costo total')) ) {
+                    $foundPrice = $col;
+                }
+            }
+            if ($foundFolio !== null && $foundService !== null) {
+                $headerRow = $row;
+                $folioCol = $foundFolio;
+                $serviceCol = $foundService;
+                $qtyCol = $foundQty;
+                $priceCol = $foundPrice;
+                break;
+            }
+        }
+
+        if ($headerRow === null) return [];
+
+        $grouped = [];
+        $emptyStreak = 0;
+        for ($row = $headerRow + 1; $row <= $highestRow; $row++) {
+            $folio = $sheet->getCellByColumnAndRow($folioCol, $row)->getValue();
+            $svc = $sheet->getCellByColumnAndRow($serviceCol, $row)->getValue();
+            if (($folio === null || trim((string)$folio) === '') && ($svc === null || trim((string)$svc) === '')) {
+                $emptyStreak++; if ($emptyStreak >= 10) break; else continue;
+            }
+            $emptyStreak = 0;
+
+            $folioKey = is_string($folio) ? trim($folio) : (string) $folio;
+            $svcName = is_string($svc) ? trim($svc) : (string) $svc;
+            if ($svcName === '') continue;
+
+            $qv = $qtyCol ? $sheet->getCellByColumnAndRow($qtyCol, $row)->getValue() : null;
+            $pv = $priceCol ? $sheet->getCellByColumnAndRow($priceCol, $row)->getValue() : null;
+
+            if (!isset($grouped[$folioKey])) $grouped[$folioKey] = [];
+            $grouped[$folioKey][] = [
+                'nombre_servicio' => $svcName,
+                'cantidad' => $qv,
+                'tipo_tarifa' => 'NORMAL',
+                'precio_unitario' => $pv,
+            ];
+        }
+
+        return $grouped;
     }
 
     private function splitServicios($value): array
