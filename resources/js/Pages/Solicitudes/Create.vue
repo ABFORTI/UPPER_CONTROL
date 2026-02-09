@@ -1,6 +1,7 @@
 <script setup>
 import { computed, watch, ref } from 'vue'
 import { useForm } from '@inertiajs/vue3'
+import UploadSolicitudExcel from '@/Components/UploadSolicitudExcel.vue'
 
 
 const props = defineProps({
@@ -305,6 +306,83 @@ form.transform(() => formData).post(postUrl, {
 function handleFiles(e) {
   form.archivos = Array.from(e.target.files || [])
 }
+
+function normalizeText(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+}
+
+function findMatchId(list, text, getLabel) {
+  const needle = normalizeText(text)
+  if (!needle) return null
+
+  // 1) Match exacto
+  for (const item of list || []) {
+    const label = normalizeText(getLabel(item))
+    if (label && label === needle) return item.id
+  }
+
+  // 2) Match por inclusión (en ambos sentidos)
+  for (const item of list || []) {
+    const label = normalizeText(getLabel(item))
+    if (!label) continue
+    if (label.includes(needle) || needle.includes(label)) return item.id
+  }
+
+  return null
+}
+
+// Handler para precarga desde Excel
+function handlePrefillLoaded({ prefill, archivo, warnings }) {
+  console.log('📋 Datos precargados desde Excel:', prefill, archivo, warnings)
+  
+  // Mostrar warnings si los hay
+  if (warnings.length > 0) {
+    const msg = 'Advertencias al procesar el Excel:\n\n' + warnings.join('\n')
+    alert(msg)
+  }
+  
+  // Aplicar datos al formulario (vienen como texto)
+  if (prefill.centro_trabajo && props.canChooseCentro) {
+    const centroId = findMatchId(props.centros, prefill.centro_trabajo, (c) => `${c.prefijo || ''} ${c.nombre || ''}`)
+    if (centroId) form.id_centrotrabajo = centroId
+  }
+
+  if (prefill.centro_costos) {
+    const ccId = findMatchId(filteredCentrosCostos.value, prefill.centro_costos, (cc) => cc.nombre)
+    if (ccId) form.id_centrocosto = ccId
+  }
+
+  if (prefill.marca) {
+    const marcaId = findMatchId(filteredMarcas.value, prefill.marca, (m) => m.nombre)
+    if (marcaId) form.id_marca = marcaId
+  }
+
+  if (prefill.tipo_servicio) {
+    const servicioId = findMatchId(filteredServicios.value, prefill.tipo_servicio, (s) => s.nombre)
+    if (servicioId) form.id_servicio = servicioId
+  }
+
+  if (prefill.area) {
+    const areaId = findMatchId(filteredAreas.value, prefill.area, (a) => a.nombre)
+    if (areaId) form.id_area = areaId
+  }
+
+  if (prefill.descripcion_producto) {
+    form.descripcion = prefill.descripcion_producto
+  }
+
+  if (prefill.cantidad !== undefined && prefill.cantidad !== null) {
+    const n = Number(prefill.cantidad)
+    if (Number.isFinite(n) && n > 0) form.cantidad = n
+  }
+  
+  console.log('✅ Formulario actualizado con datos del Excel')
+}
+
 </script>
 
 <template>
@@ -324,6 +402,12 @@ function handleFiles(e) {
           </div>
         </div>
       </div>
+
+      <!-- Componente de Carga de Excel -->
+      <UploadSolicitudExcel 
+        @prefill-loaded="handlePrefillLoaded"
+        class="mb-6"
+      />
 
       <div class="grid lg:grid-cols-3 gap-6">
         <!-- Formulario Principal -->

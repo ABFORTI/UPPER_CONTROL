@@ -13,7 +13,10 @@ class Orden extends Model {
         'descripcion_general',
         'estatus','calidad_resultado','total_planeado','total_real',
         'subtotal','iva','total',
-        'motivo_rechazo','acciones_correctivas'
+        'motivo_rechazo','acciones_correctivas',
+        // Campos de archivo Excel
+        'archivo_excel_path','archivo_excel_nombre_original','archivo_excel_mime',
+        'archivo_excel_size','archivo_excel_subido_por','archivo_excel_subido_at'
     ];
     public function solicitud(){ return $this->belongsTo(Solicitud::class,'id_solicitud'); }
     public function centro(){ return $this->belongsTo(CentroTrabajo::class,'id_centrotrabajo'); }
@@ -25,6 +28,7 @@ class Orden extends Model {
     }
     public function avances(){ return $this->hasMany(Avance::class,'id_orden'); }
     public function teamLeader(){ return $this->belongsTo(User::class,'team_leader_id'); }
+    public function archivoSubidoPor(){ return $this->belongsTo(User::class,'archivo_excel_subido_por'); }
     public function evidencias(){ return $this->hasMany(\App\Models\Evidencia::class,'id_orden'); }
     public function aprobaciones()
   

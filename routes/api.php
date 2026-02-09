@@ -62,3 +62,6 @@ Route::prefix('client')->group(function () {
         ->middleware('throttle:20,1')
         ->name('api.client.quotations.reject');
 });
+
+
+
