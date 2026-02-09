@@ -461,15 +461,15 @@ function handlePrefillLoaded({ prefill, archivo, servicios, is_multi, warnings }
         </div>
       </div>
 
-      <!-- Componente de Carga de Excel -->
-      <UploadSolicitudExcel 
-        @prefill-loaded="handlePrefillLoaded"
-        class="mb-6"
-      />
-
       <div class="grid lg:grid-cols-3 gap-6">
         <!-- Formulario Principal -->
         <div class="lg:col-span-2 space-y-6">
+
+          <!-- Cargar desde Excel (Opcional) -->
+          <UploadSolicitudExcel
+            compact
+            @prefill-loaded="handlePrefillLoaded"
+          />
           
           <!-- Sección: Información del Servicio -->
           <div class="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
