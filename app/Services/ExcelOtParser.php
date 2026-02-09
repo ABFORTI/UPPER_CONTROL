@@ -157,16 +157,7 @@ class ExcelOtParser
             if (count($folios) === 1) {
                 return $fromOtIndex[$folios[0]];
             }
-
-            // Si hay múltiples folios, elegir el folio más frecuente (mayor número de filas)
-            $counts = array_map(fn($arr) => count($arr), $fromOtIndex);
-            arsort($counts);
-            $top = array_key_first($counts);
-            if ($top !== null && isset($fromOtIndex[$top])) {
-                return $fromOtIndex[$top];
-            }
-
-            // Fallback: devolver vacío para no mezclar servicios de folios distintos
+            // Si hay múltiples folios, no intentamos construir una única solicitud automáticamente
             return [];
         }
 
@@ -297,32 +288,72 @@ class ExcelOtParser
         $qtyCol = null;
         $priceCol = null;
 
-        // Buscar encabezado que contenga 'folio' y 'servicio'
+        $facturaCol = null;
+        $semanaCol = null;
+        $costoUnitarioCol = null;
+        $costoTotalCol = null;
+
+        // Este detector debe ser estricto: sólo debe activarse para el Excel exportado de Órdenes
+        // (headings como FACTURA, SEMANA, Folio/OT SOLGISTIKA, Proceso, Costo unitario, etc.).
+        // La plantilla de Solicitud también trae "Folio" y "Tipo de Servicio" y no debe caer aquí.
         for ($row = 1; $row <= min($highestRow, 20); $row++) {
             $foundFolio = null; $foundService = null; $foundQty = null; $foundPrice = null;
+            $foundFactura = null; $foundSemana = null; $foundCostoUnitario = null; $foundCostoTotal = null;
             for ($col = 1; $col <= min($highestColumnIndex, 40); $col++) {
                 $v = $sheet->getCellByColumnAndRow($col, $row)->getValue();
                 if ($v === null || trim((string) $v) === '') continue;
                 $n = $this->normalizar($v);
-                if ($foundFolio === null && (Str::contains($n, 'folio') || Str::contains($n, 'folio/ot') || Str::contains($n, 'ot')) ) {
+
+                if ($foundFactura === null && (Str::contains($n, 'factura'))) $foundFactura = $col;
+                if ($foundSemana === null && ($n === 'semana' || Str::contains($n, 'semana'))) $foundSemana = $col;
+
+                // En export de órdenes el encabezado suele ser "Folio/OT SOLGISTIKA".
+                if ($foundFolio === null && (Str::contains($n, 'folio/ot') || (Str::contains($n, 'folio') && Str::contains($n, 'solgistika')))) {
                     $foundFolio = $col;
                 }
-                if ($foundService === null && (Str::contains($n, 'proceso') || Str::contains($n, 'servicio') || Str::contains($n, 'proceso/servicio'))) {
+
+                // En export de órdenes el servicio viene como "Proceso" (no "Tipo de Servicio").
+                if ($foundService === null && (Str::contains($n, 'proceso') || $n === 'proceso')) {
                     $foundService = $col;
                 }
+
                 if ($foundQty === null && (Str::contains($n, 'cantidad') || Str::contains($n, 'pzs') || Str::contains($n, 'piezas'))) {
                     $foundQty = $col;
                 }
-                if ($foundPrice === null && (Str::contains($n, 'costo unitario') || Str::contains($n, 'costo unitario') || Str::contains($n, 'precio unitario') || Str::contains($n, 'costo total')) ) {
-                    $foundPrice = $col;
+
+                if ($foundCostoUnitario === null && (Str::contains($n, 'costo unitario') || Str::contains($n, 'precio unitario'))) {
+                    $foundCostoUnitario = $col;
+                }
+                if ($foundCostoTotal === null && (Str::contains($n, 'costo total'))) {
+                    $foundCostoTotal = $col;
+                }
+
+                // Compat: algunas versiones usan un solo campo de costo. Mantenemos $foundPrice como respaldo.
+                if ($foundPrice === null && ($foundCostoUnitario !== null || $foundCostoTotal !== null)) {
+                    $foundPrice = $foundCostoUnitario ?? $foundCostoTotal;
                 }
             }
-            if ($foundFolio !== null && $foundService !== null) {
+
+            // Heurística estricta para evitar falsos positivos:
+            // - Requerimos Folio/OT + Proceso
+            // - Y al menos 2 señales adicionales propias del export (FACTURA, SEMANA, costos)
+            $signals = 0;
+            if ($foundFactura !== null) $signals++;
+            if ($foundSemana !== null) $signals++;
+            if ($foundCostoUnitario !== null) $signals++;
+            if ($foundCostoTotal !== null) $signals++;
+
+            if ($foundFolio !== null && $foundService !== null && $signals >= 2) {
                 $headerRow = $row;
                 $folioCol = $foundFolio;
                 $serviceCol = $foundService;
                 $qtyCol = $foundQty;
-                $priceCol = $foundPrice;
+                $priceCol = $foundCostoUnitario ?? $foundCostoTotal ?? $foundPrice;
+
+                $facturaCol = $foundFactura;
+                $semanaCol = $foundSemana;
+                $costoUnitarioCol = $foundCostoUnitario;
+                $costoTotalCol = $foundCostoTotal;
                 break;
             }
         }
