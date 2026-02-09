@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Spatie\Activitylog\Traits\LogsActivity;
 use Spatie\Activitylog\LogOptions;
+use App\Models\User;
 
 class Solicitud extends Model {
   use LogsActivity;
@@ -20,7 +21,11 @@ class Solicitud extends Model {
     'id_cotizacion',
     'id_cotizacion_item',
     'id_cotizacion_item_servicio',
-    'metadata_json'
+    'metadata_json',
+    'archivo_excel_stored_name',
+    'archivo_excel_nombre_original',
+    'archivo_excel_subido_por',
+    'archivo_excel_subido_at'
   ];
   public function cliente(){ return $this->belongsTo(User::class,'id_cliente'); }
   public function centro(){ return $this->belongsTo(CentroTrabajo::class,'id_centrotrabajo'); }
@@ -29,6 +34,8 @@ class Solicitud extends Model {
   public function centroCosto(){ return $this->belongsTo(CentroCosto::class,'id_centrocosto'); }
   public function marca(){ return $this->belongsTo(Marca::class,'id_marca'); }
   public function archivos(){ return $this->morphMany(\App\Models\Archivo::class,'fileable'); }
+
+  public function archivoExcelSubidoPor(){ return $this->belongsTo(User::class,'archivo_excel_subido_por'); }
 
   public function getActivitylogOptions(): LogOptions
   {

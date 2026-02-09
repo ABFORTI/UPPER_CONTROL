@@ -1492,6 +1492,9 @@ class OrdenController extends Controller
                 'cliente_autorizar' => route('cliente.autorizar', $orden),
                 'facturar'          => route('facturas.createFromOrden', $orden),
                 'pdf'               => route('ordenes.pdf', $orden),
+                'excel_origen'      => ($orden->solicitud && $orden->solicitud->archivo_excel_stored_name)
+                    ? route('ordenes.excel.origen', $orden)
+                    : null,
                 'evidencias_store'  => route('evidencias.store', $orden),
                 'evidencias_destroy'=> route('evidencias.destroy', 0),
                 'definir_tamanos'   => route('ordenes.definirTamanos', $orden),

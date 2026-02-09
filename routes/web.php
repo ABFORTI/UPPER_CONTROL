@@ -120,6 +120,10 @@ Route::middleware('auth')->group(function () {
         ->where('archivo', '[A-Za-z0-9._-]+')
         ->name('solicitudes.excel.download');
 
+    // Excel origen (ya guardado) asociado a la Solicitud
+    Route::get('/solicitudes/{solicitud}/excel-origen', [SolicitudExcelController::class, 'downloadBySolicitud'])
+        ->name('solicitudes.excel.origen');
+
     Route::post('/solicitudes/{solicitud}/aprobar', [SolicitudController::class,'aprobar'])
         ->middleware('role:coordinador|admin')->name('solicitudes.aprobar');
     Route::post('/solicitudes/{solicitud}/rechazar', [SolicitudController::class,'rechazar'])
@@ -227,6 +231,10 @@ Route::middleware('auth')->group(function () {
     // Archivo Excel: upload y download
     Route::post('/ordenes/{orden}/archivo', [OrdenExcelController::class,'upload'])->name('ordenes.archivo.upload');
     Route::get('/ordenes/{orden}/archivo', [OrdenExcelController::class,'download'])->name('ordenes.archivo.download');
+
+    // Excel origen (el que se usó para precargar la solicitud)
+    Route::get('/ordenes/{orden}/excel-origen', [SolicitudExcelController::class, 'downloadOrigenFromOrden'])
+        ->name('ordenes.excel.origen');
 
     // Evidencias
     Route::post('/ordenes/{orden}/evidencias', [EvidenciaController::class,'store'])->name('evidencias.store');

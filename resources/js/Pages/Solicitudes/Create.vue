@@ -39,6 +39,8 @@ id_servicio: '',
 descripcion: '',
 id_area: null,
 cantidad: 1,
+excel_stored_name: null,
+excel_nombre_original: null,
 // Modo diferido: ya no capturamos por tamaño en la solicitud
 tamanos: { chico:0, mediano:0, grande:0, jumbo:0 },
 notas: '',
@@ -255,6 +257,8 @@ notas: form.notas,
 id_centrocosto: form.id_centrocosto,
 id_marca: form.id_marca,
 id_area: form.id_area,
+excel_stored_name: form.excel_stored_name,
+excel_nombre_original: form.excel_nombre_original,
 }
 
 // Si es modo múltiple, enviar array de servicios con la cantidad compartida
@@ -350,6 +354,10 @@ function findMatchId(list, text, getLabel) {
 // Handler para precarga desde Excel
 function handlePrefillLoaded({ prefill, archivo, servicios, is_multi, warnings }) {
   console.log('📋 Datos precargados desde Excel:', { prefill, archivo, servicios, is_multi, warnings })
+
+  // Guardar referencia del Excel (para persistir y descargar después)
+  form.excel_stored_name = archivo?.stored_name || null
+  form.excel_nombre_original = archivo?.nombre || null
   
   // Mostrar warnings si los hay
   if (warnings.length > 0) {
