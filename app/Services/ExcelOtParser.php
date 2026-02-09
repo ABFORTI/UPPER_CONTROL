@@ -148,6 +148,17 @@ class ExcelOtParser
      */
     private function extraerServicios(Worksheet $sheet, array $datos): array
     {
+        // Caso especial: Excel de facturación (columnas: Cliente, Cantidad, Precio, DATOS DE LA ORDEN DE TRABAJO, ...)
+        // Agrupa por OT_ID extraído de "... OT: {id}" y construye servicios.
+        $fromFacturacion = $this->extraerServiciosDesdeTablaFacturacionExport($sheet);
+        if (count($fromFacturacion) > 0) {
+            $otIds = array_keys($fromFacturacion);
+            if (count($otIds) === 1) {
+                return $fromFacturacion[$otIds[0]];
+            }
+            return [];
+        }
+
         // Caso especial: si el Excel es el export generado por OT index (filas OT x Servicio)
         // detectamos encabezado con 'folio' y 'servicio' y agrupamos por folio.
         $fromOtIndex = $this->extraerServiciosDesdeTablaOtIndex($sheet);
@@ -383,6 +394,112 @@ class ExcelOtParser
                 'cantidad' => $qv,
                 'tipo_tarifa' => 'NORMAL',
                 'precio_unitario' => $pv,
+            ];
+        }
+
+        return $grouped;
+    }
+
+    /**
+     * Detecta y extrae filas del Excel de facturación (export) con columna "DATOS DE LA ORDEN DE TRABAJO".
+     * Devuelve array ot_id => servicios[]
+     *
+     * Requisitos mínimos para considerarlo este formato:
+     * - Encabezados: "DATOS DE LA ORDEN DE TRABAJO" + "Cantidad" + "Precio"
+     *
+     * En "DATOS..." se espera: "{NOMBRE_SERVICIO} OT: {OT_ID}".
+     */
+    private function extraerServiciosDesdeTablaFacturacionExport(Worksheet $sheet): array
+    {
+        $highestRow = min($sheet->getHighestRow(), 2000);
+        $highestColumnIndex = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::columnIndexFromString($sheet->getHighestColumn());
+
+        $headerRow = null;
+        $datosCol = null;
+        $qtyCol = null;
+        $priceCol = null;
+
+        for ($row = 1; $row <= min($highestRow, 20); $row++) {
+            $foundDatos = null;
+            $foundQty = null;
+            $foundPrice = null;
+
+            for ($col = 1; $col <= min($highestColumnIndex, 40); $col++) {
+                $v = $sheet->getCellByColumnAndRow($col, $row)->getValue();
+                if ($v === null || trim((string) $v) === '') continue;
+
+                $n = $this->normalizar($v);
+                if ($foundDatos === null && Str::contains($n, 'datos de la orden de trabajo')) {
+                    $foundDatos = $col;
+                }
+                if ($foundQty === null && (Str::contains($n, 'cantidad') || $n === 'cantidad')) {
+                    $foundQty = $col;
+                }
+                if ($foundPrice === null && ($n === 'precio' || Str::contains($n, 'precio'))) {
+                    $foundPrice = $col;
+                }
+            }
+
+            if ($foundDatos !== null && $foundQty !== null && $foundPrice !== null) {
+                $headerRow = $row;
+                $datosCol = $foundDatos;
+                $qtyCol = $foundQty;
+                $priceCol = $foundPrice;
+                break;
+            }
+        }
+
+        if ($headerRow === null) return [];
+
+        $grouped = [];
+        $emptyStreak = 0;
+
+        for ($row = $headerRow + 1; $row <= $highestRow; $row++) {
+            $datosCell = $sheet->getCellByColumnAndRow($datosCol, $row)->getValue();
+            $qtyCell = $sheet->getCellByColumnAndRow($qtyCol, $row)->getValue();
+            $priceCell = $sheet->getCellByColumnAndRow($priceCol, $row)->getValue();
+
+            $datosStr = trim((string) $datosCell);
+            $qtyStr = trim((string) $qtyCell);
+            $priceStr = trim((string) $priceCell);
+
+            if ($datosStr === '' && $qtyStr === '' && $priceStr === '') {
+                $emptyStreak++;
+                if ($emptyStreak >= 10) break;
+                continue;
+            }
+            $emptyStreak = 0;
+
+            if ($datosStr === '') continue;
+
+            if (!preg_match('/\bOT\s*:\s*(\d+)\b/i', $datosStr, $m)) {
+                continue;
+            }
+
+            $otId = (string) $m[1];
+            $svcName = trim(preg_replace('/\bOT\s*:\s*\d+\b/i', '', $datosStr));
+            $svcName = trim(rtrim($svcName, '-:'));
+
+            if ($svcName === '') {
+                $svcName = 'Servicio';
+            }
+
+            $cantidad = is_numeric($qtyCell) ? (int) $qtyCell : (int) preg_replace('/[^0-9]/', '', $qtyStr);
+            if ($cantidad <= 0) $cantidad = null;
+
+            $precio = null;
+            if (is_numeric($priceCell)) {
+                $precio = (float) $priceCell;
+            } elseif ($priceStr !== '') {
+                $precio = (float) str_replace([',', '$'], '', $priceStr);
+            }
+
+            if (!isset($grouped[$otId])) $grouped[$otId] = [];
+            $grouped[$otId][] = [
+                'nombre_servicio' => $svcName,
+                'cantidad' => $cantidad,
+                'tipo_tarifa' => 'NORMAL',
+                'precio_unitario' => $precio,
             ];
         }
 
