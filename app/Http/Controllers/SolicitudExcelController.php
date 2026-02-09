@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Services\ExcelOtParser;
+use App\Models\ServicioEmpresa;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -26,9 +27,11 @@ class SolicitudExcelController extends Controller
             // Guardar en storage/app/solicitudes_excel/
             $storedPath = $file->storeAs('solicitudes_excel', $storedName);
 
-            // Parsear desde el archivo guardado
+            // Parsear desde el archivo guardado (incluye servicios detectados)
             $parser = new ExcelOtParser();
-            $datos = $parser->parse(Storage::path($storedPath));
+            $parsed = $parser->parseWithServicios(Storage::path($storedPath));
+            $datos = $parsed['datos'] ?? [];
+            $serviciosRaw = $parsed['servicios'] ?? [];
 
             // Extraer SOLO campos solicitados (si existen)
             $prefill = [];
@@ -42,9 +45,6 @@ class SolicitudExcelController extends Controller
             if (!empty($datos['marca'])) {
                 $prefill['marca'] = $datos['marca'];
             }
-            if (!empty($datos['servicio'])) {
-                $prefill['tipo_servicio'] = $datos['servicio'];
-            }
             if (!empty($datos['descripcion_producto'])) {
                 $prefill['descripcion_producto'] = $datos['descripcion_producto'];
             }
@@ -57,6 +57,63 @@ class SolicitudExcelController extends Controller
                 $prefill['cantidad'] = $this->parseCantidad($datos['cantidad']);
             }
 
+            // Resolver servicios contra BD
+            $servicios = [];
+            $noEncontrados = [];
+            foreach ($serviciosRaw as $s) {
+                $nombre = trim((string)($s['nombre_servicio'] ?? ''));
+                if ($nombre === '') continue;
+
+                $serv = $this->buscarServicioPorNombreOCodigo($nombre);
+                if (!$serv) {
+                    $noEncontrados[] = $nombre;
+                    continue;
+                }
+
+                $servicios[] = [
+                    'id_servicio' => (int) $serv->id,
+                    'nombre_servicio' => (string) $serv->nombre,
+                    'cantidad' => $this->parseCantidad($s['cantidad'] ?? $prefill['cantidad'] ?? null),
+                    'tipo_tarifa' => (string)($s['tipo_tarifa'] ?? 'NORMAL'),
+                    'precio_unitario' => $this->parsePrecio($s['precio_unitario'] ?? null),
+                ];
+            }
+
+            // Consistencia: si no detectó lista pero sí hay servicio simple, tratarlo como 1 servicio
+            if (count($servicios) === 0 && !empty($datos['servicio'])) {
+                $nombre = trim((string) $datos['servicio']);
+                $nombre = preg_split('/\R+/u', $nombre)[0] ?? $nombre;
+                $serv = $this->buscarServicioPorNombreOCodigo($nombre);
+                if ($serv) {
+                    $servicios[] = [
+                        'id_servicio' => (int) $serv->id,
+                        'nombre_servicio' => (string) $serv->nombre,
+                        'cantidad' => $prefill['cantidad'] ?? null,
+                        'tipo_tarifa' => 'NORMAL',
+                        'precio_unitario' => null,
+                    ];
+                } else {
+                    $noEncontrados[] = $nombre;
+                }
+            }
+
+            if (count($noEncontrados) > 0) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No se encontraron estos servicios en catálogo: ' . implode(', ', array_values(array_unique($noEncontrados))),
+                    'servicios_no_encontrados' => array_values(array_unique($noEncontrados)),
+                ], 422);
+            }
+
+            // Asegurar cantidad por servicio (fallback a cantidad global)
+            foreach ($servicios as $i => $s) {
+                if (empty($s['cantidad']) && !empty($prefill['cantidad'])) {
+                    $servicios[$i]['cantidad'] = $prefill['cantidad'];
+                }
+            }
+
+            $isMulti = count($servicios) >= 2;
+
             return response()->json([
                 'success' => true,
                 'archivo' => [
@@ -64,6 +121,8 @@ class SolicitudExcelController extends Controller
                     'ruta' => route('solicitudes.excel.download', ['archivo' => $storedName], false),
                 ],
                 'prefill' => $prefill,
+                'servicios' => $servicios,
+                'is_multi' => $isMulti,
             ]);
         } catch (\Exception $e) {
             Log::error('Error al parsear Excel de solicitud (web): ' . $e->getMessage(), [
@@ -102,6 +161,44 @@ class SolicitudExcelController extends Controller
         // Si es entero, devolver int
         if (abs($num - (int) $num) < 0.00001) return (int) $num;
         return $num;
+    }
+
+    private function parsePrecio($value): ?float
+    {
+        if ($value === null) return null;
+        if (is_int($value) || is_float($value)) return (float) $value;
+
+        $raw = trim((string) $value);
+        if ($raw === '') return null;
+        $raw = preg_replace('/[^0-9.,-]+/', '', $raw);
+        if ($raw === '' || $raw === '-') return null;
+
+        if (substr_count($raw, ',') === 1 && substr_count($raw, '.') === 0) {
+            $raw = str_replace(',', '.', $raw);
+        } else {
+            $raw = str_replace(',', '', $raw);
+        }
+
+        return is_numeric($raw) ? (float) $raw : null;
+    }
+
+    private function buscarServicioPorNombreOCodigo(string $texto): ?ServicioEmpresa
+    {
+        $texto = trim($texto);
+        if ($texto === '') return null;
+
+        // Intentar por código si parece tenerlo
+        $codigo = null;
+        if (preg_match('/([A-Z]+)\s*-?\s*(\d+)/i', $texto, $m)) {
+            $codigo = strtoupper($m[1]) . $m[2];
+        }
+
+        return ServicioEmpresa::where(function ($q) use ($texto, $codigo) {
+            if ($codigo) {
+                $q->where('codigo', 'LIKE', '%' . $codigo . '%');
+            }
+            $q->orWhere('nombre', 'LIKE', '%' . $texto . '%');
+        })->first();
     }
 
     public function download(string $archivo)

@@ -181,6 +181,8 @@ async function cargarYParsear() {
     emit('prefill-loaded', {
       prefill: data.prefill || {},
       archivo: archivoProcesado.value,
+      servicios: data.servicios || [],
+      is_multi: !!data.is_multi,
       warnings: [],
     })
 
