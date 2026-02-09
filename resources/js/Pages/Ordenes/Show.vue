@@ -587,22 +587,22 @@ function aplicarFaltantesServicio(servicioId) {
 </script>
 
 <template>
-  <div class="min-h-screen bg-gradient-to-br from-slate-50 via-indigo-50 to-indigo-50 py-8 px-4 sm:px-6 lg:px-8 dark:bg-gradient-to-br dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
+  <div class="min-h-screen overflow-x-hidden bg-gradient-to-br from-slate-50 via-indigo-50 to-indigo-50 py-8 px-4 sm:px-6 lg:px-8 dark:bg-gradient-to-br dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
     <div class="max-w-7xl mx-auto space-y-6">
       
       <!-- Header Card -->
       <div class="bg-white rounded-2xl shadow-xl border-2 border-indigo-100 overflow-hidden dark:bg-slate-900/85 dark:border-slate-800 dark:shadow-[0_20px_45px_rgba(0,0,0,0.55)]">
   <div class="bg-[#1E1C8F] px-4 sm:px-6 py-3 dark:bg-gradient-to-r dark:from-[#1E1C8F] dark:to-indigo-600">
           <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-            <div class="flex items-start sm:items-center gap-4">
+            <div class="flex items-start sm:items-center gap-4 min-w-0">
               <div class="bg-white bg-opacity-20 p-3 rounded-xl backdrop-blur-sm">
                 <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                 </svg>
               </div>
-              <div>
+              <div class="min-w-0">
                 <h1 class="text-2xl sm:text-3xl font-bold text-white leading-tight">OT #{{ orden?.id }}</h1>
-                <p class="text-indigo-100 text-sm sm:text-base mt-0.5">{{ orden?.solicitud?.descripcion || orden?.servicio?.nombre || 'Sin descripción' }}</p>
+                <p class="text-indigo-100 text-sm sm:text-base mt-0.5 break-words">{{ orden?.solicitud?.descripcion || orden?.servicio?.nombre || 'Sin descripción' }}</p>
               </div>
             </div>
             
@@ -654,41 +654,41 @@ function aplicarFaltantesServicio(servicioId) {
         <!-- Info Bar -->
         <div class="bg-gradient-to-r from-indigo-50 to-[#eef2ff] px-4 sm:px-6 py-2.5 border-b border-indigo-100 dark:bg-gradient-to-r dark:from-slate-900/80 dark:via-slate-900/60 dark:to-slate-900/40 dark:border-slate-800">
           <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 text-xs">
-            <div class="flex items-center gap-1.5">
+            <div class="flex items-center gap-1.5 min-w-0">
               <svg class="w-4 h-4 text-indigo-600 dark:text-indigo-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
               </svg>
-              <span class="text-gray-700 dark:text-slate-200"><strong>Centro:</strong> {{ orden?.centro?.nombre }}</span>
+              <span class="text-gray-700 dark:text-slate-200 break-words"><strong>Centro:</strong> {{ orden?.centro?.nombre }}</span>
             </div>
-            <div v-if="orden?.solicitud?.centro_costo || orden?.solicitud?.centroCosto" class="flex items-center gap-1.5">
+            <div v-if="orden?.solicitud?.centro_costo || orden?.solicitud?.centroCosto" class="flex items-center gap-1.5 min-w-0">
               <svg class="w-4 h-4 text-indigo-600 dark:text-indigo-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l9-9h5l3 3v5l-9 9-8-8zM16 6h.01"/>
               </svg>
-              <span class="text-gray-700 dark:text-slate-200"><strong>Centro de costos:</strong> {{ (orden?.solicitud?.centroCosto?.nombre) || (orden?.solicitud?.centro_costo?.nombre) || '—' }}</span>
+              <span class="text-gray-700 dark:text-slate-200 break-words"><strong>Centro de costos:</strong> {{ (orden?.solicitud?.centroCosto?.nombre) || (orden?.solicitud?.centro_costo?.nombre) || '—' }}</span>
             </div>
-            <div class="flex items-center gap-1.5">
+            <div class="flex items-center gap-1.5 min-w-0">
               <svg class="w-4 h-4 text-indigo-600 dark:text-indigo-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l9-9h5l3 3v5l-9 9-8-8zM16 6h.01"/>
               </svg>
-              <span class="text-gray-700 dark:text-slate-200"><strong>Marca:</strong> {{ (orden?.solicitud?.marca?.nombre) || '—' }}</span>
+              <span class="text-gray-700 dark:text-slate-200 break-words"><strong>Marca:</strong> {{ (orden?.solicitud?.marca?.nombre) || '—' }}</span>
             </div>
-            <div class="flex items-center gap-1.5">
+            <div class="flex items-center gap-1.5 min-w-0">
               <svg class="w-4 h-4 text-[#1E1C8F] dark:text-indigo-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
               </svg>
-              <span class="text-gray-700 dark:text-slate-200"><strong>Team Leader:</strong> {{ orden?.team_leader?.name ?? 'No asignado' }}</span>
+              <span class="text-gray-700 dark:text-slate-200 break-words"><strong>Team Leader:</strong> {{ orden?.team_leader?.name ?? 'No asignado' }}</span>
             </div>
-            <div v-if="orden?.area" class="flex items-center gap-1.5">
+            <div v-if="orden?.area" class="flex items-center gap-1.5 min-w-0">
               <svg class="w-4 h-4 text-[#1E1C8F] dark:text-indigo-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/>
               </svg>
-              <span class="text-gray-700 dark:text-slate-200"><strong>Área:</strong> {{ orden.area.nombre }}</span>
+              <span class="text-gray-700 dark:text-slate-200 break-words"><strong>Área:</strong> {{ orden.area.nombre }}</span>
             </div>
-            <div v-if="orden?.solicitud?.descripcion" class="flex items-center gap-1.5">
+            <div v-if="orden?.solicitud?.descripcion" class="flex items-center gap-1.5 min-w-0">
               <svg class="w-4 h-4 text-indigo-600 dark:text-indigo-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/>
               </svg>
-              <span class="text-gray-700 dark:text-slate-200"><strong>Producto:</strong> {{ orden.solicitud.descripcion }}</span>
+              <span class="text-gray-700 dark:text-slate-200 break-words"><strong>Producto:</strong> {{ orden.solicitud.descripcion }}</span>
             </div>
           </div>
         </div>
@@ -827,9 +827,9 @@ function aplicarFaltantesServicio(servicioId) {
                         :class="idx % 2 === 0 ? 'bg-white dark:bg-slate-900/20' : 'bg-slate-50/50 dark:bg-slate-800/20'" 
                         class="hover:bg-blue-50/40 dark:hover:bg-blue-950/20 transition-colors">
                       <td class="px-3 py-2">
-                        <div class="flex items-center gap-1.5">
+                        <div class="flex items-center gap-1.5 min-w-0">
                           <div class="w-1 h-1 rounded-full bg-slate-400 dark:bg-slate-500"></div>
-                          <span class="font-medium text-slate-900 dark:text-slate-100 text-xs">
+                          <span class="font-medium text-slate-900 dark:text-slate-100 text-xs break-words whitespace-normal min-w-0">
                             <span v-if="it?.tamano">{{ it.tamano.toUpperCase() }}</span>
                             <span v-else>{{ it?.descripcion || 'Sin descripción' }}</span>
                           </span>
@@ -1155,9 +1155,9 @@ function aplicarFaltantesServicio(servicioId) {
                         :class="itemIdx % 2 === 0 ? 'bg-white dark:bg-slate-900/20' : 'bg-slate-50/50 dark:bg-slate-800/20'" 
                         class="hover:bg-blue-50/40 dark:hover:bg-blue-950/20 transition-colors">
                       <td class="px-3 py-2">
-                        <div class="flex items-center gap-1.5">
+                        <div class="flex items-center gap-1.5 min-w-0">
                           <div class="w-1 h-1 rounded-full bg-slate-400 dark:bg-slate-500"></div>
-                          <span class="font-medium text-slate-900 dark:text-slate-100 text-xs">{{ item.tamano ? item.tamano.toUpperCase() : (item.descripcion_item || item.descripcion || 'Distribución') }}</span>
+                          <span class="font-medium text-slate-900 dark:text-slate-100 text-xs break-words whitespace-normal min-w-0">{{ item.tamano ? item.tamano.toUpperCase() : (item.descripcion_item || item.descripcion || 'Distribución') }}</span>
                         </div>
                       </td>
                       <td class="px-3 py-2 text-center">
@@ -1477,14 +1477,14 @@ function aplicarFaltantesServicio(servicioId) {
             <div class="p-4 space-y-2">
                 <div v-for="archivo in orden.solicitud.archivos" :key="archivo.id" 
                    class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-4 bg-gradient-to-r from-gray-50 to-orange-50 rounded-xl border border-gray-200 hover:border-orange-300 hover:shadow-md transition-all duration-200 dark:from-slate-900/60 dark:to-orange-500/10 dark:border-slate-700 dark:text-slate-100">
-                 <div class="flex items-center gap-4">
+                 <div class="flex items-center gap-4 min-w-0 flex-1">
                   <div class="bg-gradient-to-br from-orange-500 to-amber-500 p-3 rounded-xl">
                     <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                     </svg>
                   </div>
-                  <div>
-                    <div class="font-semibold text-gray-800 dark:text-slate-100">{{ archivo.nombre_original || archivo.path?.split('/').pop() || 'Archivo' }}</div>
+                  <div class="min-w-0">
+                    <div class="font-semibold text-gray-800 dark:text-slate-100 break-words">{{ archivo.nombre_original || archivo.path?.split('/').pop() || 'Archivo' }}</div>
                     <div class="text-sm text-gray-500 flex items-center gap-2 mt-1 dark:text-slate-400">
                       <span class="px-2 py-0.5 bg-gray-200 rounded text-xs font-medium dark:bg-slate-700 dark:text-slate-200">
                         {{ archivo.size ? (archivo.size / 1024).toFixed(0) : '0' }} KB
