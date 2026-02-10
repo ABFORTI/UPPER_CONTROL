@@ -24,6 +24,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'check.servicios' => \App\Http\Middleware\CheckServiciosAccess::class,
             'check.areas' => \App\Http\Middleware\CheckAreasAccess::class,
             'cedim.only' => \App\Http\Middleware\RestrictToCedim::class,
+            'feature' => \App\Http\Middleware\CheckFeature::class,
         ]);
         //
     })

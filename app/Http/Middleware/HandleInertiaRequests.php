@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 use Inertia\Middleware;
 
 class HandleInertiaRequests extends Middleware
@@ -33,6 +34,22 @@ class HandleInertiaRequests extends Middleware
         // Ej.: "/upper-control/public" (o cadena vacía si está en raíz)
         $base = rtrim($request->getBaseUrl(), '/');
 
+        // Features habilitadas por centro (para UI: menú, botones, etc.)
+        // Importante: la seguridad real se aplica en backend con middleware `feature:*`.
+        $enabledFeatureKeys = [];
+        if ($u) {
+            // Si las migraciones de features aún no corren, no tumbar toda la app.
+            // En ese caso, el front verá cero features (oculta menú) y el backend seguirá protegido.
+            if (Schema::hasTable('features') && Schema::hasTable('centro_feature')) {
+                $u->loadMissing('centro.features');
+                $enabledFeatureKeys = $u->centro?->features
+                    ?->filter(fn ($f) => (bool) ($f->pivot?->enabled ?? false))
+                    ?->pluck('key')
+                    ?->values()
+                    ?->all() ?? [];
+            }
+        }
+
         // Verificar si hay órdenes completadas pendientes de validación (solo para clientes)
         $pendingValidation = 0;
         if ($u && !$u->hasAnyRole(['admin', 'coordinador', 'calidad'])) {
@@ -57,6 +74,7 @@ class HandleInertiaRequests extends Middleware
                     'roles'              => $u->getRoleNames()->values(),
                     'unread_count'       => $u->unreadNotifications()->count(),
                 ] : null,
+                'features' => $enabledFeatureKeys,
             ],
 
             'impersonation' => [

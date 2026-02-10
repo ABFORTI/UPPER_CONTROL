@@ -9,6 +9,7 @@ class DatabaseSeeder extends Seeder {
     // Ejecuta seeders base
     $this->call([
       CentrosSeeder::class,
+      FeatureSeeder::class,
       AreaSeeder::class,
       MarcasSeeder::class,
       RolesSeeder::class,

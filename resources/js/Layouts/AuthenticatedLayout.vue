@@ -30,6 +30,12 @@ const user  = computed(() => page.props.auth?.user || null)
 const roles = computed(() => user.value?.roles ?? [])
 const mainRole = computed(() => roles.value?.[0] || '')
 
+// Features habilitadas del centro del usuario (UI). La seguridad real está en backend.
+const features = computed(() => page.props.auth?.features ?? [])
+function hasFeature(key) {
+  return (features.value || []).includes(key)
+}
+
 const isAdmin  = computed(() => roles.value.includes('admin'))
 const isTeamLeader = computed(() => roles.value.includes('team_leader'))
 const isCoord  = computed(() => roles.value.includes('coordinador'))
@@ -45,7 +51,6 @@ const isOnlyControlOrComercial = computed(() => {
   if (rs.length === 0) return false
   return rs.every(r => r === 'control' || r === 'comercial')
 })
-const isCedim = computed(() => isAdmin.value || user.value?.centro_trabajo_id === 1)
 
 const unread = computed(() => page.props.auth?.user?.unread_count || 0)
 function markAll () {
@@ -150,8 +155,8 @@ function closeMobile () {
               </Link>
             </li>
 
-            <!-- Cotizaciones: coordinador + clientes + admin + gerente_upper + facturacion (solo lectura) - SOLO CEDIM -->
-            <li v-if="isCedim && !isOnlyCalidad && !isOnlyControlOrComercial && (isAdmin || isCoord || roles.includes('Cliente_Supervisor') || roles.includes('Cliente_Gerente') || isGerente || roles.includes('facturacion'))">
+            <!-- Cotizaciones: visible solo si la feature está habilitada para el centro -->
+            <li v-if="hasFeature('ver_cotizacion') && !isOnlyCalidad && !isOnlyControlOrComercial && (isAdmin || isCoord || roles.includes('Cliente_Supervisor') || roles.includes('Cliente_Gerente') || isGerente || roles.includes('facturacion'))">
               <Link :href="route('cotizaciones.index')" :class="[
                 'flex items-center p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all',
                 navArrangementClasses,
@@ -253,6 +258,16 @@ function closeMobile () {
               ]">
                 <Icon name="building" :size="24" />
                 <span :class="['overflow-hidden transition-all duration-200', labelVisibilityClasses]">Centros</span>
+              </Link>
+            </li>
+            <li v-if="isAdmin">
+              <Link :href="route('admin.centros.features.index')" :class="[
+                'flex items-center p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all',
+                navArrangementClasses,
+                { 'bg-blue-50 text-blue-700 dark:bg-slate-800': url.includes('/admin/centros/features') }
+              ]">
+                <Icon name="checkBadge" :size="24" />
+                <span :class="['overflow-hidden transition-all duration-200', labelVisibilityClasses]">Funcionalidades</span>
               </Link>
             </li>
             <li v-if="isAdmin">

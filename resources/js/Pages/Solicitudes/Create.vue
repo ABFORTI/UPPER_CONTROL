@@ -1,7 +1,11 @@
 <script setup>
 import { computed, watch, ref } from 'vue'
-import { useForm } from '@inertiajs/vue3'
+import { useForm, usePage } from '@inertiajs/vue3'
 import UploadSolicitudExcel from '@/Components/UploadSolicitudExcel.vue'
+
+const page = usePage()
+const enabledFeatures = computed(() => page.props.auth?.features ?? [])
+const canUploadExcel = computed(() => (enabledFeatures.value || []).includes('subir_excel'))
 
 
 const props = defineProps({
@@ -467,6 +471,7 @@ function handlePrefillLoaded({ prefill, archivo, servicios, is_multi, warnings }
 
           <!-- Cargar desde Excel (Opcional) -->
           <UploadSolicitudExcel
+            v-if="canUploadExcel"
             compact
             @prefill-loaded="handlePrefillLoaded"
           />

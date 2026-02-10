@@ -70,6 +70,7 @@ async function copyTable(){
 const page = usePage()
 const roles = computed(() => page.props.auth?.user?.roles ?? [])
 const isGerente = computed(() => roles.value.includes('gerente_upper'))
+const isCoordinador = computed(() => roles.value.includes('coordinador'))
 
 </script>
 
@@ -81,7 +82,7 @@ const isGerente = computed(() => roles.value.includes('gerente_upper'))
       <!-- Header integrado -->
       <div class="px-2 pt-3 pb-2 sm:px-3 lg:px-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <h1 class="font-display text-2xl sm:text-3xl font-semibold tracking-wide uppercase text-slate-900 dark:text-slate-100">Solicitudes</h1>
-        <a v-if="!isGerente" href="./solicitudes/create" class="btn btn-primary w-full sm:w-auto text-center self-start sm:self-end">AGREGAR +</a>
+        <a v-if="!isGerente && !isCoordinador" href="./solicitudes/create" class="btn btn-primary w-full sm:w-auto text-center self-start sm:self-end">AGREGAR +</a>
       </div>
 
       <!-- Acciones y filtros -->
