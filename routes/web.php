@@ -26,7 +26,8 @@ use App\Http\Controllers\Admin\{
     ActivityController,
     ImpersonateController,
     CentroController,
-    BackupController
+    BackupController,
+    CentroFeatureController
 };
 
 // Home -> Redirige a dashboard (o login si no está autenticado)
@@ -115,13 +116,16 @@ Route::middleware('auth')->group(function () {
 
     // Excel: subir, guardar y parsear (sesión web)
     Route::post('/solicitudes/parse-excel', [SolicitudExcelController::class, 'parseExcel'])
+        ->middleware('feature:subir_excel')
         ->name('solicitudes.parse-excel');
     Route::get('/solicitudes/excel/{archivo}', [SolicitudExcelController::class, 'download'])
+        ->middleware('feature:subir_excel')
         ->where('archivo', '[A-Za-z0-9._-]+')
         ->name('solicitudes.excel.download');
 
     // Excel origen (ya guardado) asociado a la Solicitud
     Route::get('/solicitudes/{solicitud}/excel-origen', [SolicitudExcelController::class, 'downloadBySolicitud'])
+        ->middleware('feature:subir_excel')
         ->name('solicitudes.excel.origen');
 
     Route::post('/solicitudes/{solicitud}/aprobar', [SolicitudController::class,'aprobar'])
@@ -139,7 +143,7 @@ Route::middleware('auth')->group(function () {
 /* ===============
  |  COTIZACIONES
  * =============== */
-Route::middleware(['auth', 'cedim.only'])->group(function () {
+Route::middleware(['auth', 'feature:ver_cotizacion'])->group(function () {
     Route::get('/cotizaciones', [CotizacionController::class, 'index'])->name('cotizaciones.index');
     Route::get('/cotizaciones/create', [CotizacionController::class, 'create'])
         ->middleware('role:coordinador|admin')
@@ -234,6 +238,7 @@ Route::middleware('auth')->group(function () {
 
     // Excel origen (el que se usó para precargar la solicitud)
     Route::get('/ordenes/{orden}/excel-origen', [SolicitudExcelController::class, 'downloadOrigenFromOrden'])
+        ->middleware('feature:subir_excel')
         ->name('ordenes.excel.origen');
 
     // Evidencias
@@ -340,6 +345,10 @@ Route::middleware(['auth','role:admin'])->prefix('admin')->name('admin.')->group
     Route::get('/backups',        [BackupController::class,'index'])->name('backups.index');
     Route::get('/backups/download', [BackupController::class,'download'])->name('backups.download');
     Route::post('/backups/run',   [BackupController::class,'run'])->name('backups.run'); // manual
+
+    // Funcionalidades por centro
+    Route::get('/centros/features', [CentroFeatureController::class, 'index'])->name('centros.features.index');
+    Route::put('/centros/{centro}/features', [CentroFeatureController::class, 'update'])->name('centros.features.update');
 });
 
 // Arranque de impersonación (solo admin)
