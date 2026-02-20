@@ -4,6 +4,31 @@
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="csrf-token" content="{{ csrf_token() }}">
+        {{-- Limpia Service Workers y caches heredados de versiones anteriores del PWA.
+             Una vez limpiados (sessionStorage marca la versión), no vuelve a correr. --}}
+        <script>
+        (function() {
+            if (!('serviceWorker' in navigator) && !('caches' in window)) return;
+            var VER = 'v{{ filemtime(public_path("build/manifest.json")) }}';
+            if (sessionStorage.getItem('uc_sw_clean') === VER) return;
+            var jobs = [];
+            if ('serviceWorker' in navigator)
+                jobs.push(navigator.serviceWorker.getRegistrations().then(function(rs) {
+                    return Promise.all(rs.map(function(r) { return r.unregister(); }));
+                }));
+            if ('caches' in window)
+                jobs.push(caches.keys().then(function(ks) {
+                    return Promise.all(ks.map(function(k) { return caches.delete(k); }));
+                }));
+            Promise.all(jobs).then(function() {
+                sessionStorage.setItem('uc_sw_clean', VER);
+                window.location.reload(true);
+            }).catch(function() {
+                sessionStorage.setItem('uc_sw_clean', VER);
+                window.location.reload(true);
+            });
+        })();
+        </script>
 
     <title inertia>{{ config('app.name', 'Laravel') }}</title>
 

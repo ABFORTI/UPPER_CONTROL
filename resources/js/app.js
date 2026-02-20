@@ -1,7 +1,7 @@
 import '../css/app.css';
 import './bootstrap';
 
-import { createInertiaApp } from '@inertiajs/vue3';
+import { createInertiaApp, router } from '@inertiajs/vue3';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import { createApp, h } from 'vue';
 import { ZiggyVue } from 'ziggy-js';
@@ -15,6 +15,123 @@ import { initializeTheme } from './Support/useTheme';
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
 
 initializeTheme();
+
+// Guard de seguridad: el logout NO debe ejecutarse automáticamente.
+// Solo se permite si hubo una interacción explícita (click) reciente.
+if (typeof window !== 'undefined' && router && !window.__logoutGuardInstalled) {
+    window.__logoutGuardInstalled = true;
+    // Usar un getter/setter para rastrear cualquier escritura a __lastExplicitLogoutAt
+    let __explicitLogoutTs = 0;
+    Object.defineProperty(window, '__lastExplicitLogoutAt', {
+        get() { return __explicitLogoutTs; },
+        set(val) {
+            __explicitLogoutTs = val;
+            const setErr = new Error(`[upper-control] __lastExplicitLogoutAt SET to ${val}`);
+            console.warn(setErr.message);
+            console.warn(setErr.stack);
+        },
+        configurable: true,
+    });
+    const originalPost = router.post.bind(router);
+    const originalVisit = router.visit.bind(router);
+
+    function isLogoutAllowed() {
+        const now = Date.now();
+        const last = Number(window.__lastExplicitLogoutAt || 0);
+        const diff = now - last;
+        const allowed = diff <= 2000;
+        console.log(`[upper-control] isLogoutAllowed() → last=${last}, diff=${diff}ms → ${allowed ? 'PERMITIDO ⚠️' : 'BLOQUEADO ✅'}`);
+        return allowed;
+    }
+
+    function getPathFromUrl(raw) {
+        try {
+            return new URL(String(raw || ''), window.location.origin).pathname;
+        } catch {
+            return String(raw || '');
+        }
+    }
+
+    function isLogoutPath(path) {
+        return /(^|\/)logout(\b|\/)?$/i.test(String(path || ''));
+    }
+
+    function blockLogout(reason, details = {}) {
+        const err = new Error(`[upper-control] LOGOUT BLOQUEADO (${reason}) — intento no explícito.`);
+        console.error(err.message, details);
+        console.error(err.stack);
+        try { return router.visit(route('login'), { replace: true }); } catch { return; }
+    }
+
+    router.post = (url, data = {}, options = {}) => {
+        let blocked = false;
+        try {
+            const raw = String(url || '');
+            const path = getPathFromUrl(raw);
+            if (isLogoutPath(path) && !isLogoutAllowed()) blocked = true;
+        } catch (e) {
+            console.error('[upper-control] Error en router.post guard:', e);
+        }
+        if (blocked) return blockLogout('router.post', { url });
+        return originalPost(url, data, options);
+    };
+
+    // Verificar que el patch funcionó.
+    if (router.post === originalPost) {
+        console.error('[upper-control] CRÍTICO: router.post patch FALLÓ — el guard no está activo.');
+    }
+
+    router.visit = (url, options = {}) => {
+        let blocked = false;
+        try {
+            const method = String(options?.method || 'get').toLowerCase();
+            const path = getPathFromUrl(url);
+            if (method !== 'get' && isLogoutPath(path) && !isLogoutAllowed()) {
+                blocked = true;
+            }
+        } catch (e) {
+            console.error('[upper-control] Error en router.visit guard:', e);
+        }
+        if (blocked) return blockLogout('router.visit', { url });
+        return originalVisit(url, options);
+    };
+
+    // Escucha global: marca el flag si el usuario hace click en algo que apunta a logout
+    // (links con href, forms con action, o botones con [data-action="logout"]).
+    // Solo aplica a eventos REALES del usuario (isTrusted).
+    document.addEventListener('click', (e) => {
+        try {
+            if (!e?.isTrusted) return; // ignorar clicks sintéticos/programáticos
+            const target = e?.target;
+            if (!(target instanceof Element)) return;
+
+            const clickable = target.closest('a,button,input[type="submit"],form,[data-action]');
+            if (!clickable) return;
+
+            // Detectar si es explícitamente un botón de logout por data-attribute
+            if (clickable.dataset?.action === 'logout' || clickable.closest('[data-action="logout"]')) {
+                window.__lastExplicitLogoutAt = Date.now();
+                return;
+            }
+
+            let raw = '';
+            if (clickable instanceof HTMLAnchorElement) raw = clickable.getAttribute('href') || '';
+            else if (clickable instanceof HTMLFormElement) raw = clickable.getAttribute('action') || '';
+            else if (clickable instanceof HTMLButtonElement) raw = clickable.getAttribute('formaction') || '';
+            else if (clickable instanceof HTMLInputElement) raw = clickable.getAttribute('formaction') || '';
+
+            if (!raw) {
+                const form = clickable.closest('form');
+                raw = form?.getAttribute('action') || '';
+            }
+
+            const path = getPathFromUrl(raw);
+            if (isLogoutPath(path)) {
+                window.__lastExplicitLogoutAt = Date.now();
+            }
+        } catch {}
+    }, true);
+}
 
 // Simple gestor del splash principal (login/logout)
 function splashShow() {
@@ -282,14 +399,8 @@ createInertiaApp({
             });
         }
 
-        // Registrar Service Worker para capacidades PWA
-        if (typeof window !== 'undefined' && 'serviceWorker' in navigator && !import.meta.env.DEV) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js').catch((error) => {
-                    console.error('SW registration failed', error);
-                });
-            });
-        }
+        // Service Worker deshabilitado: ver public/sw.js para más información.
+        // Si en el futuro se re-habilita PWA, agregar aquí el registro del SW.
         return app;
     },
     progress: {

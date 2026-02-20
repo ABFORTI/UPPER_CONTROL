@@ -16,6 +16,24 @@ class HandleInertiaRequests extends Middleware
     protected $rootView = 'app';
 
     /**
+     * Garantiza que el HTML de Inertia nunca se cachee en el browser ni en el SW.
+     * Esto evita que un HTML con CSRF token viejo sea servido desde caché.
+     */
+    public function handle(\Illuminate\Http\Request $request, \Closure $next): mixed
+    {
+        $response = parent::handle($request, $next);
+
+        // Solo aplica a respuestas que devuelven el HTML principal (full page) o la respuesta JSON de Inertia.
+        if ($response instanceof \Symfony\Component\HttpFoundation\Response) {
+            $response->headers->set('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
+            $response->headers->set('Pragma', 'no-cache');
+            $response->headers->set('Expires', '0');
+        }
+
+        return $response;
+    }
+
+    /**
      * Determine the current asset version.
      */
     public function version(Request $request): ?string

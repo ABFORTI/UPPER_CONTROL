@@ -73,6 +73,18 @@ function closeMobile () {
   mobileOpen.value = false
 }
 
+function logout (e) {
+  // Solo permite logout si fue disparado por un click real del usuario.
+  // e.isTrusted = true en eventos del usuario; false en eventos sintéticos/programáticos.
+  if (!e || !e.isTrusted) {
+    console.warn('[upper-control] logout() bloqueado: no es un evento confiable del usuario.', e);
+    return;
+  }
+  e.preventDefault();
+  try { window.__lastExplicitLogoutAt = Date.now(); } catch {}
+  router.post(route('logout'), {}, { replace: true });
+}
+
 </script>
 
 <template>
@@ -323,13 +335,13 @@ function closeMobile () {
             </span>
             <span :class="['overflow-hidden transition-all duration-200 whitespace-nowrap', labelVisibilityClasses]">Notificaciones</span>
           </Link>
-          <Link :href="route('logout')" method="post" as="button" :class="[
+          <button type="button" @click="logout" data-action="logout" :class="[
             'w-full flex items-center p-3 rounded-md bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 hover:bg-slate-300 transition-all',
             navArrangementClasses
           ]">
             <Icon name="logout" :size="24" class="shrink-0" />
             <span :class="['overflow-hidden transition-all duration-200 whitespace-nowrap', labelVisibilityClasses]">Logout</span>
-          </Link>
+          </button>
         </div>
       </aside>
 

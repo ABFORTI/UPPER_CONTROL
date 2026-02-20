@@ -2,7 +2,7 @@
 import { computed } from 'vue';
 import GuestLayout from '@/Layouts/GuestLayout.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
-import { Head, Link, useForm } from '@inertiajs/vue3';
+import { Head, useForm, router } from '@inertiajs/vue3';
 
 const props = defineProps({
     status: {
@@ -15,6 +15,17 @@ const form = useForm({});
 const submit = () => {
     form.post(route('verification.send'));
 };
+
+function logout (e) {
+    // Solo permite logout si fue disparado por un click real del usuario.
+    if (!e || !e.isTrusted) {
+        console.warn('[upper-control] logout() bloqueado: no es un evento confiable del usuario.', e);
+        return;
+    }
+    e.preventDefault();
+    try { window.__lastExplicitLogoutAt = Date.now(); } catch {}
+    router.post(route('logout'), {}, { replace: true });
+}
 
 const verificationLinkSent = computed(
     () => props.status === 'verification-link-sent',
@@ -48,13 +59,13 @@ const verificationLinkSent = computed(
                     Resend Verification Email
                 </PrimaryButton>
 
-                <Link
-                    :href="route('logout')"
-                    method="post"
-                    as="button"
+                <button
+                    type="button"
+                    @click="logout"
                     class="rounded-md text-sm text-gray-600 underline hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-                    >Log Out</Link
                 >
+                    Log Out
+                </button>
             </div>
         </form>
     </GuestLayout>

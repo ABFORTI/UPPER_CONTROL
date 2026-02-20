@@ -1,6 +1,24 @@
+// Este Service Worker se auto-desregistra e invalida todos los caches.
+// Fue necesario porque versiones anteriores cacheaban HTML y scripts de forma
+// agresiva, impidiendo que el navegador cargara bundles actualizados.
+// Para re-habilitar PWA en el futuro, reemplazar este archivo con uno nuevo
+// y actualizar CACHE_VERSION en el SW.
 'use strict';
 
-const CACHE_VERSION = 'upper-control-v6';
+self.addEventListener('install', () => self.skipWaiting());
+
+self.addEventListener('activate', (event) => {
+    event.waitUntil(
+        caches.keys()
+            .then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
+            .then(() => self.registration.unregister())
+            .then(() => self.clients.matchAll())
+            .then((clients) => clients.forEach((c) => c.navigate(c.url)))
+    );
+});
+
+// No interceptar ninguna request - dejar que el browser las maneje normalmente.
+
 const APP_SHELL = [
   '/',
   '/offline.html',
@@ -42,15 +60,12 @@ self.addEventListener('fetch', (event) => {
   const requestUrl = new URL(request.url);
   const isSameOrigin = requestUrl.origin === self.location.origin;
 
+  // Las navegaciones (HTML) NUNCA se sirven desde caché:
+  // el HTML de Laravel lleva CSRF token dinámico y debe venir siempre del servidor.
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request)
-        .then((response) => {
-          const copy = response.clone();
-          caches.open(CACHE_VERSION).then((cache) => cache.put(request, copy));
-          return response;
-        })
-        .catch(() => caches.match(request).then((cached) => cached || caches.match('/offline.html')))
+        .catch(() => caches.match('/offline.html').then((r) => r || new Response('Offline', { status: 503 })))
     );
     return;
   }
@@ -59,13 +74,13 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  const cacheFirstTypes = ['style', 'script', 'image', 'font'];
-  if (cacheFirstTypes.includes(request.destination)) {
+  // Assets con hash en la URL (Vite: app-AbCdEf.js, app-AbCd.css):
+  // son inmutables por nombre → cache-first.
+  const isHashedAsset = /\/assets\/[^/]+-[A-Za-z0-9_-]{8,}\.(js|css)$/.test(requestUrl.pathname);
+  if (isHashedAsset) {
     event.respondWith(
       caches.match(request).then((cached) => {
-        if (cached) {
-          return cached;
-        }
+        if (cached) return cached;
         return fetch(request).then((response) => {
           const copy = response.clone();
           caches.open(CACHE_VERSION).then((cache) => cache.put(request, copy));
@@ -76,13 +91,22 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  event.respondWith(
-    fetch(request)
-      .then((response) => {
-        const copy = response.clone();
-        caches.open(CACHE_VERSION).then((cache) => cache.put(request, copy));
-        return response;
+  // Imágenes y fuentes: cache-first pero solo de same-origin.
+  const staticTypes = ['image', 'font'];
+  if (staticTypes.includes(request.destination)) {
+    event.respondWith(
+      caches.match(request).then((cached) => {
+        if (cached) return cached;
+        return fetch(request).then((response) => {
+          const copy = response.clone();
+          caches.open(CACHE_VERSION).then((cache) => cache.put(request, copy));
+          return response;
+        });
       })
-      .catch(() => caches.match(request))
-  );
+    );
+    return;
+  }
+
+  // Todo lo demás: network-first, sin caché.
+  event.respondWith(fetch(request).catch(() => caches.match(request)));
 });
