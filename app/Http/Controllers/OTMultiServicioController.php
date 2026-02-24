@@ -11,6 +11,7 @@ use App\Models\ServicioEmpresa;
 use App\Models\CentroTrabajo;
 use App\Models\Area;
 use App\Models\User;
+use App\Services\Notifier;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
@@ -259,6 +260,9 @@ class OTMultiServicioController extends Controller
                 'descripcion_general' => $orden->descripcion_general,
                 'estatus' => $orden->estatus,
                 'calidad_resultado' => $orden->calidad_resultado,
+                'ot_status' => $orden->ot_status ?? 'active',
+                'parent_ot_id' => $orden->parent_ot_id,
+                'split_index' => $orden->split_index ?? 0,
                 'subtotal' => $orden->subtotal,
                 'iva' => $orden->iva,
                 'total' => $orden->total,
@@ -268,6 +272,7 @@ class OTMultiServicioController extends Controller
                 'team_leader' => $orden->teamLeader ? $orden->teamLeader->only(['id', 'name']) : null,
             ],
             'servicios' => $serviciosData,
+            'cortes' => $this->getCortesData($orden),
         ]);
     }
 
@@ -278,6 +283,11 @@ class OTMultiServicioController extends Controller
     {
         // Verificar autorización
         $this->authorizeFromCentro($orden->id_centrotrabajo, $orden);
+
+        if (in_array((string)($orden->ot_status ?? 'active'), ['partial', 'closed', 'canceled'], true)
+            || in_array((string)$orden->estatus, ['completada', 'autorizada_cliente', 'facturada', 'entregada'], true)) {
+            return back()->withErrors(['orden' => 'La OT ya fue cerrada por corte o por estatus; no se permite registrar más producción/faltantes.']);
+        }
 
         // Validar entrada
         $data = $request->validate([
@@ -393,6 +403,27 @@ class OTMultiServicioController extends Controller
             ])
             ->log("Faltantes registrados en servicio #{$servicioId} de OT #{$orden->id}");
 
+        // Notificar al coordinador y al cliente sobre faltantes
+        if (!empty($resumen)) {
+            $partesTxt = array_map(fn($r) => "{$r['faltantes']} en {$r['descripcion']}", $resumen);
+            $detalleTxt = implode(', ', $partesTxt);
+
+            Notifier::toRoleInCentro('coordinador', $orden->id_centrotrabajo,
+                'Faltantes en Servicio',
+                "OT #{$orden->id}, servicio #{$servicioId}: faltantes — {$detalleTxt}.",
+                route('ordenes.show', $orden->id)
+            );
+
+            if ($orden->solicitud && $orden->solicitud->id_cliente) {
+                Notifier::toUser(
+                    $orden->solicitud->id_cliente,
+                    'Faltantes en tu OT',
+                    "Se registraron faltantes en la OT #{$orden->id}: {$detalleTxt}.",
+                    route('ordenes.show', $orden->id)
+                );
+            }
+        }
+
         return back()->with('ok', 'Faltantes registrados correctamente.');
     }
 
@@ -416,5 +447,20 @@ class OTMultiServicioController extends Controller
         if ($user->centro_trabajo_id !== $centroId) {
             abort(403, 'No tienes acceso a este centro de trabajo.');
         }
+    }
+
+    /**
+     * Obtener los cortes de una OT para pasar a Inertia.
+     */
+    private function getCortesData(\App\Models\Orden $orden): array
+    {
+        $splitService = app(\App\Services\OtSplitService::class);
+
+        return $orden->cortes()
+            ->with(['detalles.otServicio.servicio', 'createdBy', 'otHija'])
+            ->orderByDesc('created_at')
+            ->get()
+            ->map(fn (\App\Models\OtCorte $c) => $splitService->getCorteDetalle($c))
+            ->toArray();
     }
 }

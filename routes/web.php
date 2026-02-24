@@ -260,6 +260,25 @@ Route::middleware('auth')->group(function () {
         ->name('ot-multi-servicio.servicios.faltantes');
 });
 
+/* ===========================
+ |  CORTES DE OT (SPLIT)
+ * =========================== */
+Route::middleware('auth')->group(function () {
+    Route::get('/ots/{ot}/cortes', [\App\Http\Controllers\OtCorteController::class, 'index'])
+        ->name('ot-cortes.index');
+    Route::post('/ots/{ot}/cortes/preview', [\App\Http\Controllers\OtCorteController::class, 'preview'])
+        ->middleware('role:admin|coordinador|team_leader|facturacion')
+        ->name('ot-cortes.preview');
+    Route::post('/ots/{ot}/cortes', [\App\Http\Controllers\OtCorteController::class, 'store'])
+        ->middleware('role:admin|coordinador|team_leader|facturacion')
+        ->name('ot-cortes.store');
+    Route::get('/cortes/{corte}', [\App\Http\Controllers\OtCorteController::class, 'show'])
+        ->name('ot-cortes.show');
+    Route::patch('/cortes/{corte}/estatus', [\App\Http\Controllers\OtCorteController::class, 'updateEstatus'])
+        ->middleware('role:admin|coordinador|team_leader|facturacion')
+        ->name('ot-cortes.updateEstatus');
+});
+
 /* ==========================
  |  CALIDAD / CLIENTE / FACTURAS
  * ========================== */

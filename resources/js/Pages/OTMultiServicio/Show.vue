@@ -1,9 +1,11 @@
 <script setup>
 import { computed, onMounted } from 'vue'
+import OtCortes from '@/Components/OtCortes.vue'
 
 const props = defineProps({
   orden: Object,
   servicios: Array,
+  cortes: { type: Array, default: () => [] },
 })
 
 // DEBUG: Ver qué datos llegan
@@ -287,6 +289,9 @@ const estatusConfig = computed(() => {
 
         </div>
       </div>
+
+      <!-- Cortes de OT -->
+      <OtCortes :orden="orden" :cortes="cortes" />
 
     </div>
   </div>

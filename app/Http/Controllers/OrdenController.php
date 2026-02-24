@@ -32,6 +32,8 @@ class OrdenController extends Controller
 
     private function ordenBloqueadaParaEdicionProduccion(Orden $orden): bool
     {
+        if (in_array((string)($orden->ot_status ?? 'active'), ['partial', 'closed', 'canceled'], true)) return true;
+        if (in_array((string)$orden->estatus, ['completada', 'autorizada_cliente', 'facturada', 'entregada'], true)) return true;
         if (in_array((string)$orden->estatus, ['facturada'], true)) return true;
         if ($orden->factura()->exists()) return true;
         if ($orden->facturas()->exists()) return true;
@@ -40,6 +42,7 @@ class OrdenController extends Controller
 
     private function ordenBloqueadaParaEdicionPrecios(Orden $orden): bool
     {
+        if (in_array((string)($orden->ot_status ?? 'active'), ['partial', 'closed', 'canceled'], true)) return true;
         if (in_array((string)$orden->estatus, ['autorizada_cliente','facturada'], true)) return true;
         if ($orden->factura()->exists()) return true;
         if ($orden->facturas()->exists()) return true;
@@ -1157,6 +1160,28 @@ class OrdenController extends Controller
                 ->log("OT #{$orden->id}: faltantes aplicados");
         });
 
+        // Notificar al coordinador y al cliente sobre faltantes
+        if (!empty($resumen)) {
+            $partesTxt = array_map(fn($r) => "{$r['faltantes']} en {$r['descripcion']}", $resumen);
+            $detalleTxt = implode(', ', $partesTxt);
+
+            Notifier::toRoleInCentro('coordinador', $orden->id_centrotrabajo,
+                'Faltantes Registrados',
+                "OT #{$orden->id}: faltantes aplicados — {$detalleTxt}.",
+                route('ordenes.show', $orden->id)
+            );
+
+            // Notificar al cliente si tiene solicitud
+            if ($orden->solicitud && $orden->solicitud->id_cliente) {
+                Notifier::toUser(
+                    $orden->solicitud->id_cliente,
+                    'Faltantes en tu OT',
+                    "Se registraron faltantes en la OT #{$orden->id}: {$detalleTxt}.",
+                    route('ordenes.show', $orden->id)
+                );
+            }
+        }
+
         return back()->with('ok','Faltantes aplicados');
     }
 
@@ -1505,6 +1530,7 @@ class OrdenController extends Controller
             'servicios_con_tamanos' => $serviciosConTamanos,
             'precios_por_servicio' => $preciosPorServicio,
             'servicios_disponibles' => $this->getServiciosDisponibles($orden->id_centrotrabajo),
+            'cortes' => $this->getCortesData($orden),
         ]);
     }
 
@@ -2191,6 +2217,21 @@ class OrdenController extends Controller
                     'precio_base' => $servicioCentro->precio_base,
                 ];
             })
+            ->toArray();
+    }
+
+    /**
+     * Obtener los cortes de una OT para pasar a Inertia.
+     */
+    private function getCortesData(Orden $orden): array
+    {
+        $splitService = app(\App\Services\OtSplitService::class);
+
+        return $orden->cortes()
+            ->with(['detalles.otServicio.servicio', 'createdBy', 'otHija'])
+            ->orderByDesc('created_at')
+            ->get()
+            ->map(fn (\App\Models\OtCorte $c) => $splitService->getCorteDetalle($c))
             ->toArray();
     }
 

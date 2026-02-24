@@ -165,12 +165,6 @@ class CalidadController extends Controller
       'error'    => $e->getMessage(),
     ]);
   }
-  Notifier::toUser(
-    $orden->solicitud->id_cliente,
-    'Calidad rechazada',
-    "La OT #{$orden->id} fue rechazada por calidad.",
-    route('ordenes.show',$orden->id)
-  );
     $this->act('ordenes')
       ->performedOn($orden)
       ->event('calidad_rechazar')

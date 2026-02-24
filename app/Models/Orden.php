@@ -16,7 +16,9 @@ class Orden extends Model {
         'motivo_rechazo','acciones_correctivas',
         // Campos de archivo Excel
         'archivo_excel_path','archivo_excel_nombre_original','archivo_excel_mime',
-        'archivo_excel_size','archivo_excel_subido_por','archivo_excel_subido_at'
+        'archivo_excel_size','archivo_excel_subido_por','archivo_excel_subido_at',
+        // Campos de corte / OT hija
+        'parent_ot_id','split_index','ot_status',
     ];
     public function solicitud(){ return $this->belongsTo(Solicitud::class,'id_solicitud'); }
     public function centro(){ return $this->belongsTo(CentroTrabajo::class,'id_centrotrabajo'); }
@@ -47,6 +49,46 @@ class Orden extends Model {
     public function otServicios()
     {
         return $this->hasMany(OTServicio::class, 'ot_id');
+    }
+
+    /* ── Relaciones de Corte de OT ── */
+
+    public function parentOt()
+    {
+        return $this->belongsTo(self::class, 'parent_ot_id');
+    }
+
+    public function childOts()
+    {
+        return $this->hasMany(self::class, 'parent_ot_id');
+    }
+
+    public function cortes()
+    {
+        return $this->hasMany(OtCorte::class, 'ot_id');
+    }
+
+    /**
+     * Obtiene la OT raíz de la cadena de splits.
+     */
+    public function getRootOt(): self
+    {
+        $ot = $this;
+        while ($ot->parent_ot_id) {
+            $ot = $ot->parentOt;
+        }
+        return $ot;
+    }
+
+    /**
+     * Siguiente split_index disponible para la cadena.
+     */
+    public function nextSplitIndex(): int
+    {
+        $root = $this->getRootOt();
+        $max  = self::where('parent_ot_id', $root->id)
+                    ->max('split_index') ?? 0;
+        return $max + 1;
     }
 
     /**

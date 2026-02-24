@@ -94,6 +94,15 @@ class OrdenPolicy
     // app/Policies/OrdenPolicy.php
     public function reportarAvance(User $u, Orden $o): bool
     {
+        // Si la OT ya fue cortada, se cierra producción para esta OT origen
+        // (ot_status: partial/closed). También bloquear si ya está en flujo posterior.
+        if (in_array((string)($o->ot_status ?? 'active'), ['partial', 'closed', 'canceled'], true)) {
+            return false;
+        }
+        if (in_array((string)$o->estatus, ['completada', 'autorizada_cliente', 'facturada', 'entregada'], true)) {
+            return false;
+        }
+
         if ($u->hasRole('admin')) return true;
 
         // Sumar permisos entre roles

@@ -609,6 +609,14 @@ class SolicitudController extends Controller
             ->withProperties(['resultado' => 'rechazada', 'motivo' => $req->input('motivo')])
             ->log("Solicitud {$solicitud->folio} rechazada");
 
+        // Notificar al cliente que solicitó
+        Notifier::toUser(
+            $solicitud->id_cliente,
+            'Solicitud Rechazada',
+            "Tu solicitud {$solicitud->folio} fue rechazada. Motivo: {$motivo}",
+            route('solicitudes.show', $solicitud->id)
+        );
+
         return back()->with('ok','Solicitud rechazada');
     }
 

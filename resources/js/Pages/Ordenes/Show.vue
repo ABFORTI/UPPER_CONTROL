@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import { router, useForm } from '@inertiajs/vue3'
 import { route } from 'ziggy-js'
 import FilePreview from '@/Components/FilePreview.vue'
+import OtCortes from '@/Components/OtCortes.vue'
 
 const props = defineProps({
   orden:       { type: Object, required: true },
@@ -15,6 +16,7 @@ const props = defineProps({
   servicios_con_tamanos: { type: Object, default: () => ({}) },
   precios_por_servicio: { type: Object, default: () => ({}) },
   servicios_disponibles: { type: Array, default: () => [] },
+  cortes: { type: Array, default: () => [] },
 })
 
 // Alias para acceder fácilmente en el template
@@ -1677,6 +1679,9 @@ function aplicarFaltantesServicio(servicioId) {
 
         <!-- Right Column: Acciones -->
         <div class="lg:col-span-1 space-y-6">
+
+          <!-- ═══ Cortes de OT ═══ -->
+          <OtCortes :orden="orden" :cortes="cortes" />
 
           <!-- Totales / Cotización -->
           <div class="bg-white rounded-2xl shadow-lg border-2 border-emerald-100 overflow-hidden dark:bg-slate-900/80 dark:border-emerald-500/40">

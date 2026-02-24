@@ -1084,12 +1084,24 @@ class CotizacionController extends Controller
             return back()->withErrors(['estatus' => 'No se puede cancelar en el estatus actual.']);
         }
 
+        $estabaEnviada = $cotizacion->estatus === Cotizacion::ESTATUS_SENT;
+
         $cotizacion->update([
             'estatus' => Cotizacion::ESTATUS_CANCELLED,
             'cancelled_at' => now(),
         ]);
 
         $this->audit($req, $cotizacion, 'cancelled');
+
+        // Notificar al cliente si la cotización ya había sido enviada
+        if ($estabaEnviada && $cotizacion->id_cliente) {
+            Notifier::toUser(
+                $cotizacion->id_cliente,
+                'Cotización Cancelada',
+                "La cotización #{$cotizacion->id} que recibiste ha sido cancelada.",
+                route('cotizaciones.show', $cotizacion->id)
+            );
+        }
 
         return back()->with('ok', 'Cotización cancelada');
     }
