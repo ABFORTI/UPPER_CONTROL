@@ -400,10 +400,16 @@
     @php
       $servicio = $otServicio->servicio;
       $totalesServicio = $otServicio->calcularTotales();
-      $planeado = $totalesServicio['planeado'];
+      $solicitado = $totalesServicio['solicitado'] ?? $totalesServicio['planeado'];
+      $extra = $totalesServicio['extra'] ?? 0;
+      $totalCobrable = $totalesServicio['total_cobrable'] ?? $totalesServicio['total'];
       $completado = $totalesServicio['completado'];
-      $faltantesReg = $totalesServicio['faltantes_registrados'];
+      $faltantesReg = $totalesServicio['faltantes'];
       $pendiente = $totalesServicio['pendiente'];
+      $extrasAuditables = $otServicio->items
+        ->flatMap(fn($it) => $it->ajustes ?? collect())
+        ->where('tipo', 'extra')
+        ->sortBy('created_at');
     @endphp
     
     <div class="service-block">
@@ -424,26 +430,58 @@
       {{-- Mini-resumen del servicio --}}
       <div class="service-summary mb-1">
         <div class="summary-item">
-          <div class="info-label">Planeado</div>
-          <strong>{{ number_format($planeado) }}</strong>
+          <div class="info-label">Solicitado</div>
+          <strong>{{ number_format($solicitado) }}</strong>
+        </div>
+        <div class="summary-item">
+          <div class="info-label">Extra</div>
+          <strong style="color: #b45309;">{{ number_format($extra) }}</strong>
+        </div>
+        <div class="summary-item">
+          <div class="info-label">Faltantes</div>
+          <strong style="color: #dc2626;">{{ number_format($faltantesReg) }}</strong>
+        </div>
+        <div class="summary-item">
+          <div class="info-label">Total Cobrable</div>
+          <strong style="color: #1d4ed8;">{{ number_format($totalCobrable) }}</strong>
         </div>
         <div class="summary-item">
           <div class="info-label">Completado</div>
           <strong style="color: #059669;">{{ number_format($completado) }}</strong>
         </div>
         <div class="summary-item">
-          <div class="info-label">Faltantes Reg.</div>
-          <strong style="color: #dc2626;">{{ number_format($faltantesReg) }}</strong>
-        </div>
-        <div class="summary-item">
           <div class="info-label">Pendiente</div>
           <strong style="color: #f59e0b;">{{ number_format($pendiente) }}</strong>
         </div>
-        <div class="summary-item">
-          <div class="info-label">Total</div>
-          <strong>{{ number_format($totalesServicio['total']) }}</strong>
-        </div>
       </div>
+
+      @if($extrasAuditables->count() > 0)
+        <div style="font-size: 9px; font-weight: bold; color: #4b5563; margin: 8px 0 4px;">
+          Extras registrados (auditoría):
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 20%;">Detalle</th>
+              <th style="width: 10%;" class="text-center">Cantidad</th>
+              <th style="width: 40%;">Motivo</th>
+              <th style="width: 15%;">Usuario</th>
+              <th style="width: 15%;">Fecha/Hora</th>
+            </tr>
+          </thead>
+          <tbody>
+            @foreach($extrasAuditables as $ext)
+              <tr>
+                <td>{{ $ext->detalle->descripcion_item ?? 'Detalle' }}</td>
+                <td class="text-center text-bold">{{ number_format($ext->cantidad) }}</td>
+                <td>{{ $ext->motivo ?: '—' }}</td>
+                <td>{{ optional($ext->user)->name ?? '—' }}</td>
+                <td>{{ $ext->created_at ? $ext->created_at->format('d/m/Y h:i a') : '—' }}</td>
+              </tr>
+            @endforeach
+          </tbody>
+        </table>
+      @endif
       
       {{-- Tabla de avances/segmentos --}}
       @if($otServicio->avances && $otServicio->avances->count() > 0)

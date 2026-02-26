@@ -51,6 +51,11 @@ class Orden extends Model {
         return $this->hasMany(OTServicio::class, 'ot_id');
     }
 
+    public function ajustesDetalle()
+    {
+        return $this->hasMany(OtAjusteDetalle::class, 'ot_id');
+    }
+
     /* ── Relaciones de Corte de OT ── */
 
     public function parentOt()

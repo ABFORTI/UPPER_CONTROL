@@ -77,26 +77,60 @@ class OTServicio extends Model
      */
     public function calcularTotales(): array
     {
-        // Usar la colección cargada si existe, sino hacer query
-        $items = $this->relationLoaded('items') ? $this->items : $this->items()->get();
-        
-        $planeado = (int)$items->sum('planeado');
-        $completado = (int)$items->sum('completado');
-        $faltantesRegistrados = (int)$items->sum('faltante');
-        
-        $pendiente = max(0, $planeado - ($completado + $faltantesRegistrados));
-        $progreso = $planeado > 0 
-            ? round((($completado + $faltantesRegistrados) / $planeado) * 100) 
-            : 0;
+        $items = $this->relationLoaded('items')
+            ? $this->items
+            : $this->items()->with('ajustes')->get();
+
+        $metrics = $items->map(function (OTServicioItem $item) {
+            return $item->calcularMetricas();
+        });
+
+        $solicitado = (int) $metrics->sum('solicitado');
+        $extra = (int) $metrics->sum('extra');
+        $faltantes = (int) $metrics->sum('faltantes');
+        $totalCobrable = (int) $metrics->sum('total_cobrable');
+        $completado = (int) $metrics->sum('completado');
+        $pendiente = max(0, $totalCobrable - $completado);
+        $progreso = $totalCobrable > 0
+            ? round(($completado / $totalCobrable) * 100, 2)
+            : 0.0;
 
         return [
-            'planeado' => $planeado,
+            'solicitado' => $solicitado,
+            'planeado' => $solicitado,
+            'extra' => $extra,
+            'total_cobrable' => $totalCobrable,
             'completado' => $completado,
-            'faltantes_registrados' => $faltantesRegistrados,
+            'faltantes' => $faltantes,
+            'faltantes_registrados' => $faltantes,
             'pendiente' => $pendiente,
             'progreso' => $progreso,
-            'total' => $planeado, // Total siempre igual a planeado
+            'total' => $totalCobrable,
         ];
+    }
+
+    public function recalcularSubtotalDesdeCobrable(): float
+    {
+        $this->loadMissing('items.ajustes');
+
+        $subtotal = 0.0;
+        foreach ($this->items as $item) {
+            $met = $item->calcularMetricas();
+            $precioUnitario = (float) ($item->precio_unitario ?? 0);
+            if ($precioUnitario <= 0) {
+                $precioUnitario = (float) ($this->precio_unitario ?? 0);
+            }
+
+            $lineSub = round(((float) $met['total_cobrable']) * $precioUnitario, 2);
+            $item->subtotal = $lineSub;
+            $item->save();
+            $subtotal += $lineSub;
+        }
+
+        $this->subtotal = round($subtotal, 2);
+        $this->save();
+
+        return (float) $this->subtotal;
     }
 
     /**
@@ -113,7 +147,7 @@ class OTServicio extends Model
             // El subtotal debe venir de la suma de los avances
             $tieneAvances = \App\Models\OTServicioAvance::where('ot_servicio_id', $model->id)->exists();
             
-            if (!$tieneAvances) {
+            if (!$tieneAvances && !$model->isDirty('subtotal')) {
                 // Solo para servicios nuevos sin avances, calcular subtotal inicial
                 $model->subtotal = $model->cantidad * $model->precio_unitario;
             }

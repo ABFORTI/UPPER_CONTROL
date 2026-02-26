@@ -43,12 +43,13 @@ class OtSplitService
 
     protected function previewMultiServicio(Orden $ot, ?string $periodoInicio, ?string $periodoFin): array
     {
-        $ot->load(['otServicios.servicio', 'otServicios.avances']);
+        $ot->load(['otServicios.servicio', 'otServicios.items.ajustes', 'otServicios.avances']);
 
         $conceptos = [];
 
         foreach ($ot->otServicios as $srv) {
-            $contratado = (float) $srv->cantidad;
+            $totalesSrv = $srv->calcularTotales();
+            $contratado = (float) ($totalesSrv['total_cobrable'] ?? 0);
             $precioUnit = (float) $srv->precio_unitario;
 
             $ejecutadoTotal = (float) $srv->avances->sum('cantidad_registrada');
@@ -66,7 +67,7 @@ class OtSplitService
                     ->sum('cantidad_registrada');
             }
 
-            $sugerencia = min($ejecutadoEnPeriodo, $ejecutadoNoCortado, $contratado);
+            $sugerencia = min($ejecutadoEnPeriodo, $ejecutadoNoCortado, max(0, $contratado));
 
             $srvNombre = $srv->servicio->nombre ?? 'Servicio #' . $srv->servicio_id;
 
@@ -295,10 +296,13 @@ class OtSplitService
                     "excede el ejecutado no cortado ({$ejecutadoNoCortado})."
                 );
             }
-            if ($cantidadCortada > (float) $srv->cantidad) {
+            $totalesSrv = $srv->calcularTotales();
+            $totalCobrableSrv = (float) ($totalesSrv['total_cobrable'] ?? 0);
+
+            if ($cantidadCortada > $totalCobrableSrv) {
                 throw new \InvalidArgumentException(
                     "Servicio \"{$srvNombre}\": cantidad a cortar ({$cantidadCortada}) " .
-                    "excede lo contratado ({$srv->cantidad})."
+                    "excede lo cobrable ({$totalCobrableSrv})."
                 );
             }
 
@@ -414,11 +418,13 @@ class OtSplitService
         $serviciosRemanente = [];
 
         foreach ($ot->otServicios as $srv) {
+            $totalesSrv = $srv->calcularTotales();
+            $cobrableSrv = (float) ($totalesSrv['total_cobrable'] ?? 0);
             $totalCortado = (float) OtCorteDetalle::where('ot_servicio_id', $srv->id)
                 ->whereHas('corte', fn ($q) => $q->where('ot_id', $ot->id)->where('estatus', '!=', 'void'))
                 ->sum('cantidad_cortada');
 
-            $remanente = (float) $srv->cantidad - $totalCortado;
+            $remanente = $cobrableSrv - $totalCortado;
 
             if ($remanente > 0) {
                 $serviciosRemanente[] = ['srv' => $srv, 'remanente' => $remanente];
@@ -559,6 +565,17 @@ class OtSplitService
             'createdBy',
         ]);
 
+        $extrasPeriodo = \App\Models\OtAjusteDetalle::query()
+            ->where('ot_id', $corte->ot_id)
+            ->where('tipo', 'extra')
+            ->whereBetween('created_at', [
+                $corte->periodo_inicio->copy()->startOfDay(),
+                $corte->periodo_fin->copy()->endOfDay(),
+            ])
+            ->with(['user', 'detalle.otServicio.servicio'])
+            ->orderBy('created_at')
+            ->get();
+
         return [
             'id'             => $corte->id,
             'folio_corte'    => $corte->folio_corte,
@@ -586,6 +603,21 @@ class OtSplitService
                 'cantidad_cortada'         => (float) $d->cantidad_cortada,
                 'precio_unitario_snapshot' => (float) $d->precio_unitario_snapshot,
                 'importe_snapshot'         => (float) $d->importe_snapshot,
+            ])->toArray(),
+            'extras' => $extrasPeriodo->map(fn ($extra) => [
+                'id' => $extra->id,
+                'ot_detalle_id' => $extra->ot_detalle_id,
+                'cantidad' => (int) $extra->cantidad,
+                'motivo' => $extra->motivo,
+                'usuario' => $extra->user ? [
+                    'id' => $extra->user->id,
+                    'name' => $extra->user->name,
+                ] : null,
+                'detalle' => $extra->detalle ? [
+                    'descripcion_item' => $extra->detalle->descripcion_item,
+                    'servicio' => $extra->detalle->otServicio?->servicio?->nombre,
+                ] : null,
+                'created_at' => $extra->created_at?->toIso8601String(),
             ])->toArray(),
             'created_at' => $corte->created_at->toIso8601String(),
         ];

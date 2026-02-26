@@ -140,7 +140,7 @@ class OrdenController extends Controller
                 $query->with([
                     'servicio',             // Información del servicio
                     'addedBy',              // Usuario que agregó servicio adicional
-                    'items',                // Items del servicio (para totales)
+                                        'items.ajustes.user',   // Items y ajustes auditables
                     'avances' => function($q) {
                         $q->with('createdBy') // Usuario que creó el avance
                           ->orderBy('created_at', 'asc');
@@ -647,10 +647,12 @@ class OrdenController extends Controller
                 foreach ($data['items'] as $i) {
                     $item = \App\Models\OTServicioItem::where('id', $i['id_item'])
                         ->where('ot_servicio_id', $otServicio->id)
+                        ->with('ajustes')
                         ->lockForUpdate()
                         ->firstOrFail();
-                    
-                    $remaining = max(0, (int)$item->planeado - (int)$item->completado);
+
+                    $metricas = $item->calcularMetricas();
+                    $remaining = max(0, (int) $metricas['total_cobrable'] - (int) $item->completado);
                     $reqQty = (int)($i['cantidad'] ?? 0);
                     $addQty = min($reqQty, $remaining);
                     
@@ -756,33 +758,11 @@ class OrdenController extends Controller
                         ]);
                     }
                     
-                    // Recalcular subtotal del servicio sumando TODOS los avances (similar a segmentos tradicionales)
-                    $todosAvances = \App\Models\OTServicioAvance::where('ot_servicio_id', $otServicio->id)->get();
-                    $cantidadTotal = $todosAvances->sum('cantidad_registrada');
-                    $subtotalTotal = 0;
-                    
-                    foreach ($todosAvances as $av) {
-                        $cantidad = (int)$av->cantidad_registrada;
-                        $precio = (float)$av->precio_unitario_aplicado;
-                        $subtotalTotal += round($precio * $cantidad, 2);
-                    }
-                    
-                    Log::info('Recálculo subtotal multi-servicio', [
-                        'servicio_id' => $otServicio->id,
-                        'avances_count' => $todosAvances->count(),
-                        'cantidad_total' => $cantidadTotal,
-                        'subtotal_calculado' => $subtotalTotal,
-                        'subtotal_anterior' => $otServicio->subtotal,
-                    ]);
-                    
-                    // Actualizar servicio con subtotal recalculado
-                    // NO tocar precio_unitario original - mantener precio del catálogo
-                    $otServicio->subtotal = $subtotalTotal;
-                    $otServicio->save();
+                    $subtotalServicio = $otServicio->recalcularSubtotalDesdeCobrable();
                     
                     Log::info('Subtotal servicio actualizado', [
                         'servicio_id' => $otServicio->id,
-                        'nuevo_subtotal' => $otServicio->subtotal,
+                        'nuevo_subtotal' => $subtotalServicio,
                     ]);
                     
                     // Recalcular totales de la OT completa
@@ -830,6 +810,7 @@ class OrdenController extends Controller
                         ->where('id_orden', $orden->id)
                         ->lockForUpdate()
                         ->firstOrFail();
+                    $item->load('ajustes');
 
                 // Cargar/asegurar segmentos existentes bajo lock
                 $segQ = OrdenItemProduccionSegmento::where('id_orden', $orden->id)
@@ -864,7 +845,9 @@ class OrdenController extends Controller
 
                 $qtySeg = (int)$segmentos->sum('cantidad');
                 $subSeg = (float)$segmentos->sum('subtotal');
-                $remaining = max(0, (int)$item->cantidad_planeada - $qtySeg);
+                $met = $item->calcularMetricas();
+                $totalCobrableItem = (int) ($met['total_cobrable'] ?? (int) $item->cantidad_planeada);
+                $remaining = max(0, $totalCobrableItem - $qtySeg);
                 $reqQty = (int)($i['cantidad'] ?? 0);
                 $addQty = min($reqQty, $remaining);
                 if ($addQty <= 0) {
@@ -914,8 +897,8 @@ class OrdenController extends Controller
             }
 
             // totales y estatus (solo para modo tradicional)
-            $sumReal = $orden->items()->sum('cantidad_real');
-            $sumPlan = $orden->items()->sum('cantidad_planeada');
+            $sumReal = (int) $orden->items()->sum('cantidad_real');
+            $sumObjetivo = $this->sumTotalCobrableTradicional($orden);
 
             // Monetario real: usar la suma de subtotales (robusto incluso si algún PU era 0 y se corrigió)
             $orden->total_real = (float)$orden->items()->selectRaw('COALESCE(SUM(subtotal),0) as t')->value('t');
@@ -925,7 +908,7 @@ class OrdenController extends Controller
             $orden->total = $orden->subtotal + $orden->iva;
 
 
-            $justCompleted = ($orden->estatus !== 'completada') && ($sumReal >= $sumPlan && $sumPlan > 0);
+            $justCompleted = ($orden->estatus !== 'completada') && ($sumReal >= $sumObjetivo && $sumObjetivo > 0);
             if ($justCompleted) {
                 $orden->estatus = 'completada';
                 // Cuando la OT se completa de nuevo, reiniciar el marcador de calidad a 'pendiente'
@@ -1123,8 +1106,8 @@ class OrdenController extends Controller
 
             // Si con el nuevo plan la suma real alcanza el plan, marcar completada
             $sumReal = (int)$orden->items()->sum('cantidad_real');
-            $sumPlan = (int)$orden->items()->sum('cantidad_planeada');
-            if ($sumPlan > 0 && $sumReal >= $sumPlan) {
+            $sumObjetivo = $this->sumTotalCobrableTradicional($orden);
+            if ($sumObjetivo > 0 && $sumReal >= $sumObjetivo) {
                 if ($orden->estatus !== 'completada') {
                     $orden->estatus = 'completada';
                     $orden->calidad_resultado = 'pendiente';
@@ -1194,11 +1177,12 @@ class OrdenController extends Controller
         $orden->load([
             'solicitud.archivos','solicitud.centroCosto','solicitud.marca','solicitud.tamanos',
             'servicio','centro','area','items','teamLeader',
+            'items.ajustes',
             'items.segmentosProduccion' => fn($q) => $q->with('usuario')->orderBy('created_at'),
             'avances' => fn($q) => $q->with(['usuario', 'item'])->orderByDesc('created_at'),
             'evidencias' => fn($q)=>$q->with('usuario')->orderByDesc('id'),
             'otServicios.servicio',
-            'otServicios.items',
+            'otServicios.items.ajustes.user',
             'otServicios.avances' => fn($q) => $q->with('createdBy')->orderBy('created_at'),
             'otServicios.addedBy', // Cargar usuario que agregó servicio adicional
         ]);
@@ -1296,11 +1280,13 @@ class OrdenController extends Controller
         } else {
             // Para OT tradicional, usar items
             foreach ($orden->items as $it) {
-                $qty = ($it->cantidad_real ?? 0) > 0 ? (int)$it->cantidad_real : (int)$it->cantidad_planeada;
+                $met = $it->calcularMetricas();
+                $qty = (int) ($met['total_cobrable'] ?? (($it->cantidad_real ?? 0) > 0 ? (int)$it->cantidad_real : (int)$it->cantidad_planeada));
                 $tieneSeg = ($it->segmentosProduccion ?? null) && $it->segmentosProduccion->count() > 0;
-                $lineSub = ($tieneSeg && (int)($it->cantidad_real ?? 0) > 0)
-                    ? (float)($it->subtotal ?? 0)
-                    : ((float)$it->precio_unitario * $qty);
+                $lineSub = (float) ($it->subtotal ?? 0);
+                if ($lineSub <= 0) {
+                    $lineSub = ((float)$it->precio_unitario * $qty);
+                }
                 if ($tieneSeg) { $usaSegmentos = true; }
                 $sub += $lineSub;
                 $lines[] = [
@@ -1335,11 +1321,26 @@ class OrdenController extends Controller
             ];
         }
 
+        if (!$esMultiServicio) {
+            $orden->setRelation('items', $orden->items->map(function ($it) {
+                $met = $it->calcularMetricas();
+                $it->setAttribute('solicitado', (int) ($met['solicitado'] ?? 0));
+                $it->setAttribute('extra', (int) ($met['extra'] ?? 0));
+                $it->setAttribute('faltantes_ajuste', (int) ($met['faltantes'] ?? 0));
+                $it->setAttribute('total_cobrable', (int) ($met['total_cobrable'] ?? 0));
+                return $it;
+            }));
+        }
+
         // Resumen de unidades: planeado original, completado, faltante y total vigente
         $planeadoOriginal = (int)$orden->items->sum(fn($i)=> (int)$i->cantidad_planeada + (int)($i->faltantes ?? 0));
         $completadoSum    = (int)$orden->items->sum('cantidad_real');
         $faltanteSum      = (int)$orden->items->sum(function($i){ return (int)($i->faltantes ?? 0); });
-        $totalVigente     = (int)$orden->items->sum('cantidad_planeada');
+        $totalVigente     = $esMultiServicio
+            ? (int)$orden->items->sum('cantidad_planeada')
+            : (int)$orden->items->sum(function($i){
+                return (int)($i->total_cobrable ?? ((int)$i->cantidad_planeada));
+            });
 
         // Información de servicios multi-servicio con tamaños
         $serviciosConTamanos = [];
@@ -1424,29 +1425,43 @@ class OrdenController extends Controller
                     'cantidad' => $otServicio->cantidad,
                     'precio_unitario' => $otServicio->precio_unitario,
                     'subtotal' => $otServicio->subtotal,
+                    'solicitado' => $totales['solicitado'],
                     'planeado' => $totales['planeado'],
+                    'extra' => $totales['extra'],
+                    'total_cobrable' => $totales['total_cobrable'],
                     'completado' => $totales['completado'],
                     'faltantes_registrados' => $totales['faltantes_registrados'],
                     'pendiente' => $totales['pendiente'],
                     'progreso' => $totales['progreso'],
                     'total' => $totales['total'],
                     'items' => $otServicio->items->map(function ($item) {
-                        $planeado = (int)$item->planeado;
-                        $completado = (int)$item->completado;
-                        $faltantesRegistrados = (int)$item->faltante;
-                        $pendiente = max(0, $planeado - ($completado + $faltantesRegistrados));
-                        $progreso = $planeado > 0 
-                            ? round((($completado + $faltantesRegistrados) / $planeado) * 100) 
-                            : 0;
+                        $met = $item->calcularMetricas();
                         
                         return [
                             'id' => $item->id,
                             'descripcion_item' => $item->descripcion_item,
-                            'planeado' => $planeado,
-                            'completado' => $completado,
-                            'faltantes_registrados' => $faltantesRegistrados,
-                            'pendiente' => $pendiente,
-                            'progreso' => $progreso,
+                            'solicitado' => $met['solicitado'],
+                            'planeado' => $met['solicitado'],
+                            'extra' => $met['extra'],
+                            'faltantes' => $met['faltantes'],
+                            'faltantes_registrados' => $met['faltantes'],
+                            'total_cobrable' => $met['total_cobrable'],
+                            'completado' => $met['completado'],
+                            'pendiente' => $met['pendiente'],
+                            'progreso' => $met['progreso'],
+                            'ajustes' => $item->ajustes->map(function ($ajuste) {
+                                return [
+                                    'id' => $ajuste->id,
+                                    'tipo' => $ajuste->tipo,
+                                    'cantidad' => $ajuste->cantidad,
+                                    'motivo' => $ajuste->motivo,
+                                    'user' => $ajuste->user ? [
+                                        'id' => $ajuste->user->id,
+                                        'name' => $ajuste->user->name,
+                                    ] : null,
+                                    'created_at' => optional($ajuste->created_at)->toIso8601String(),
+                                ];
+                            })->values()->toArray(),
                         ];
                     })->toArray(),
                     'avances' => $otServicio->avances->map(function ($avance) {
@@ -1456,7 +1471,10 @@ class OrdenController extends Controller
                             'precio_unitario_aplicado' => $avance->precio_unitario_aplicado,
                             'cantidad_registrada' => $avance->cantidad_registrada,
                             'comentario' => $avance->comentario,
-                            'created_by' => $avance->createdBy->name ?? 'N/A',
+                            'created_by' => $avance->createdBy ? [
+                                'id' => $avance->createdBy->id,
+                                'name' => $avance->createdBy->name,
+                            ] : null,
                             'created_at' => $avance->created_at->format('Y-m-d H:i'),
                         ];
                     })->toArray(),
@@ -1510,6 +1528,7 @@ class OrdenController extends Controller
                 'asignar_tl'        => route('ordenes.asignarTL', $orden),
                 'avances_store'     => route('ordenes.avances.store', $orden),
                 'faltantes_store'   => route('ordenes.faltantes.store', $orden),
+                'ot_item_ajuste_store' => route('ot-items-ajustes.store', ['ot' => $orden->id, 'item' => 0]),
                 'segmentos_update'  => route('ordenes.segmentos.update', ['orden' => $orden->id, 'segmento' => 0]),
                 'calidad_page'      => route('calidad.show', $orden),
                 'calidad_validar'   => route('calidad.validar', $orden),
@@ -2056,6 +2075,18 @@ class OrdenController extends Controller
         $primary = (int)($u->centro_trabajo_id ?? 0);
         if ($primary) $ids[] = $primary;
         return array_values(array_unique(array_filter($ids)));
+    }
+
+    private function sumTotalCobrableTradicional(Orden $orden): int
+    {
+        $items = OrdenItem::where('id_orden', $orden->id)
+            ->with('ajustes')
+            ->get();
+
+        return (int) $items->sum(function (OrdenItem $item) {
+            $met = $item->calcularMetricas();
+            return (int) ($met['total_cobrable'] ?? 0);
+        });
     }
 
     /**

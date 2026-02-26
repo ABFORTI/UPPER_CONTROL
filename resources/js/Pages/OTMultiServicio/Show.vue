@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted } from 'vue'
+import { computed } from 'vue'
 import OtCortes from '@/Components/OtCortes.vue'
 
 const props = defineProps({
@@ -7,23 +7,6 @@ const props = defineProps({
   servicios: Array,
   cortes: { type: Array, default: () => [] },
 })
-
-// DEBUG: Ver qué datos llegan
-onMounted(() => {
-  console.log('=== DATOS RECIBIDOS ===')
-  console.log('Servicios:', props.servicios)
-  if (props.servicios && props.servicios.length > 0) {
-    console.log('Primer servicio:', props.servicios[0])
-    console.log('Planeado:', props.servicios[0].planeado)
-    console.log('Completado:', props.servicios[0].completado)
-  }
-})
-
-// Calcular el porcentaje de completitud por servicio
-const calcularPorcentaje = (servicio) => {
-  if (servicio.planeado === 0) return 0
-  return Math.min(100, Math.round((servicio.completado / servicio.planeado) * 100))
-}
 
 // Estado visual basado en el estatus de la OT
 const estatusConfig = computed(() => {
@@ -143,42 +126,36 @@ const estatusConfig = computed(() => {
 
           <!-- Métricas del Servicio - Mini Stat Tiles -->
           <div class="px-5 py-3 bg-slate-50/50 border-b border-slate-200 dark:bg-slate-900/30 dark:border-slate-700">
-            <!-- DEBUG INFO -->
-            <div class="mb-2 p-2 bg-red-100 border border-red-300 rounded text-xs">
-              <strong>DEBUG:</strong> servicio.planeado={{ servicio.planeado }}, servicio.completado={{ servicio.completado }}, servicio.id={{ servicio.id }}
-            </div>
-            
-            <div class="grid grid-cols-2 md:grid-cols-5 gap-2.5">
-              <!-- Planeado -->
+            <div class="grid grid-cols-2 md:grid-cols-6 gap-2.5">
+              <!-- Solicitado -->
               <div class="bg-white border-l-3 border-blue-500 rounded-md p-2.5 shadow-sm dark:bg-slate-800/50 dark:border-blue-400">
-                <p class="text-[9px] uppercase tracking-wide font-bold text-slate-500 dark:text-slate-400">Planeado</p>
-                <p class="text-2xl font-extrabold text-slate-900 dark:text-slate-100 leading-none mt-1">{{ servicio.planeado || 0 }}</p>
+                <p class="text-[9px] uppercase tracking-wide font-bold text-slate-500 dark:text-slate-400">Solicitado</p>
+                <p class="text-2xl font-extrabold text-slate-900 dark:text-slate-100 leading-none mt-1">{{ servicio.solicitado || servicio.planeado || 0 }}</p>
+              </div>
+              <!-- Extra -->
+              <div class="bg-white border-l-3 border-orange-500 rounded-md p-2.5 shadow-sm dark:bg-slate-800/50 dark:border-orange-400">
+                <p class="text-[9px] uppercase tracking-wide font-bold text-slate-500 dark:text-slate-400">Extra</p>
+                <p class="text-2xl font-extrabold text-slate-900 dark:text-slate-100 leading-none mt-1">{{ servicio.extra || 0 }}</p>
+              </div>
+              <!-- Faltantes -->
+              <div class="bg-white border-l-3 border-amber-500 rounded-md p-2.5 shadow-sm dark:bg-slate-800/50 dark:border-amber-400">
+                <p class="text-[9px] uppercase tracking-wide font-bold text-slate-500 dark:text-slate-400">Faltantes</p>
+                <p class="text-2xl font-extrabold text-slate-900 dark:text-slate-100 leading-none mt-1">{{ servicio.faltantes_registrados || 0 }}</p>
+              </div>
+              <!-- Total cobrable -->
+              <div class="bg-white border-l-3 border-indigo-500 rounded-md p-2.5 shadow-sm dark:bg-slate-800/50 dark:border-indigo-400">
+                <p class="text-[9px] uppercase tracking-wide font-bold text-slate-500 dark:text-slate-400">Total cobrable</p>
+                <p class="text-2xl font-extrabold text-slate-900 dark:text-slate-100 leading-none mt-1">{{ servicio.total_cobrable || servicio.total || 0 }}</p>
               </div>
               <!-- Completado -->
               <div class="bg-white border-l-3 border-emerald-500 rounded-md p-2.5 shadow-sm dark:bg-slate-800/50 dark:border-emerald-400">
                 <p class="text-[9px] uppercase tracking-wide font-bold text-slate-500 dark:text-slate-400">Completado</p>
                 <p class="text-2xl font-extrabold text-slate-900 dark:text-slate-100 leading-none mt-1">{{ servicio.completado || 0 }}</p>
               </div>
-              <!-- Faltantes Registrados -->
-              <div class="bg-white border-l-3 border-amber-500 rounded-md p-2.5 shadow-sm dark:bg-slate-800/50 dark:border-amber-400">
-                <p class="text-[9px] uppercase tracking-wide font-bold text-slate-500 dark:text-slate-400">Faltantes</p>
-                <p class="text-2xl font-extrabold text-slate-900 dark:text-slate-100 leading-none mt-1">{{ servicio.faltantes_registrados || 0 }}</p>
-              </div>
               <!-- Pendiente -->
               <div class="bg-white border-l-3 border-purple-500 rounded-md p-2.5 shadow-sm dark:bg-slate-800/50 dark:border-purple-400">
                 <p class="text-[9px] uppercase tracking-wide font-bold text-slate-500 dark:text-slate-400">Pendiente</p>
                 <p class="text-2xl font-extrabold text-slate-900 dark:text-slate-100 leading-none mt-1">{{ servicio.pendiente || 0 }}</p>
-              </div>
-              <!-- Progreso -->
-              <div class="bg-white border-l-3 border-indigo-500 rounded-md p-2.5 shadow-sm dark:bg-slate-800/50 dark:border-indigo-400">
-                <p class="text-[9px] uppercase tracking-wide font-bold text-slate-500 dark:text-slate-400">Progreso</p>
-                <div class="flex items-center gap-2 mt-1">
-                  <p class="text-2xl font-extrabold text-slate-900 dark:text-slate-100 leading-none">{{ servicio.progreso || 0 }}%</p>
-                  <div class="flex-1 h-1.5 bg-slate-200 rounded-full overflow-hidden dark:bg-slate-700">
-                    <div class="bg-gradient-to-r from-emerald-500 to-teal-500 h-full transition-all duration-500"
-                         :style="{ width: (servicio.progreso || 0) + '%' }"></div>
-                  </div>
-                </div>
               </div>
             </div>
           </div>

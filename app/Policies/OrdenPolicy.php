@@ -122,6 +122,27 @@ class OrdenPolicy
 
         return $allowed;
     }
+
+    public function registrarAjuste(User $u, Orden $o): bool
+    {
+        if ($u->hasRole('admin')) return true;
+
+        $allowed = false;
+
+        if ($u->hasRole('team_leader')) {
+            $allowed = $allowed || ((int)$o->team_leader_id === (int)$u->id);
+        }
+
+        if ($u->hasRole('coordinador')) {
+            $ids = $u->centros()->pluck('centros_trabajo.id')->map(fn($v)=>(int)$v)->all();
+            $primary = (int)($u->centro_trabajo_id ?? 0);
+            if ($primary) $ids[] = $primary;
+            $ids = array_values(array_unique($ids));
+            $allowed = $allowed || in_array((int)$o->id_centrotrabajo, $ids, true);
+        }
+
+        return $allowed;
+    }
     // ya tenías:
     public function createFromSolicitud(User $u, int $centroId): bool
     {

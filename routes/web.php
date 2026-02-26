@@ -272,6 +272,10 @@ Route::middleware('auth')->group(function () {
     Route::post('/ots/{ot}/cortes', [\App\Http\Controllers\OtCorteController::class, 'store'])
         ->middleware('role:admin|coordinador|team_leader|facturacion')
         ->name('ot-cortes.store');
+    Route::post('/ots/{ot}/detalles/{detalle}/ajustes', [\App\Http\Controllers\OtDetalleAjusteController::class, 'store'])
+        ->name('ot-detalles-ajustes.store');
+    Route::post('/ots/{ot}/items/{item}/ajustes', [\App\Http\Controllers\OtDetalleAjusteController::class, 'storeTradicional'])
+        ->name('ot-items-ajustes.store');
     Route::get('/cortes/{corte}', [\App\Http\Controllers\OtCorteController::class, 'show'])
         ->name('ot-cortes.show');
     Route::patch('/cortes/{corte}/estatus', [\App\Http\Controllers\OtCorteController::class, 'updateEstatus'])

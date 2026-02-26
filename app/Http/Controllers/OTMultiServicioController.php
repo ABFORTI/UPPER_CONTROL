@@ -182,7 +182,7 @@ class OTMultiServicioController extends Controller
         // Cargar relaciones necesarias
         $orden->load([
             'otServicios.servicio',
-            'otServicios.items',
+            'otServicios.items.ajustes.user',
             'otServicios.avances.createdBy',
             'centro',
             'area',
@@ -200,30 +200,30 @@ class OTMultiServicioController extends Controller
                 'cantidad' => $otServicio->cantidad,
                 'precio_unitario' => $otServicio->precio_unitario,
                 'subtotal' => $otServicio->subtotal,
+                'solicitado' => $totales['solicitado'],
                 'planeado' => $totales['planeado'],
+                'extra' => $totales['extra'],
+                'total_cobrable' => $totales['total_cobrable'],
                 'completado' => $totales['completado'],
                 'faltantes_registrados' => $totales['faltantes_registrados'],
                 'pendiente' => $totales['pendiente'],
                 'progreso' => $totales['progreso'],
                 'total' => $totales['total'],
                 'items' => $otServicio->items->map(function ($item) {
-                    // Calcular valores individuales de cada item
-                    $planeado = (int)$item->planeado;
-                    $completado = (int)$item->completado;
-                    $faltantesRegistrados = (int)$item->faltante;
-                    $pendiente = max(0, $planeado - ($completado + $faltantesRegistrados));
-                    $progreso = $planeado > 0 
-                        ? round((($completado + $faltantesRegistrados) / $planeado) * 100) 
-                        : 0;
+                    $met = $item->calcularMetricas();
                     
                     return [
                         'id' => $item->id,
                         'descripcion_item' => $item->descripcion_item,
-                        'planeado' => $planeado,
-                        'completado' => $completado,
-                        'faltantes_registrados' => $faltantesRegistrados,
-                        'pendiente' => $pendiente,
-                        'progreso' => $progreso,
+                        'solicitado' => $met['solicitado'],
+                        'planeado' => $met['solicitado'],
+                        'extra' => $met['extra'],
+                        'faltantes' => $met['faltantes'],
+                        'faltantes_registrados' => $met['faltantes'],
+                        'total_cobrable' => $met['total_cobrable'],
+                        'completado' => $met['completado'],
+                        'pendiente' => $met['pendiente'],
+                        'progreso' => $met['progreso'],
                     ];
                 }),
                 'avances' => $otServicio->avances->map(function ($avance) {
@@ -315,22 +315,15 @@ class OTMultiServicioController extends Controller
                 $falt = max(0, (int)$d['faltantes']);
                 
                 if ($falt <= 0) continue;
-                
-                // Validar que no exceda lo planeado
-                $nuevoTotal = (int)$item->completado + (int)($item->faltante ?? 0) + $falt;
-                if ($nuevoTotal > (int)$item->planeado) {
-                    $pendiente = max(0, (int)$item->planeado - (int)$item->completado - (int)($item->faltante ?? 0));
-                    return response()->json([
-                        'message' => "No se pueden registrar {$falt} faltantes para '{$item->descripcion_item}'. Solo quedan {$pendiente} unidades pendientes.",
-                        'errors' => [
-                            'items' => ["El item '{$item->descripcion_item}' excede lo planeado."]
-                        ]
-                    ], 422);
-                }
 
-                // Acumular faltantes SIN modificar el planeado
-                $item->faltante = (int)($item->faltante ?? 0) + (int)$falt;
-                $item->save();
+                \App\Models\OtAjusteDetalle::create([
+                    'ot_id' => $orden->id,
+                    'ot_detalle_id' => $item->id,
+                    'tipo' => 'faltante',
+                    'cantidad' => $falt,
+                    'motivo' => !empty($data['nota']) ? $data['nota'] : null,
+                    'user_id' => Auth::id(),
+                ]);
 
                 // Registrar avance individual por cada item con faltantes
                 \App\Models\OTServicioAvance::create([
@@ -371,14 +364,7 @@ class OTMultiServicioController extends Controller
                 'created_by' => Auth::id(),
             ]);
             */
-            // Recalcular totales del servicio
-            $totales = $otServicio->calcularTotales();
-            
-            // Actualizar subtotal del servicio basado en completado
-            if ($otServicio->tipo_cobro === 'unidad') {
-                $otServicio->subtotal = $totales['completado'] * $otServicio->precio_unitario;
-                $otServicio->save();
-            }
+            $otServicio->recalcularSubtotalDesdeCobrable();
 
             // Recalcular totales de la orden
             $subtotalOT = $orden->otServicios()->sum('subtotal');

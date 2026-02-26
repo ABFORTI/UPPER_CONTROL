@@ -209,6 +209,16 @@ const faltForm = useForm({
   items: items.value.map(i => ({ id_item: i.id, faltantes: '' })),
   nota: ''
 })
+
+const ajusteTradicionalForm = ref({
+  item_id: items.value?.[0]?.id ?? null,
+  tipo: 'faltante',
+  cantidad: '',
+  motivo: '',
+  processing: false,
+})
+const ajusteTradicionalMsg = ref('')
+const ajusteTradicionalError = ref('')
 const hasFaltantes = computed(() => {
   try {
     return (faltForm.items || []).some((x, idx) => {
@@ -219,7 +229,22 @@ const hasFaltantes = computed(() => {
     })
   } catch { return false }
 })
-const restante = (it) => Math.max(0, (it?.cantidad_planeada ?? 0) - (it?.cantidad_real ?? 0))
+const restante = (it) => {
+  const base = Number(it?.total_cobrable ?? it?.cantidad_planeada ?? 0)
+  const completado = Number(it?.cantidad_real ?? 0)
+  return Math.max(0, base - completado)
+}
+const objetivoItem = (it) => Number(it?.total_cobrable ?? it?.cantidad_planeada ?? 0)
+const solicitadoItem = (it) => Number(it?.solicitado ?? it?.cantidad_planeada ?? 0)
+const extraItem = (it) => Number(it?.extra ?? 0)
+const faltantesItem = (it) => Number(it?.faltantes_ajuste ?? it?.faltantes ?? 0)
+const pendienteItem = (it) => Math.max(0, objetivoItem(it) - Number(it?.cantidad_real ?? 0))
+const kpiSolicitadoTrad = computed(() => (items.value || []).reduce((sum, it) => sum + solicitadoItem(it), 0))
+const kpiExtraTrad = computed(() => (items.value || []).reduce((sum, it) => sum + extraItem(it), 0))
+const kpiFaltantesTrad = computed(() => (items.value || []).reduce((sum, it) => sum + faltantesItem(it), 0))
+const kpiTotalCobrableTrad = computed(() => (items.value || []).reduce((sum, it) => sum + objetivoItem(it), 0))
+const kpiCompletadoTrad = computed(() => (items.value || []).reduce((sum, it) => sum + Number(it?.cantidad_real ?? 0), 0))
+const kpiPendienteTrad = computed(() => Math.max(0, kpiTotalCobrableTrad.value - kpiCompletadoTrad.value))
 const hasAvance = computed(() => {
   try {
     const okQty = (avForm.items || []).some((x, idx) => {
@@ -323,6 +348,58 @@ function aplicarFaltantes(){
       faltForm.clearErrors('items')
   // También recargar 'unidades' para que el panel de desglose use el TOTAL vigente
   router.reload({ only: ['orden','cotizacion','unidades'], preserveScroll: true })
+    }
+  })
+}
+
+function registrarAjusteTradicional() {
+  const form = ajusteTradicionalForm.value
+  const itemId = Number(form.item_id || 0)
+  const cantidad = Number(form.cantidad || 0)
+  ajusteTradicionalMsg.value = ''
+  ajusteTradicionalError.value = ''
+
+  if (!(itemId > 0)) {
+    alert('Selecciona un producto para el ajuste.')
+    return
+  }
+  if (!(cantidad > 0)) {
+    alert('La cantidad debe ser mayor a 0.')
+    return
+  }
+  if (form.tipo === 'extra' && !String(form.motivo || '').trim()) {
+    alert('El motivo es obligatorio para un extra.')
+    return
+  }
+
+  const template = props.urls?.ot_item_ajuste_store || ''
+  const postUrl = template.replace(/\/items\/0\/ajustes$/, `/items/${itemId}/ajustes`)
+  if (!postUrl || postUrl === template) {
+    ajusteTradicionalError.value = 'No se pudo construir la ruta para guardar el ajuste.'
+    return
+  }
+
+  form.processing = true
+  router.post(postUrl, {
+    tipo: form.tipo,
+    cantidad,
+    motivo: form.motivo,
+  }, {
+    preserveScroll: true,
+    only: ['orden', 'unidades', 'cotizacion', 'cortes'],
+    onSuccess: () => {
+      form.cantidad = ''
+      if (form.tipo !== 'extra') form.motivo = ''
+      ajusteTradicionalMsg.value = 'Ajuste registrado correctamente.'
+    },
+    onError: (errors = {}) => {
+      ajusteTradicionalError.value = Object.values(errors)[0] || 'No fue posible registrar el ajuste.'
+    },
+    onCancel: () => {
+      ajusteTradicionalError.value = 'La operación fue cancelada.'
+    },
+    onFinish: () => {
+      form.processing = false
     }
   })
 }
@@ -451,6 +528,7 @@ const avancesFormsServicio = ref({})
 
 // Faltantes para multi-servicio
 const faltantesMultiServicio = ref({})
+const ajustesMultiServicio = ref({})
 
 // Inicializar formularios de avances por servicio
 const inicializarAvancesServicios = () => {
@@ -476,9 +554,60 @@ const inicializarAvancesServicios = () => {
         nota: ''
       }
     }
+
+    if (!ajustesMultiServicio.value[servicio.id]) {
+      ajustesMultiServicio.value[servicio.id] = {
+        detalle_id: (servicio.items || [])[0]?.id ?? null,
+        tipo: 'faltante',
+        cantidad: '',
+        motivo: '',
+        processing: false,
+      }
+    }
   })
 }
 inicializarAvancesServicios()
+
+function registrarAjusteServicio(servicioId) {
+  const form = ajustesMultiServicio.value[servicioId]
+  if (!form) return
+
+  const detalleId = Number(form.detalle_id || 0)
+  const cantidad = Number(form.cantidad || 0)
+  if (!(detalleId > 0)) {
+    alert('Selecciona un producto para el ajuste.')
+    return
+  }
+  if (!(cantidad > 0)) {
+    alert('La cantidad debe ser mayor a 0.')
+    return
+  }
+  if (form.tipo === 'extra' && !String(form.motivo || '').trim()) {
+    alert('El motivo es obligatorio para un extra.')
+    return
+  }
+
+  form.processing = true
+
+  router.post(route('ot-detalles-ajustes.store', { ot: props.orden.id, detalle: detalleId }), {
+    tipo: form.tipo,
+    cantidad,
+    motivo: form.motivo,
+  }, {
+    preserveScroll: true,
+    only: ['orden', 'unidades', 'cotizacion', 'cortes'],
+    onSuccess: () => {
+      form.cantidad = ''
+      if (form.tipo !== 'extra') form.motivo = ''
+    },
+    onError: () => {
+      alert('No fue posible registrar el ajuste.')
+    },
+    onFinish: () => {
+      form.processing = false
+    }
+  })
+}
 
 // Función para guardar avance de un servicio
 function guardarAvanceServicio(servicioId) {
@@ -755,7 +884,7 @@ function aplicarFaltantesServicio(servicioId) {
                         {{ orden?.servicio?.nombre || 'Servicio' }}
                       </h2>
                       <span class="text-emerald-50/70 text-[11px] font-medium leading-none whitespace-nowrap">
-                        {{ unidades?.planeado ?? 0 }} uds.
+                        {{ kpiSolicitadoTrad }} uds.
                       </span>
                     </div>
                   </div>
@@ -771,35 +900,41 @@ function aplicarFaltantesServicio(servicioId) {
             <div class="px-4 sm:px-5 py-4 space-y-4">
             
               <!-- KPIs Mini Stat Tiles -->
-              <div class="grid grid-cols-2 md:grid-cols-5 gap-2.5">
-                <!-- Planeado -->
+              <div class="grid grid-cols-2 md:grid-cols-6 gap-2.5">
+                <!-- Solicitado -->
                 <div class="relative bg-gradient-to-br from-blue-50 to-blue-50/50 border-l-4 border-blue-500 rounded-lg p-2.5 shadow-sm ring-1 ring-slate-900/5 dark:from-blue-950/40 dark:to-blue-950/20 dark:border-blue-400 dark:ring-blue-500/20">
-                  <p class="text-[10px] uppercase tracking-wider font-extrabold text-blue-600 dark:text-blue-400 leading-none">Planeado</p>
-                  <p class="text-2xl font-black text-blue-900 dark:text-blue-100 leading-none mt-1.5">{{ unidades?.planeado ?? 0 }}</p>
+                  <p class="text-[10px] uppercase tracking-wider font-extrabold text-blue-600 dark:text-blue-400 leading-none">Solicitado</p>
+                  <p class="text-2xl font-black text-blue-900 dark:text-blue-100 leading-none mt-1.5">{{ kpiSolicitadoTrad }}</p>
+                </div>
+
+                <!-- Extra -->
+                <div class="relative bg-gradient-to-br from-orange-50 to-orange-50/50 border-l-4 border-orange-500 rounded-lg p-2.5 shadow-sm ring-1 ring-slate-900/5 dark:from-orange-950/40 dark:to-orange-950/20 dark:border-orange-400 dark:ring-orange-500/20">
+                  <p class="text-[10px] uppercase tracking-wider font-extrabold text-orange-600 dark:text-orange-400 leading-none">Extra</p>
+                  <p class="text-2xl font-black text-orange-900 dark:text-orange-100 leading-none mt-1.5">{{ kpiExtraTrad }}</p>
                 </div>
                 
                 <!-- Completado -->
                 <div class="relative bg-gradient-to-br from-emerald-50 to-emerald-50/50 border-l-4 border-emerald-500 rounded-lg p-2.5 shadow-sm ring-1 ring-slate-900/5 dark:from-emerald-950/40 dark:to-emerald-950/20 dark:border-emerald-400 dark:ring-emerald-500/20">
                   <p class="text-[10px] uppercase tracking-wider font-extrabold text-emerald-600 dark:text-emerald-400 leading-none">Completado</p>
-                  <p class="text-2xl font-black text-emerald-900 dark:text-emerald-100 leading-none mt-1.5">{{ unidades?.completado ?? 0 }}</p>
+                  <p class="text-2xl font-black text-emerald-900 dark:text-emerald-100 leading-none mt-1.5">{{ kpiCompletadoTrad }}</p>
                 </div>
                 
                 <!-- Faltantes -->
                 <div class="relative bg-gradient-to-br from-amber-50 to-amber-50/50 border-l-4 border-amber-500 rounded-lg p-2.5 shadow-sm ring-1 ring-slate-900/5 dark:from-amber-950/40 dark:to-amber-950/20 dark:border-amber-400 dark:ring-amber-500/20">
                   <p class="text-[10px] uppercase tracking-wider font-extrabold text-amber-600 dark:text-amber-400 leading-none">Faltantes</p>
-                  <p class="text-2xl font-black text-amber-900 dark:text-amber-100 leading-none mt-1.5">{{ unidades?.faltante ?? 0 }}</p>
+                  <p class="text-2xl font-black text-amber-900 dark:text-amber-100 leading-none mt-1.5">{{ kpiFaltantesTrad }}</p>
+                </div>
+
+                <!-- Total Cobrable -->
+                <div class="relative bg-gradient-to-br from-indigo-50 to-indigo-50/50 border-l-4 border-indigo-500 rounded-lg p-2.5 shadow-sm ring-1 ring-slate-900/5 dark:from-indigo-950/40 dark:to-indigo-950/20 dark:border-indigo-400 dark:ring-indigo-500/20">
+                  <p class="text-[10px] uppercase tracking-wider font-extrabold text-indigo-600 dark:text-indigo-400 leading-none">Total cobrable</p>
+                  <p class="text-2xl font-black text-indigo-900 dark:text-indigo-100 leading-none mt-1.5">{{ kpiTotalCobrableTrad }}</p>
                 </div>
                 
                 <!-- Pendiente -->
                 <div class="relative bg-gradient-to-br from-purple-50 to-purple-50/50 border-l-4 border-purple-500 rounded-lg p-2.5 shadow-sm ring-1 ring-slate-900/5 dark:from-purple-950/40 dark:to-purple-950/20 dark:border-purple-400 dark:ring-purple-500/20">
                   <p class="text-[10px] uppercase tracking-wider font-extrabold text-purple-600 dark:text-purple-400 leading-none">Pendiente</p>
-                  <p class="text-2xl font-black text-purple-900 dark:text-purple-100 leading-none mt-1.5">{{ (unidades?.planeado ?? 0) - ((unidades?.completado ?? 0) + (unidades?.faltante ?? 0)) }}</p>
-                </div>
-                
-                <!-- Total -->
-                <div class="relative bg-gradient-to-br from-slate-50 to-slate-50/50 border-l-4 border-slate-400 rounded-lg p-2.5 shadow-sm ring-1 ring-slate-900/5 dark:from-slate-800/40 dark:to-slate-800/20 dark:border-slate-500 dark:ring-slate-500/20">
-                  <p class="text-[10px] uppercase tracking-wider font-extrabold text-slate-600 dark:text-slate-400 leading-none">Total</p>
-                  <p class="text-2xl font-black text-slate-900 dark:text-slate-100 leading-none mt-1.5">{{ unidades?.total ?? 0 }}</p>
+                  <p class="text-2xl font-black text-purple-900 dark:text-purple-100 leading-none mt-1.5">{{ kpiPendienteTrad }}</p>
                 </div>
               </div>
               
@@ -817,8 +952,12 @@ function aplicarFaltantesServicio(servicioId) {
                   <thead class="bg-slate-100/60 dark:bg-slate-800/60">
                     <tr>
                       <th class="px-3 py-2 text-left text-[10px] uppercase tracking-wider font-bold text-slate-600 dark:text-slate-400">Descripción</th>
-                      <th class="px-3 py-2 text-center text-[10px] uppercase tracking-wider font-bold text-slate-600 dark:text-slate-400">Planeado</th>
+                      <th class="px-3 py-2 text-center text-[10px] uppercase tracking-wider font-bold text-slate-600 dark:text-slate-400">Solicitado</th>
+                      <th class="px-3 py-2 text-center text-[10px] uppercase tracking-wider font-bold text-orange-600 dark:text-orange-400">Extra</th>
+                      <th class="px-3 py-2 text-center text-[10px] uppercase tracking-wider font-bold text-indigo-600 dark:text-indigo-400">Total cobrable</th>
                       <th class="px-3 py-2 text-center text-[10px] uppercase tracking-wider font-bold text-slate-600 dark:text-slate-400">Completado</th>
+                      <th class="px-3 py-2 text-center text-[10px] uppercase tracking-wider font-bold text-amber-600 dark:text-amber-400">Faltantes</th>
+                      <th class="px-3 py-2 text-center text-[10px] uppercase tracking-wider font-bold text-purple-600 dark:text-purple-400">Pendiente</th>
                       <th class="px-3 py-2 text-center text-[10px] uppercase tracking-wider font-bold text-slate-600 dark:text-slate-400">Progreso</th>
                       <th v-if="can?.reportarAvance" class="px-3 py-2 text-center text-[10px] uppercase tracking-wider font-bold text-slate-600 dark:text-slate-400">Registrar</th>
                       <th v-if="can?.reportarAvance" class="px-3 py-2 text-center text-[10px] uppercase tracking-wider font-bold text-indigo-600 dark:text-indigo-400">Faltantes</th>
@@ -838,23 +977,37 @@ function aplicarFaltantesServicio(servicioId) {
                         </div>
                       </td>
                       <td class="px-3 py-2 text-center">
-                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300">{{ it?.cantidad_planeada || 0 }}</span>
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300">{{ solicitadoItem(it) }}</span>
+                      </td>
+                      <td class="px-3 py-2 text-center">
+                        <span v-if="extraItem(it) > 0" class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-300">{{ extraItem(it) }}</span>
+                        <span v-else class="text-slate-400 text-xs">—</span>
+                      </td>
+                      <td class="px-3 py-2 text-center">
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300">{{ objetivoItem(it) }}</span>
                       </td>
                       <td class="px-3 py-2 text-center">
                         <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold"
-                              :class="(it?.cantidad_real || 0) >= (it?.cantidad_planeada || 0) ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300'">
+                              :class="(it?.cantidad_real || 0) >= objetivoItem(it) ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300'">
                           {{ it?.cantidad_real || 0 }}
                         </span>
+                      </td>
+                      <td class="px-3 py-2 text-center">
+                        <span v-if="faltantesItem(it) > 0" class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">{{ faltantesItem(it) }}</span>
+                        <span v-else class="text-slate-400 text-xs">—</span>
+                      </td>
+                      <td class="px-3 py-2 text-center">
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-300">{{ pendienteItem(it) }}</span>
                       </td>
                       <td class="px-3 py-2">
                         <div class="flex items-center gap-2">
                           <div class="flex-1 bg-slate-200 rounded-full h-1.5 overflow-hidden dark:bg-slate-700">
                             <div class="h-full rounded-full transition-all"
-                                 :class="(it?.cantidad_real || 0) >= (it?.cantidad_planeada || 0) ? 'bg-gradient-to-r from-emerald-500 to-teal-500' : 'bg-gradient-to-r from-amber-500 to-orange-500'"
-                                 :style="{ width: Math.min(100, ((it?.cantidad_real || 0) / (it?.cantidad_planeada || 1)) * 100) + '%' }"></div>
+                                 :class="(it?.cantidad_real || 0) >= objetivoItem(it) ? 'bg-gradient-to-r from-emerald-500 to-teal-500' : 'bg-gradient-to-r from-amber-500 to-orange-500'"
+                                 :style="{ width: Math.min(100, ((it?.cantidad_real || 0) / Math.max(1, objetivoItem(it))) * 100) + '%' }"></div>
                           </div>
                           <span class="text-[11px] font-bold text-slate-700 dark:text-slate-300 min-w-[2.5rem] text-right">
-                            {{ Math.round(((it?.cantidad_real || 0) / (it?.cantidad_planeada || 1)) * 100) }}%
+                            {{ Math.round(((it?.cantidad_real || 0) / Math.max(1, objetivoItem(it))) * 100) }}%
                           </span>
                         </div>
                       </td>
@@ -983,6 +1136,66 @@ function aplicarFaltantesServicio(servicioId) {
                   <p v-if="faltForm.errors.items" class="mt-2 text-xs text-red-600 dark:text-red-400">{{ faltForm.errors.items }}</p>
                 </div>
               </div>
+
+              <div v-if="can?.reportarAvance && items.length" class="-mx-4 sm:-mx-5 px-4 sm:px-5 py-3.5 bg-indigo-50/50 dark:bg-indigo-900/20 border-t border-indigo-200 dark:border-indigo-700">
+                <div class="flex items-center gap-2.5 mb-3">
+                  <svg class="w-4 h-4 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                  </svg>
+                  <h4 class="font-bold text-xs uppercase tracking-wider text-indigo-700 dark:text-indigo-300">Registrar ajuste</h4>
+                </div>
+
+                <div class="bg-white dark:bg-slate-900/50 rounded-lg p-3 ring-1 ring-indigo-200 dark:ring-indigo-700">
+                  <div class="grid grid-cols-1 lg:grid-cols-12 gap-3">
+                    <div class="lg:col-span-3">
+                      <label class="block text-[10px] font-bold text-slate-600 dark:text-slate-400 mb-1.5 uppercase tracking-wider">Producto</label>
+                      <select v-model="ajusteTradicionalForm.item_id"
+                              class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md text-sm font-semibold focus:border-indigo-500 focus:ring-1 focus:ring-indigo-200 dark:bg-slate-900 dark:text-slate-100 transition-all bg-white">
+                        <option v-for="it in items" :key="it.id" :value="it.id">
+                          {{ it.tamano ? it.tamano.toUpperCase() : (it.descripcion || 'Producto') }}
+                        </option>
+                      </select>
+                    </div>
+
+                    <div class="lg:col-span-2">
+                      <label class="block text-[10px] font-bold text-slate-600 dark:text-slate-400 mb-1.5 uppercase tracking-wider">Tipo</label>
+                      <select v-model="ajusteTradicionalForm.tipo"
+                              class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md text-sm font-semibold focus:border-indigo-500 focus:ring-1 focus:ring-indigo-200 dark:bg-slate-900 dark:text-slate-100 transition-all bg-white">
+                        <option value="extra">Extra</option>
+                        <option value="faltante">Faltante</option>
+                      </select>
+                    </div>
+
+                    <div class="lg:col-span-2">
+                      <label class="block text-[10px] font-bold text-slate-600 dark:text-slate-400 mb-1.5 uppercase tracking-wider">Cantidad</label>
+                      <input type="number" min="1" step="1"
+                             v-model.number="ajusteTradicionalForm.cantidad"
+                             class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md text-sm font-semibold focus:border-indigo-500 focus:ring-1 focus:ring-indigo-200 dark:bg-slate-900 dark:text-slate-100 transition-all" />
+                    </div>
+
+                    <div class="lg:col-span-3">
+                      <label class="block text-[10px] font-bold text-slate-600 dark:text-slate-400 mb-1.5 uppercase tracking-wider">
+                        Motivo <span v-if="ajusteTradicionalForm.tipo === 'extra'" class="text-rose-600">*</span>
+                      </label>
+                      <textarea rows="2"
+                                v-model="ajusteTradicionalForm.motivo"
+                                :placeholder="ajusteTradicionalForm.tipo === 'extra' ? 'Motivo obligatorio para extra' : 'Motivo (opcional)'"
+                                class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-200 dark:bg-slate-900 dark:text-slate-100 transition-all bg-white resize-none"></textarea>
+                    </div>
+
+                    <div class="lg:col-span-2 flex items-end">
+                      <button @click="registrarAjusteTradicional" type="button"
+                              :disabled="ajusteTradicionalForm.processing"
+                              class="w-full px-4 py-2 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 disabled:from-slate-400 disabled:to-slate-500 disabled:cursor-not-allowed text-white font-bold text-sm rounded-md transition-all flex items-center justify-center gap-2 shadow hover:shadow-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1">
+                        <span>{{ ajusteTradicionalForm.processing ? 'Guardando...' : 'Guardar' }}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <p v-if="ajusteTradicionalMsg" class="mt-2 text-xs text-emerald-700 dark:text-emerald-400">{{ ajusteTradicionalMsg }}</p>
+                  <p v-if="ajusteTradicionalError" class="mt-2 text-xs text-red-600 dark:text-red-400">{{ ajusteTradicionalError }}</p>
+                </div>
+              </div>
               
               <!-- Avances Registrados dentro de la misma card -->
               <div v-if="avances && avances.length > 0" class="-mx-4 sm:-mx-5 px-4 sm:px-5 py-3.5 bg-white dark:bg-slate-900/50 border-t border-slate-200 dark:border-slate-700">
@@ -1097,17 +1310,17 @@ function aplicarFaltantesServicio(servicioId) {
               <div class="px-4 sm:px-5 py-4 space-y-4">
               
               <!-- KPIs Mini Stat Tiles -->
-              <div class="grid grid-cols-2 md:grid-cols-5 gap-2.5">
-                <!-- Planeado -->
+              <div class="grid grid-cols-2 md:grid-cols-6 gap-2.5">
+                <!-- Solicitado -->
                 <div class="relative bg-gradient-to-br from-blue-50 to-blue-50/50 border-l-4 border-blue-500 rounded-lg p-2.5 shadow-sm ring-1 ring-slate-900/5 dark:from-blue-950/40 dark:to-blue-950/20 dark:border-blue-400 dark:ring-blue-500/20">
-                  <p class="text-[10px] uppercase tracking-wider font-extrabold text-blue-600 dark:text-blue-400 leading-none">Planeado</p>
-                  <p class="text-2xl font-black text-blue-900 dark:text-blue-100 leading-none mt-1.5">{{ servicio.planeado || 0 }}</p>
+                  <p class="text-[10px] uppercase tracking-wider font-extrabold text-blue-600 dark:text-blue-400 leading-none">Solicitado</p>
+                  <p class="text-2xl font-black text-blue-900 dark:text-blue-100 leading-none mt-1.5">{{ servicio.solicitado || servicio.planeado || 0 }}</p>
                 </div>
                 
-                <!-- Completado -->
-                <div class="relative bg-gradient-to-br from-emerald-50 to-emerald-50/50 border-l-4 border-emerald-500 rounded-lg p-2.5 shadow-sm ring-1 ring-slate-900/5 dark:from-emerald-950/40 dark:to-emerald-950/20 dark:border-emerald-400 dark:ring-emerald-500/20">
-                  <p class="text-[10px] uppercase tracking-wider font-extrabold text-emerald-600 dark:text-emerald-400 leading-none">Completado</p>
-                  <p class="text-2xl font-black text-emerald-900 dark:text-emerald-100 leading-none mt-1.5">{{ servicio.completado || 0 }}</p>
+                <!-- Extra -->
+                <div class="relative bg-gradient-to-br from-orange-50 to-orange-50/50 border-l-4 border-orange-500 rounded-lg p-2.5 shadow-sm ring-1 ring-slate-900/5 dark:from-orange-950/40 dark:to-orange-950/20 dark:border-orange-400 dark:ring-orange-500/20">
+                  <p class="text-[10px] uppercase tracking-wider font-extrabold text-orange-600 dark:text-orange-400 leading-none">Extra</p>
+                  <p class="text-2xl font-black text-orange-900 dark:text-orange-100 leading-none mt-1.5">{{ servicio.extra || 0 }}</p>
                 </div>
                 
                 <!-- Faltantes Registrados -->
@@ -1115,17 +1328,23 @@ function aplicarFaltantesServicio(servicioId) {
                   <p class="text-[10px] uppercase tracking-wider font-extrabold text-amber-600 dark:text-amber-400 leading-none">Faltantes</p>
                   <p class="text-2xl font-black text-amber-900 dark:text-amber-100 leading-none mt-1.5">{{ servicio.faltantes_registrados || 0 }}</p>
                 </div>
+
+                <!-- Total Cobrable -->
+                <div class="relative bg-gradient-to-br from-indigo-50 to-indigo-50/50 border-l-4 border-indigo-500 rounded-lg p-2.5 shadow-sm ring-1 ring-slate-900/5 dark:from-indigo-950/40 dark:to-indigo-950/20 dark:border-indigo-400 dark:ring-indigo-500/20">
+                  <p class="text-[10px] uppercase tracking-wider font-extrabold text-indigo-600 dark:text-indigo-400 leading-none">Total cobrable</p>
+                  <p class="text-2xl font-black text-indigo-900 dark:text-indigo-100 leading-none mt-1.5">{{ servicio.total_cobrable || servicio.total || 0 }}</p>
+                </div>
+
+                <!-- Completado -->
+                <div class="relative bg-gradient-to-br from-emerald-50 to-emerald-50/50 border-l-4 border-emerald-500 rounded-lg p-2.5 shadow-sm ring-1 ring-slate-900/5 dark:from-emerald-950/40 dark:to-emerald-950/20 dark:border-emerald-400 dark:ring-emerald-500/20">
+                  <p class="text-[10px] uppercase tracking-wider font-extrabold text-emerald-600 dark:text-emerald-400 leading-none">Completado</p>
+                  <p class="text-2xl font-black text-emerald-900 dark:text-emerald-100 leading-none mt-1.5">{{ servicio.completado || 0 }}</p>
+                </div>
                 
                 <!-- Pendiente -->
                 <div class="relative bg-gradient-to-br from-purple-50 to-purple-50/50 border-l-4 border-purple-500 rounded-lg p-2.5 shadow-sm ring-1 ring-slate-900/5 dark:from-purple-950/40 dark:to-purple-950/20 dark:border-purple-400 dark:ring-purple-500/20">
                   <p class="text-[10px] uppercase tracking-wider font-extrabold text-purple-600 dark:text-purple-400 leading-none">Pendiente</p>
                   <p class="text-2xl font-black text-purple-900 dark:text-purple-100 leading-none mt-1.5">{{ servicio.pendiente || 0 }}</p>
-                </div>
-                
-                <!-- Total -->
-                <div class="relative bg-gradient-to-br from-slate-50 to-slate-50/50 border-l-4 border-slate-400 rounded-lg p-2.5 shadow-sm ring-1 ring-slate-900/5 dark:from-slate-800/40 dark:to-slate-800/20 dark:border-slate-500 dark:ring-slate-500/20">
-                  <p class="text-[10px] uppercase tracking-wider font-extrabold text-slate-600 dark:text-slate-400 leading-none">Total</p>
-                  <p class="text-2xl font-black text-slate-900 dark:text-slate-100 leading-none mt-1.5">{{ servicio.total || servicio.planeado || 0 }}</p>
                 </div>
               </div>
               
@@ -1143,7 +1362,9 @@ function aplicarFaltantesServicio(servicioId) {
                   <thead class="bg-slate-100/60 dark:bg-slate-800/60">
                     <tr>
                       <th class="px-3 py-2 text-left text-[10px] uppercase tracking-wider font-bold text-slate-600 dark:text-slate-400">Descripción</th>
-                      <th class="px-3 py-2 text-center text-[10px] uppercase tracking-wider font-bold text-slate-600 dark:text-slate-400">Planeado</th>
+                      <th class="px-3 py-2 text-center text-[10px] uppercase tracking-wider font-bold text-slate-600 dark:text-slate-400">Solicitado</th>
+                      <th class="px-3 py-2 text-center text-[10px] uppercase tracking-wider font-bold text-orange-600 dark:text-orange-400">Extra</th>
+                      <th class="px-3 py-2 text-center text-[10px] uppercase tracking-wider font-bold text-indigo-600 dark:text-indigo-400">Total cobrable</th>
                       <th class="px-3 py-2 text-center text-[10px] uppercase tracking-wider font-bold text-slate-600 dark:text-slate-400">Completado</th>
                       <th class="px-3 py-2 text-center text-[10px] uppercase tracking-wider font-bold text-amber-600 dark:text-amber-400">Faltantes</th>
                       <th class="px-3 py-2 text-center text-[10px] uppercase tracking-wider font-bold text-purple-600 dark:text-purple-400">Pendiente</th>
@@ -1163,11 +1384,22 @@ function aplicarFaltantesServicio(servicioId) {
                         </div>
                       </td>
                       <td class="px-3 py-2 text-center">
-                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300">{{ item.planeado || 0 }}</span>
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300">{{ item.solicitado || item.planeado || 0 }}</span>
+                      </td>
+                      <td class="px-3 py-2 text-center">
+                        <span v-if="(item.extra || 0) > 0" class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-300">
+                          {{ item.extra || 0 }}
+                        </span>
+                        <span v-else class="text-slate-400 text-xs">—</span>
+                      </td>
+                      <td class="px-3 py-2 text-center">
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300">
+                          {{ item.total_cobrable || 0 }}
+                        </span>
                       </td>
                       <td class="px-3 py-2 text-center">
                         <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold"
-                              :class="(item.completado || 0) >= (item.planeado || 0) ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300'">
+                              :class="(item.completado || 0) >= (item.total_cobrable || item.planeado || 0) ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300'">
                           {{ item.completado || 0 }}
                         </span>
                       </td>
@@ -1303,6 +1535,63 @@ function aplicarFaltantesServicio(servicioId) {
                           <span class="hidden sm:inline">Aplicar</span>
                         </button>
                       </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div v-if="can?.reportarAvance && (servicio.items || []).length" class="-mx-4 sm:-mx-5 px-4 sm:px-5 py-3.5 bg-indigo-50/50 dark:bg-indigo-900/20 border-t border-indigo-200 dark:border-indigo-700">
+                <div class="flex items-center gap-2.5 mb-3">
+                  <svg class="w-4 h-4 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                  </svg>
+                  <h4 class="font-bold text-xs uppercase tracking-wider text-indigo-700 dark:text-indigo-300">Registrar ajuste</h4>
+                </div>
+
+                <div class="bg-white dark:bg-slate-900/50 rounded-lg p-3 ring-1 ring-indigo-200 dark:ring-indigo-700">
+                  <div class="grid grid-cols-1 lg:grid-cols-12 gap-3">
+                    <div class="lg:col-span-3">
+                      <label class="block text-[10px] font-bold text-slate-600 dark:text-slate-400 mb-1.5 uppercase tracking-wider">Producto</label>
+                      <select v-model="ajustesMultiServicio[servicio.id].detalle_id"
+                              class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md text-sm font-semibold focus:border-indigo-500 focus:ring-1 focus:ring-indigo-200 dark:bg-slate-900 dark:text-slate-100 transition-all bg-white">
+                        <option v-for="item in servicio.items" :key="item.id" :value="item.id">
+                          {{ item.tamano ? item.tamano.toUpperCase() : (item.descripcion_item || 'Producto') }}
+                        </option>
+                      </select>
+                    </div>
+
+                    <div class="lg:col-span-2">
+                      <label class="block text-[10px] font-bold text-slate-600 dark:text-slate-400 mb-1.5 uppercase tracking-wider">Tipo</label>
+                      <select v-model="ajustesMultiServicio[servicio.id].tipo"
+                              class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md text-sm font-semibold focus:border-indigo-500 focus:ring-1 focus:ring-indigo-200 dark:bg-slate-900 dark:text-slate-100 transition-all bg-white">
+                        <option value="extra">Extra</option>
+                        <option value="faltante">Faltante</option>
+                      </select>
+                    </div>
+
+                    <div class="lg:col-span-2">
+                      <label class="block text-[10px] font-bold text-slate-600 dark:text-slate-400 mb-1.5 uppercase tracking-wider">Cantidad</label>
+                      <input type="number" min="1" step="1"
+                             v-model.number="ajustesMultiServicio[servicio.id].cantidad"
+                             class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md text-sm font-semibold focus:border-indigo-500 focus:ring-1 focus:ring-indigo-200 dark:bg-slate-900 dark:text-slate-100 transition-all" />
+                    </div>
+
+                    <div class="lg:col-span-3">
+                      <label class="block text-[10px] font-bold text-slate-600 dark:text-slate-400 mb-1.5 uppercase tracking-wider">
+                        Motivo <span v-if="ajustesMultiServicio[servicio.id].tipo === 'extra'" class="text-rose-600">*</span>
+                      </label>
+                      <textarea rows="2"
+                                v-model="ajustesMultiServicio[servicio.id].motivo"
+                                :placeholder="ajustesMultiServicio[servicio.id].tipo === 'extra' ? 'Motivo obligatorio para extra' : 'Motivo (opcional)'"
+                                class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-200 dark:bg-slate-900 dark:text-slate-100 transition-all bg-white resize-none"></textarea>
+                    </div>
+
+                    <div class="lg:col-span-2 flex items-end">
+                      <button @click="registrarAjusteServicio(servicio.id)" type="button"
+                              :disabled="ajustesMultiServicio[servicio.id]?.processing"
+                              class="w-full px-4 py-2 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 disabled:from-slate-400 disabled:to-slate-500 disabled:cursor-not-allowed text-white font-bold text-sm rounded-md transition-all flex items-center justify-center gap-2 shadow hover:shadow-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1">
+                        <span>{{ ajustesMultiServicio[servicio.id]?.processing ? 'Guardando...' : 'Guardar' }}</span>
+                      </button>
                     </div>
                   </div>
                 </div>
