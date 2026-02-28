@@ -30,5 +30,13 @@ class FeatureSeeder extends Seeder
                 'descripcion' => 'Permite subir/parsear Excel para precargar solicitudes y descargar Excel origen.',
             ]
         );
+
+        Feature::updateOrCreate(
+            ['key' => 'service_customs_fields'],
+            [
+                'nombre' => 'Campos aduanales (SKU/Origen/Pedimento)',
+                'descripcion' => 'Habilita captura de SKU, Origen y Pedimento en Información del Servicio.',
+            ]
+        );
     }
 }

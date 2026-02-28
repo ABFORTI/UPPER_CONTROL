@@ -315,6 +315,9 @@ class OrdenController extends Controller
             'solicitud'           => [
                 'id' => $solicitud->id,
                 'descripcion' => $solicitud->descripcion,
+                'sku' => $solicitud->sku,
+                'origen' => $solicitud->origen,
+                'pedimento' => $solicitud->pedimento,
                 'cantidad' => (int)$solicitud->cantidad,
                 'id_servicio' => (int)$solicitud->id_servicio,
                 'id_centrotrabajo' => (int)$solicitud->id_centrotrabajo,

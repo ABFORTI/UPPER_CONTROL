@@ -82,6 +82,10 @@ class ExcelOtParser
             'solicitante' => ['solicitante', 'cliente'],
             'cantidad' => ['cantidad', 'pzs', 'piezas'],
             'upc' => ['upc', 'codigo barras', 'código de barras'],
+            'numero_parte' => ['n/p', 'np', 'numero de parte', 'número de parte'],
+            'sku' => ['sku'],
+            'origen' => ['origen', 'pais de origen', 'país de origen'],
+            'pedimento' => ['pedimento', 'numero de pedimento', 'número de pedimento'],
         ];
         
         // Buscar etiquetas en las primeras filas
@@ -206,6 +210,9 @@ class ExcelOtParser
         $qtyCol = null;
         $priceCol = null;
         $tarifaCol = null;
+        $skuCol = null;
+        $origenCol = null;
+        $pedimentoCol = null;
         $headerRow = null;
 
         // Buscar encabezados en primeras filas
@@ -214,6 +221,9 @@ class ExcelOtParser
             $foundQty = null;
             $foundPrice = null;
             $foundTarifa = null;
+            $foundSku = null;
+            $foundOrigen = null;
+            $foundPedimento = null;
 
             for ($col = 1; $col <= min($highestColumnIndex, 40); $col++) {
                 $v = $sheet->getCellByColumnAndRow($col, $row)->getValue();
@@ -232,6 +242,15 @@ class ExcelOtParser
                 if ($foundTarifa === null && (Str::contains($n, 'tarifa') || Str::contains($n, 'tipo tarifa'))) {
                     $foundTarifa = $col;
                 }
+                if ($foundSku === null && ($n === 'sku' || Str::contains($n, 'sku'))) {
+                    $foundSku = $col;
+                }
+                if ($foundOrigen === null && (Str::contains($n, 'origen') || Str::contains($n, 'pais de origen') || Str::contains($n, 'país de origen'))) {
+                    $foundOrigen = $col;
+                }
+                if ($foundPedimento === null && (Str::contains($n, 'pedimento') || Str::contains($n, 'numero de pedimento') || Str::contains($n, 'número de pedimento'))) {
+                    $foundPedimento = $col;
+                }
             }
 
             if ($foundService !== null) {
@@ -240,6 +259,9 @@ class ExcelOtParser
                 $qtyCol = $foundQty;
                 $priceCol = $foundPrice;
                 $tarifaCol = $foundTarifa;
+                $skuCol = $foundSku;
+                $origenCol = $foundOrigen;
+                $pedimentoCol = $foundPedimento;
                 break;
             }
         }
@@ -263,6 +285,9 @@ class ExcelOtParser
             $qv = $qtyCol ? $sheet->getCellByColumnAndRow($qtyCol, $row)->getValue() : null;
             $pv = $priceCol ? $sheet->getCellByColumnAndRow($priceCol, $row)->getValue() : null;
             $tv = $tarifaCol ? $sheet->getCellByColumnAndRow($tarifaCol, $row)->getValue() : null;
+            $skuv = $skuCol ? $sheet->getCellByColumnAndRow($skuCol, $row)->getValue() : null;
+            $origenv = $origenCol ? $sheet->getCellByColumnAndRow($origenCol, $row)->getValue() : null;
+            $pedimentov = $pedimentoCol ? $sheet->getCellByColumnAndRow($pedimentoCol, $row)->getValue() : null;
 
             $names = $this->splitServicios($svStr);
             $qtyLines = $this->splitServicios($qv);
@@ -275,6 +300,9 @@ class ExcelOtParser
                 $servicios[] = [
                     'nombre_servicio' => $name,
                     'cantidad' => $qtyLines[$i] ?? $qv,
+                    'sku' => $skuv,
+                    'origen' => $origenv,
+                    'pedimento' => $pedimentov,
                     'tipo_tarifa' => $tv ? trim((string) $tv) : 'NORMAL',
                     'precio_unitario' => $priceLines[$i] ?? $pv,
                 ];

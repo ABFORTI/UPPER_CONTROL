@@ -168,6 +168,11 @@ function canPreview(mime) {
                             {{ ss.cantidad }} {{ ss.tipo_cobro === 'tamanos' ? 'unidades' : 'piezas' }} · 
                             {{ money(ss.precio_unitario) }} c/u
                           </p>
+                          <p v-if="ss.sku || ss.origen || ss.pedimento" class="text-xs text-gray-500 dark:text-slate-400 mt-1">
+                            <span v-if="ss.sku">SKU: {{ ss.sku }}</span>
+                            <span v-if="ss.origen" class="ml-2">Origen: {{ ss.origen }}</span>
+                            <span v-if="ss.pedimento" class="ml-2">Pedimento: {{ ss.pedimento }}</span>
+                          </p>
                         </div>
                       </div>
                       <p class="text-lg font-bold text-indigo-600 dark:text-indigo-400">
@@ -220,6 +225,21 @@ function canPreview(mime) {
               <div v-if="solicitud.descripcion" class="bg-gray-50 dark:bg-slate-800/70 rounded-xl p-4 border border-gray-200 dark:border-slate-700">
                 <label class="text-xs font-semibold text-gray-600 dark:text-slate-300 uppercase tracking-wide">Descripción</label>
                 <p class="mt-2 text-gray-700 dark:text-slate-200 leading-relaxed">{{ solicitud.descripcion }}</p>
+              </div>
+
+              <div v-if="solicitud.sku || solicitud.origen || solicitud.pedimento" class="grid md:grid-cols-3 gap-4">
+                <div v-if="solicitud.sku" class="bg-gray-50 dark:bg-slate-800/70 rounded-xl p-4 border border-gray-200 dark:border-slate-700">
+                  <label class="text-xs font-semibold text-gray-600 dark:text-slate-300 uppercase tracking-wide">SKU</label>
+                  <p class="mt-1 text-lg font-bold text-gray-800 dark:text-slate-100">{{ solicitud.sku }}</p>
+                </div>
+                <div v-if="solicitud.origen" class="bg-gray-50 dark:bg-slate-800/70 rounded-xl p-4 border border-gray-200 dark:border-slate-700">
+                  <label class="text-xs font-semibold text-gray-600 dark:text-slate-300 uppercase tracking-wide">Origen</label>
+                  <p class="mt-1 text-lg font-bold text-gray-800 dark:text-slate-100">{{ solicitud.origen }}</p>
+                </div>
+                <div v-if="solicitud.pedimento" class="bg-gray-50 dark:bg-slate-800/70 rounded-xl p-4 border border-gray-200 dark:border-slate-700">
+                  <label class="text-xs font-semibold text-gray-600 dark:text-slate-300 uppercase tracking-wide">Pedimento</label>
+                  <p class="mt-1 text-lg font-bold text-gray-800 dark:text-slate-100">{{ solicitud.pedimento }}</p>
+                </div>
               </div>
 
               <div v-if="solicitud.notas" class="bg-amber-50 dark:bg-amber-500/20 rounded-xl p-4 border border-amber-200 dark:border-amber-500/40">

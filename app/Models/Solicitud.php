@@ -16,7 +16,7 @@ class Solicitud extends Model {
   ];
   protected $fillable=[
     'folio','id_cliente','id_centrotrabajo','id_servicio',
-    'tamano','descripcion','id_area','id_centrocosto','id_marca','cantidad','subtotal','iva','total','notas','estatus','aprobada_por','aprobada_at','tamanos_json',
+    'tamano','descripcion','sku','origen','pedimento','id_area','id_centrocosto','id_marca','cantidad','subtotal','iva','total','notas','estatus','aprobada_por','aprobada_at','tamanos_json',
     'motivo_rechazo',
     'id_cotizacion',
     'id_cotizacion_item',

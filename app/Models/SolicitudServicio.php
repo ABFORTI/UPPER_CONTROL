@@ -4,14 +4,21 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Spatie\Activitylog\LogOptions;
+use Spatie\Activitylog\Traits\LogsActivity;
 
 class SolicitudServicio extends Model
 {
+    use LogsActivity;
+
     protected $table = 'solicitud_servicios';
     
     protected $fillable = [
         'solicitud_id',
         'servicio_id',
+        'sku',
+        'origen',
+        'pedimento',
         'tipo_cobro',
         'cantidad',
         'precio_unitario',
@@ -33,6 +40,15 @@ class SolicitudServicio extends Model
     public function servicio(): BelongsTo
     {
         return $this->belongsTo(ServicioEmpresa::class, 'servicio_id');
+    }
+
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()
+            ->useLogName('solicitud_servicios')
+            ->logOnly(['sku', 'origen', 'pedimento'])
+            ->logOnlyDirty()
+            ->dontSubmitEmptyLogs();
     }
 
     // Boot para calcular subtotal automáticamente

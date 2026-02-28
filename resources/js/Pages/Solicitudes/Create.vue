@@ -6,6 +6,7 @@ import UploadSolicitudExcel from '@/Components/UploadSolicitudExcel.vue'
 const page = usePage()
 const enabledFeatures = computed(() => page.props.auth?.features ?? [])
 const canUploadExcel = computed(() => (enabledFeatures.value || []).includes('subir_excel'))
+const canServiceCustomsFields = computed(() => (enabledFeatures.value || []).includes('service_customs_fields'))
 
 
 const props = defineProps({
@@ -32,6 +33,9 @@ function servicioMultipleVacio() {
   return {
     id_servicio: '',
     cantidad: null,
+    sku: '',
+    origen: '',
+    pedimento: '',
     tipo_tarifa: 'NORMAL',
     precio_unitario: null,
   }
@@ -41,6 +45,9 @@ const form = useForm({
 id_centrotrabajo: null,
 id_servicio: '',
 descripcion: '',
+sku: '',
+origen: '',
+pedimento: '',
 id_area: null,
 cantidad: 1,
 excel_stored_name: null,
@@ -56,6 +63,9 @@ serviciosMultiples: [
   {
     id_servicio: '',
     cantidad: null,
+    sku: '',
+    origen: '',
+    pedimento: '',
     tipo_tarifa: 'NORMAL',
     precio_unitario: null,
   }
@@ -270,6 +280,11 @@ if (multipleServicios.value) {
   payload.servicios = form.serviciosMultiples.map(s => ({
     id_servicio: s.id_servicio,
     cantidad: +(s.cantidad ?? form.cantidad) || 1,
+    ...(canServiceCustomsFields.value ? {
+      sku: s.sku ?? '',
+      origen: s.origen ?? '',
+      pedimento: s.pedimento ?? '',
+    } : {}),
   }))
   payload.cantidad = +form.cantidad || 1
   
@@ -281,6 +296,11 @@ if (multipleServicios.value) {
 } else {
   // Modo simple (un solo servicio)
   payload.id_servicio = form.id_servicio
+  if (canServiceCustomsFields.value) {
+    payload.sku = form.sku ?? ''
+    payload.origen = form.origen ?? ''
+    payload.pedimento = form.pedimento ?? ''
+  }
   if (usaTamanos.value) payload.tamanos = {
     // Ya no se envían tamaños; sólo total de piezas
   }
@@ -304,6 +324,11 @@ for (const [key, value] of Object.entries(payload)) {
     value.forEach((servicio, index) => {
       formData.append(`servicios[${index}][id_servicio]`, servicio.id_servicio)
       formData.append(`servicios[${index}][cantidad]`, servicio.cantidad)
+      if (canServiceCustomsFields.value) {
+        formData.append(`servicios[${index}][sku]`, servicio.sku ?? '')
+        formData.append(`servicios[${index}][origen]`, servicio.origen ?? '')
+        formData.append(`servicios[${index}][pedimento]`, servicio.pedimento ?? '')
+      }
     })
   } else if (value !== null && value !== undefined) {
     formData.append(key, value)
@@ -399,6 +424,18 @@ function handlePrefillLoaded({ prefill, archivo, servicios, is_multi, warnings }
     form.descripcion = prefill.descripcion_producto
   }
 
+  if (canServiceCustomsFields.value) {
+    if (prefill.sku !== undefined && prefill.sku !== null) {
+      form.sku = String(prefill.sku)
+    }
+    if (prefill.origen !== undefined && prefill.origen !== null) {
+      form.origen = String(prefill.origen)
+    }
+    if (prefill.pedimento !== undefined && prefill.pedimento !== null) {
+      form.pedimento = String(prefill.pedimento)
+    }
+  }
+
   if (prefill.cantidad !== undefined && prefill.cantidad !== null) {
     const n = Number(prefill.cantidad)
     if (Number.isFinite(n) && n > 0) form.cantidad = n
@@ -407,6 +444,17 @@ function handlePrefillLoaded({ prefill, archivo, servicios, is_multi, warnings }
   // Servicios detectados desde Excel
   const list = Array.isArray(servicios) ? servicios : []
   const multi = !!is_multi || list.length >= 2
+
+  if (canServiceCustomsFields.value) {
+    const firstWithCustoms = list.find(s => s?.sku || s?.origen || s?.pedimento) || list[0] || {}
+    const nextSku = firstWithCustoms?.sku ?? prefill?.sku ?? ''
+    const nextOrigen = firstWithCustoms?.origen ?? prefill?.origen ?? ''
+    const nextPedimento = firstWithCustoms?.pedimento ?? prefill?.pedimento ?? ''
+
+    form.sku = nextSku !== null && nextSku !== undefined ? String(nextSku) : ''
+    form.origen = nextOrigen !== null && nextOrigen !== undefined ? String(nextOrigen) : ''
+    form.pedimento = nextPedimento !== null && nextPedimento !== undefined ? String(nextPedimento) : ''
+  }
 
   if (list.length > 0) {
     if (multi) {
@@ -418,6 +466,9 @@ function handlePrefillLoaded({ prefill, archivo, servicios, is_multi, warnings }
       form.serviciosMultiples = list.map(s => ({
         id_servicio: s.id_servicio ? String(s.id_servicio) : '',
         cantidad: s.cantidad ?? null,
+        sku: s.sku ?? '',
+        origen: s.origen ?? '',
+        pedimento: s.pedimento ?? '',
         tipo_tarifa: s.tipo_tarifa || 'NORMAL',
         precio_unitario: s.precio_unitario ?? null,
       }))
@@ -435,6 +486,11 @@ function handlePrefillLoaded({ prefill, archivo, servicios, is_multi, warnings }
       form.serviciosMultiples = [servicioMultipleVacio()]
       const s0 = list[0]
       if (s0?.id_servicio) form.id_servicio = s0.id_servicio
+      if (canServiceCustomsFields.value) {
+        form.sku = s0?.sku ? String(s0.sku) : (prefill?.sku ? String(prefill.sku) : '')
+        form.origen = s0?.origen ? String(s0.origen) : (prefill?.origen ? String(prefill.origen) : '')
+        form.pedimento = s0?.pedimento ? String(s0.pedimento) : (prefill?.pedimento ? String(prefill.pedimento) : '')
+      }
       if (s0?.cantidad) {
         const n = Number(s0.cantidad)
         if (Number.isFinite(n) && n > 0) form.cantidad = n
@@ -633,6 +689,38 @@ function handlePrefillLoaded({ prefill, archivo, servicios, is_multi, warnings }
                       {{ form.errors.descripcion }}
                     </p>
                   </div>
+
+                  <div v-if="canServiceCustomsFields" class="grid grid-cols-1 md:grid-cols-3 gap-5">
+                    <div class="form-group">
+                      <label class="block text-sm font-semibold text-gray-700 mb-2">SKU</label>
+                      <input
+                        v-model="form.sku"
+                        class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none bg-gray-50 hover:bg-white"
+                        placeholder="SKU"
+                      />
+                      <p v-if="form.errors.sku" class="text-red-600 text-sm mt-2">{{ form.errors.sku }}</p>
+                    </div>
+
+                    <div class="form-group">
+                      <label class="block text-sm font-semibold text-gray-700 mb-2">Origen</label>
+                      <input
+                        v-model="form.origen"
+                        class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none bg-gray-50 hover:bg-white"
+                        placeholder="Origen"
+                      />
+                      <p v-if="form.errors.origen" class="text-red-600 text-sm mt-2">{{ form.errors.origen }}</p>
+                    </div>
+
+                    <div class="form-group">
+                      <label class="block text-sm font-semibold text-gray-700 mb-2">Pedimento</label>
+                      <input
+                        v-model="form.pedimento"
+                        class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none bg-gray-50 hover:bg-white"
+                        placeholder="Pedimento"
+                      />
+                      <p v-if="form.errors.pedimento" class="text-red-600 text-sm mt-2">{{ form.errors.pedimento }}</p>
+                    </div>
+                  </div>
                 </div>
 
                 <!-- Modo Múltiple: Varios servicios -->
@@ -752,6 +840,44 @@ function handlePrefillLoaded({ prefill, archivo, servicios, is_multi, warnings }
                                 : 'Catálogo' }}
                             </span>
                           </span>
+                        </div>
+
+                        <div v-if="canServiceCustomsFields" class="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
+                          <div>
+                            <label class="block text-xs font-semibold text-gray-600 mb-1">SKU</label>
+                            <input
+                              v-model="servicio.sku"
+                              class="w-full px-3 py-2 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none bg-white text-sm"
+                              placeholder="SKU"
+                            />
+                            <p v-if="form.errors[`servicios.${index}.sku`]" class="text-red-600 text-xs mt-1">
+                              {{ form.errors[`servicios.${index}.sku`] }}
+                            </p>
+                          </div>
+
+                          <div>
+                            <label class="block text-xs font-semibold text-gray-600 mb-1">Origen</label>
+                            <input
+                              v-model="servicio.origen"
+                              class="w-full px-3 py-2 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none bg-white text-sm"
+                              placeholder="Origen"
+                            />
+                            <p v-if="form.errors[`servicios.${index}.origen`]" class="text-red-600 text-xs mt-1">
+                              {{ form.errors[`servicios.${index}.origen`] }}
+                            </p>
+                          </div>
+
+                          <div>
+                            <label class="block text-xs font-semibold text-gray-600 mb-1">Pedimento</label>
+                            <input
+                              v-model="servicio.pedimento"
+                              class="w-full px-3 py-2 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none bg-white text-sm"
+                              placeholder="Pedimento"
+                            />
+                            <p v-if="form.errors[`servicios.${index}.pedimento`]" class="text-red-600 text-xs mt-1">
+                              {{ form.errors[`servicios.${index}.pedimento`] }}
+                            </p>
+                          </div>
                         </div>
                       </div>
                     </div>

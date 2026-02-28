@@ -53,6 +53,15 @@ class SolicitudExcelController extends Controller
             if (!empty($datos['area'])) {
                 $prefill['area'] = $datos['area'];
             }
+            if (!empty($datos['sku'])) {
+                $prefill['sku'] = trim((string) $datos['sku']);
+            }
+            if (!empty($datos['origen'])) {
+                $prefill['origen'] = trim((string) $datos['origen']);
+            }
+            if (!empty($datos['pedimento'])) {
+                $prefill['pedimento'] = trim((string) $datos['pedimento']);
+            }
 
             // Adicional: cantidad (para precargar el formulario)
             if (!empty($datos['cantidad'])) {
@@ -76,6 +85,9 @@ class SolicitudExcelController extends Controller
                     'id_servicio' => (int) $serv->id,
                     'nombre_servicio' => (string) $serv->nombre,
                     'cantidad' => $this->parseCantidad($s['cantidad'] ?? $prefill['cantidad'] ?? null),
+                    'sku' => $this->parseTexto($s['sku'] ?? $prefill['sku'] ?? null),
+                    'origen' => $this->parseTexto($s['origen'] ?? $prefill['origen'] ?? null),
+                    'pedimento' => $this->parseTexto($s['pedimento'] ?? $prefill['pedimento'] ?? null),
                     'tipo_tarifa' => (string)($s['tipo_tarifa'] ?? 'NORMAL'),
                     'precio_unitario' => $this->parsePrecio($s['precio_unitario'] ?? null),
                 ];
@@ -91,6 +103,9 @@ class SolicitudExcelController extends Controller
                         'id_servicio' => (int) $serv->id,
                         'nombre_servicio' => (string) $serv->nombre,
                         'cantidad' => $prefill['cantidad'] ?? null,
+                        'sku' => $this->parseTexto($prefill['sku'] ?? null),
+                        'origen' => $this->parseTexto($prefill['origen'] ?? null),
+                        'pedimento' => $this->parseTexto($prefill['pedimento'] ?? null),
                         'tipo_tarifa' => 'NORMAL',
                         'precio_unitario' => null,
                     ];
@@ -183,6 +198,13 @@ class SolicitudExcelController extends Controller
         }
 
         return is_numeric($raw) ? (float) $raw : null;
+    }
+
+    private function parseTexto($value): ?string
+    {
+        if ($value === null) return null;
+        $text = trim((string) $value);
+        return $text !== '' ? $text : null;
     }
 
     private function buscarServicioPorNombreOCodigo(string $texto): ?ServicioEmpresa

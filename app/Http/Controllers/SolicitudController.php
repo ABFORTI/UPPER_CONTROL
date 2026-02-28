@@ -257,11 +257,17 @@ class SolicitudController extends Controller
                 'servicios' => ['required', 'array', 'min:1'],
                 'servicios.*.id_servicio' => ['required', 'integer', 'exists:servicios_empresa,id'],
                 'servicios.*.cantidad' => ['required', 'integer', 'min:1'],
+                'servicios.*.sku' => ['nullable', 'string', 'max:255'],
+                'servicios.*.origen' => ['nullable', 'string', 'max:255'],
+                'servicios.*.pedimento' => ['nullable', 'string', 'max:255'],
                 'cantidad' => ['required', 'integer', 'min:1'],
             ]);
         } else {
             $req->validate([
                 'id_servicio' => ['required', 'integer', 'exists:servicios_empresa,id'],
+                'sku' => ['nullable', 'string', 'max:255'],
+                'origen' => ['nullable', 'string', 'max:255'],
+                'pedimento' => ['nullable', 'string', 'max:255'],
             ]);
         }
         
@@ -283,6 +289,16 @@ class SolicitudController extends Controller
                 'centro' => 'No se pudo determinar el centro de trabajo para la solicitud.'
             ])->withInput();
         }
+
+        $centro = CentroTrabajo::query()->find($centroId);
+        $customsFieldsEnabled = (bool) ($centro?->hasFeature('service_customs_fields') ?? false);
+        $normalizeCustomField = static function ($value): ?string {
+            if ($value === null) {
+                return null;
+            }
+            $value = trim((string) $value);
+            return $value !== '' ? $value : null;
+        };
 
         // Para roles no privilegiados, deben tener centro_trabajo_id asignado
     if (!($u && $u->hasAnyRole(['admin','facturacion','calidad','control','comercial'])) && (!$u || !$u->centro_trabajo_id)) {
@@ -380,11 +396,18 @@ class SolicitudController extends Controller
                     if (!$usaTamanosCentro) {
                         $precioUnitario = (float)$pricing->precioUnitario($centroId, $serv->id, null);
                     }
+
+                    $sku = $customsFieldsEnabled ? $normalizeCustomField($servicioData['sku'] ?? null) : null;
+                    $origen = $customsFieldsEnabled ? $normalizeCustomField($servicioData['origen'] ?? null) : null;
+                    $pedimento = $customsFieldsEnabled ? $normalizeCustomField($servicioData['pedimento'] ?? null) : null;
                     
                     // Crear SolicitudServicio
                     \App\Models\SolicitudServicio::create([
                         'solicitud_id'     => $sol->id,
                         'servicio_id'      => $serv->id,
+                        'sku'              => $sku,
+                        'origen'           => $origen,
+                        'pedimento'        => $pedimento,
                         'tipo_cobro'       => $usaTamanosCentro ? 'tamanos' : 'cantidad',
                         'cantidad'         => $cantidadServicio,
                         'precio_unitario'  => $precioUnitario,
@@ -445,6 +468,10 @@ class SolicitudController extends Controller
         $attempts = 0; $maxAttempts = 3; $lastException = null;
         while ($attempts < $maxAttempts) {
             try {
+                $sku = $customsFieldsEnabled ? $normalizeCustomField($req->input('sku')) : null;
+                $origen = $customsFieldsEnabled ? $normalizeCustomField($req->input('origen')) : null;
+                $pedimento = $customsFieldsEnabled ? $normalizeCustomField($req->input('pedimento')) : null;
+
                 // Determinar si el servicio usa tamaños EN ESTE centro (per-centro)
                 $usaTamanosCentro = \App\Models\ServicioCentro::where('id_centrotrabajo', $centroId)
                     ->where('id_servicio', $serv->id)
@@ -463,6 +490,9 @@ class SolicitudController extends Controller
                         'id_centrotrabajo' => $centroId,
                         'id_servicio'      => $serv->id,
                         'descripcion'      => $req->descripcion,
+                        'sku'              => $sku,
+                        'origen'           => $origen,
+                        'pedimento'        => $pedimento,
                         'id_centrocosto'   => (int)$req->id_centrocosto,
                         'id_marca'         => $req->filled('id_marca') ? (int)$req->id_marca : null,
                         'id_area'          => $areaId,
@@ -495,6 +525,9 @@ class SolicitudController extends Controller
                         'id_centrotrabajo' => $centroId,
                         'id_servicio'      => $serv->id,
                         'descripcion'      => $req->descripcion,
+                        'sku'              => $sku,
+                        'origen'           => $origen,
+                        'pedimento'        => $pedimento,
                         'id_area'          => $areaId,
                         'id_centrocosto'   => (int)$req->id_centrocosto,
                         'id_marca'         => $req->filled('id_marca') ? (int)$req->id_marca : null,
