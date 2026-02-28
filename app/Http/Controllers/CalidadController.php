@@ -122,11 +122,25 @@ class CalidadController extends Controller
   DB::transaction(function() use ($orden, $req) {
   // Keep historical avances: do NOT delete them so history remains available for audit.
 
+      // Reiniciar producción efectiva en OTs tradicionales eliminando segmentos previos
+      // para que el pendiente se calcule desde cero tras el rechazo.
+      \App\Models\OrdenItemProduccionSegmento::where('id_orden', $orden->id)->delete();
+
       // Reset each item
       foreach ($orden->items as $it) {
         $it->cantidad_real = 0;
         $it->subtotal = 0;
         $it->save();
+      }
+
+      // Reset de producción en OTs multi-servicio
+      $idsServicios = \App\Models\OTServicio::where('ot_id', $orden->id)->pluck('id');
+      if ($idsServicios->isNotEmpty()) {
+        \App\Models\OTServicioItem::whereIn('ot_servicio_id', $idsServicios)
+          ->update([
+            'completado' => 0,
+            'subtotal' => 0,
+          ]);
       }
 
     // Update orden totals and calidad status
@@ -136,6 +150,8 @@ class CalidadController extends Controller
     $orden->acciones_correctivas = $req->input('acciones_correctivas');
     // Move back to en_proceso so TL can re-open work (if previously completed)
     $orden->estatus = 'en_proceso';
+    // Reabrir OT para producción en caso de que hubiera quedado cerrada por estatus de corte
+    $orden->ot_status = 'active';
     // Limpiar fecha_completada para indicar que la OT ya no está completada (si existe la columna)
     if (Schema::hasColumn('ordenes_trabajo', 'fecha_completada')) {
       $orden->fecha_completada = null;

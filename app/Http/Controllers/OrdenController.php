@@ -817,6 +817,15 @@ class OrdenController extends Controller
                     ->where('id_item', $item->id);
                 $segmentos = $segQ->lockForUpdate()->get();
 
+                // Sanidad para OTs rechazadas previamente: si se reinició cantidad_real a 0
+                // pero quedaron segmentos históricos, eliminarlos para reabrir producción real.
+                if ((string)($orden->calidad_resultado ?? '') === 'rechazado'
+                    && (int)($item->cantidad_real ?? 0) === 0
+                    && (int)$segmentos->sum('cantidad') > 0) {
+                    $segQ->delete();
+                    $segmentos = $segQ->lockForUpdate()->get();
+                }
+
                 // Backfill: si ya hay producción legacy pero aún no hay segmentos, crear un segmento NORMAL inicial
                 if ($segmentos->isEmpty() && (int)($item->cantidad_real ?? 0) > 0) {
                     $qtyHist = (int)$item->cantidad_real;
@@ -867,6 +876,10 @@ class OrdenController extends Controller
                     if ($puSeg <= 0) {
                         $baseQty = $qtySeg > 0 ? $qtySeg : max(1, (int)$item->cantidad_planeada);
                         $puSeg = (float)$item->subtotal / max(1, $baseQty);
+                    }
+                    if ($puSeg <= 0) {
+                        $objetivoOt = max(1, $this->sumTotalCobrableTradicional($orden));
+                        $puSeg = (float)($orden->subtotal ?? 0) / $objetivoOt;
                     }
                 } else {
                     $puSeg = (float)$precioManual;
@@ -1177,7 +1190,7 @@ class OrdenController extends Controller
         $orden->load([
             'solicitud.archivos','solicitud.centroCosto','solicitud.marca','solicitud.tamanos',
             'servicio','centro','area','items','teamLeader',
-            'items.ajustes',
+            'items.ajustes.user',
             'items.segmentosProduccion' => fn($q) => $q->with('usuario')->orderBy('created_at'),
             'avances' => fn($q) => $q->with(['usuario', 'item'])->orderByDesc('created_at'),
             'evidencias' => fn($q)=>$q->with('usuario')->orderByDesc('id'),

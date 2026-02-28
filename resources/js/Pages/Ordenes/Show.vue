@@ -245,6 +245,24 @@ const kpiFaltantesTrad = computed(() => (items.value || []).reduce((sum, it) => 
 const kpiTotalCobrableTrad = computed(() => (items.value || []).reduce((sum, it) => sum + objetivoItem(it), 0))
 const kpiCompletadoTrad = computed(() => (items.value || []).reduce((sum, it) => sum + Number(it?.cantidad_real ?? 0), 0))
 const kpiPendienteTrad = computed(() => Math.max(0, kpiTotalCobrableTrad.value - kpiCompletadoTrad.value))
+const productoItemLabel = (it) => it?.tamano ? String(it.tamano).toUpperCase() : (it?.descripcion || 'Producto')
+const ajustesTradicionales = computed(() => {
+  const listado = []
+  for (const it of (items.value || [])) {
+    for (const aj of (it?.ajustes || [])) {
+      listado.push({
+        id: aj?.id,
+        tipo: aj?.tipo,
+        cantidad: Number(aj?.cantidad || 0),
+        motivo: aj?.motivo || '',
+        created_at: aj?.created_at || null,
+        user: aj?.user || null,
+        producto: productoItemLabel(it),
+      })
+    }
+  }
+  return listado.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
+})
 const hasAvance = computed(() => {
   try {
     const okQty = (avForm.items || []).some((x, idx) => {
@@ -658,6 +676,25 @@ function guardarAvanceServicio(servicioId) {
 // Calcular restante para un item de servicio
 function restanteServicio(item) {
   return Math.max(0, (item?.planeado || 0) - (item?.completado || 0))
+}
+
+function ajustesServicioAuditoria(servicio) {
+  const listado = []
+  for (const item of (servicio?.items || [])) {
+    for (const aj of (item?.ajustes || [])) {
+      listado.push({
+        id: aj?.id,
+        tipo: aj?.tipo,
+        cantidad: Number(aj?.cantidad || 0),
+        motivo: aj?.motivo || '',
+        created_at: aj?.created_at || null,
+        user: aj?.user || null,
+        producto: item?.tamano ? String(item.tamano).toUpperCase() : (item?.descripcion_item || item?.descripcion || 'Producto'),
+      })
+    }
+  }
+
+  return listado.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
 }
 
 // Verificar si hay faltantes válidos para un servicio
@@ -1137,15 +1174,15 @@ function aplicarFaltantesServicio(servicioId) {
                 </div>
               </div>
 
-              <div v-if="can?.reportarAvance && items.length" class="-mx-4 sm:-mx-5 px-4 sm:px-5 py-3.5 bg-indigo-50/50 dark:bg-indigo-900/20 border-t border-indigo-200 dark:border-indigo-700">
-                <div class="flex items-center gap-2.5 mb-3">
+              <div v-if="items.length" class="-mx-4 sm:-mx-5 px-4 sm:px-5 py-3.5 bg-indigo-50/50 dark:bg-indigo-900/20 border-t border-indigo-200 dark:border-indigo-700">
+                <div v-if="can?.reportarAvance" class="flex items-center gap-2.5 mb-3">
                   <svg class="w-4 h-4 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
                   </svg>
                   <h4 class="font-bold text-xs uppercase tracking-wider text-indigo-700 dark:text-indigo-300">Registrar ajuste</h4>
                 </div>
 
-                <div class="bg-white dark:bg-slate-900/50 rounded-lg p-3 ring-1 ring-indigo-200 dark:ring-indigo-700">
+                <div v-if="can?.reportarAvance" class="bg-white dark:bg-slate-900/50 rounded-lg p-3 ring-1 ring-indigo-200 dark:ring-indigo-700">
                   <div class="grid grid-cols-1 lg:grid-cols-12 gap-3">
                     <div class="lg:col-span-3">
                       <label class="block text-[10px] font-bold text-slate-600 dark:text-slate-400 mb-1.5 uppercase tracking-wider">Producto</label>
@@ -1194,6 +1231,38 @@ function aplicarFaltantesServicio(servicioId) {
 
                   <p v-if="ajusteTradicionalMsg" class="mt-2 text-xs text-emerald-700 dark:text-emerald-400">{{ ajusteTradicionalMsg }}</p>
                   <p v-if="ajusteTradicionalError" class="mt-2 text-xs text-red-600 dark:text-red-400">{{ ajusteTradicionalError }}</p>
+                </div>
+
+                <div v-if="ajustesTradicionales.length" class="mt-3 bg-white dark:bg-slate-900/50 rounded-lg p-3 ring-1 ring-indigo-200 dark:ring-indigo-700">
+                  <div class="flex items-center gap-2 mb-2.5">
+                    <svg class="w-4 h-4 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m3 8H6a2 2 0 01-2-2V7a2 2 0 012-2h12a2 2 0 012 2v10a2 2 0 01-2 2z"/>
+                    </svg>
+                    <h5 class="text-xs font-bold text-indigo-700 dark:text-indigo-300 uppercase tracking-wider">Ajustes registrados</h5>
+                    <span class="text-xs text-slate-500 dark:text-slate-400">{{ ajustesTradicionales.length }} registro(s)</span>
+                  </div>
+
+                  <div class="space-y-2.5 max-h-64 overflow-auto pr-1">
+                    <div v-for="(a, idx) in ajustesTradicionales" :key="a?.id || idx"
+                         class="bg-slate-50 border border-slate-200 rounded-md p-3 dark:bg-slate-800/30 dark:border-slate-700">
+                      <div class="flex items-center gap-2 mb-1.5 flex-wrap">
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold"
+                              :class="a?.tipo === 'extra' ? 'bg-orange-100 text-orange-800 dark:bg-orange-500/20 dark:text-orange-300' : 'bg-rose-100 text-rose-800 dark:bg-rose-500/20 dark:text-rose-300'">
+                          {{ (a?.tipo || 'ajuste').toUpperCase() }}
+                        </span>
+                        <span class="text-[10px] text-slate-500 dark:text-slate-400">{{ fmtDate(a?.created_at) }}</span>
+                        <span class="text-[10px] text-slate-500 dark:text-slate-400">• {{ a?.user?.name || 'Usuario' }}</span>
+                      </div>
+
+                      <div class="text-xs text-slate-700 dark:text-slate-300 flex items-center gap-3 flex-wrap">
+                        <span><strong class="font-semibold">Producto:</strong> {{ a?.producto }}</span>
+                        <span><strong class="font-semibold">Cant:</strong> {{ a?.cantidad || 0 }}</span>
+                      </div>
+                      <div class="text-xs text-slate-600 dark:text-slate-400 mt-1">
+                        <strong class="font-semibold">Motivo:</strong> {{ a?.motivo || 'Sin motivo' }}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
               
@@ -1540,15 +1609,15 @@ function aplicarFaltantesServicio(servicioId) {
                 </div>
               </div>
 
-              <div v-if="can?.reportarAvance && (servicio.items || []).length" class="-mx-4 sm:-mx-5 px-4 sm:px-5 py-3.5 bg-indigo-50/50 dark:bg-indigo-900/20 border-t border-indigo-200 dark:border-indigo-700">
-                <div class="flex items-center gap-2.5 mb-3">
+              <div v-if="(servicio.items || []).length" class="-mx-4 sm:-mx-5 px-4 sm:px-5 py-3.5 bg-indigo-50/50 dark:bg-indigo-900/20 border-t border-indigo-200 dark:border-indigo-700">
+                <div v-if="can?.reportarAvance" class="flex items-center gap-2.5 mb-3">
                   <svg class="w-4 h-4 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
                   </svg>
                   <h4 class="font-bold text-xs uppercase tracking-wider text-indigo-700 dark:text-indigo-300">Registrar ajuste</h4>
                 </div>
 
-                <div class="bg-white dark:bg-slate-900/50 rounded-lg p-3 ring-1 ring-indigo-200 dark:ring-indigo-700">
+                <div v-if="can?.reportarAvance" class="bg-white dark:bg-slate-900/50 rounded-lg p-3 ring-1 ring-indigo-200 dark:ring-indigo-700">
                   <div class="grid grid-cols-1 lg:grid-cols-12 gap-3">
                     <div class="lg:col-span-3">
                       <label class="block text-[10px] font-bold text-slate-600 dark:text-slate-400 mb-1.5 uppercase tracking-wider">Producto</label>
@@ -1592,6 +1661,38 @@ function aplicarFaltantesServicio(servicioId) {
                               class="w-full px-4 py-2 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 disabled:from-slate-400 disabled:to-slate-500 disabled:cursor-not-allowed text-white font-bold text-sm rounded-md transition-all flex items-center justify-center gap-2 shadow hover:shadow-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1">
                         <span>{{ ajustesMultiServicio[servicio.id]?.processing ? 'Guardando...' : 'Guardar' }}</span>
                       </button>
+                    </div>
+                  </div>
+
+                  <div v-if="ajustesServicioAuditoria(servicio).length" class="mt-3 border-t border-indigo-100 dark:border-indigo-800 pt-3">
+                    <div class="flex items-center gap-2 mb-2.5">
+                      <svg class="w-4 h-4 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m3 8H6a2 2 0 01-2-2V7a2 2 0 012-2h12a2 2 0 012 2v10a2 2 0 01-2 2z"/>
+                      </svg>
+                      <h5 class="text-xs font-bold text-indigo-700 dark:text-indigo-300 uppercase tracking-wider">Ajustes registrados</h5>
+                      <span class="text-xs text-slate-500 dark:text-slate-400">{{ ajustesServicioAuditoria(servicio).length }} registro(s)</span>
+                    </div>
+
+                    <div class="space-y-2.5 max-h-64 overflow-auto pr-1">
+                      <div v-for="(a, aIdx) in ajustesServicioAuditoria(servicio)" :key="a?.id || aIdx"
+                           class="bg-slate-50 border border-slate-200 rounded-md p-3 dark:bg-slate-800/30 dark:border-slate-700">
+                        <div class="flex items-center gap-2 mb-1.5 flex-wrap">
+                          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold"
+                                :class="a?.tipo === 'extra' ? 'bg-orange-100 text-orange-800 dark:bg-orange-500/20 dark:text-orange-300' : 'bg-rose-100 text-rose-800 dark:bg-rose-500/20 dark:text-rose-300'">
+                            {{ (a?.tipo || 'ajuste').toUpperCase() }}
+                          </span>
+                          <span class="text-[10px] text-slate-500 dark:text-slate-400">{{ fmtDate(a?.created_at) }}</span>
+                          <span class="text-[10px] text-slate-500 dark:text-slate-400">• {{ a?.user?.name || 'Usuario' }}</span>
+                        </div>
+
+                        <div class="text-xs text-slate-700 dark:text-slate-300 flex items-center gap-3 flex-wrap">
+                          <span><strong class="font-semibold">Producto:</strong> {{ a?.producto }}</span>
+                          <span><strong class="font-semibold">Cant:</strong> {{ a?.cantidad || 0 }}</span>
+                        </div>
+                        <div class="text-xs text-slate-600 dark:text-slate-400 mt-1">
+                          <strong class="font-semibold">Motivo:</strong> {{ a?.motivo || 'Sin motivo' }}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
