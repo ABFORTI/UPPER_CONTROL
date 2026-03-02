@@ -147,19 +147,39 @@ function confirmarCalidad() {
   })
 }
 function esEventoCalidad(avance) {
-  return ['CALIDAD_VALIDADA', 'CALIDAD_RECHAZADA'].includes(String(avance?.tipo || '').toUpperCase())
+  const tipo = String(avance?.tipo || '').toUpperCase()
+  if (['CALIDAD_VALIDADA', 'CALIDAD_RECHAZADA'].includes(tipo)) return true
+
+  const cantidad = Number(avance?.cantidad_registrada ?? avance?.cantidad ?? 0)
+  const tarifa = String(avance?.tarifa || '').toUpperCase()
+  const comentario = String(avance?.comentario || '').trim()
+
+  // Compatibilidad con registros históricos sin campo tipo.
+  // Evitar confundir otros eventos técnicos en comentario.
+  const esComentarioTecnico = comentario.startsWith('[FALTANTES]')
+    || comentario.startsWith('[CORREGIDO]')
+    || comentario.startsWith('[OT_SERVICIO_AVANCE_ID:')
+
+  // Si viene como evento sin cantidad y sin PU, tratarlo como aprobación por calidad
+  // aunque tarifa sea nula o NORMAL.
+  return cantidad === 0
+    && comentario.length > 0
+    && !avance?.precio_unitario_aplicado
+    && !['EXTRA', 'FIN_DE_SEMANA'].includes(tarifa)
+    && !esComentarioTecnico
 }
 function etiquetaTipoAvance(avance) {
   const tipo = String(avance?.tipo || '').toUpperCase()
-  if (tipo === 'CALIDAD_VALIDADA') return 'CALIDAD VALIDADA'
+  if (tipo === 'CALIDAD_VALIDADA') return 'APROBACIÓN POR CALIDAD'
   if (tipo === 'CALIDAD_RECHAZADA') return 'CALIDAD RECHAZADA'
+  if (esEventoCalidad(avance)) return 'APROBACIÓN POR CALIDAD'
   return String(avance?.tarifa || 'NORMAL').toUpperCase()
 }
 function claseTipoAvance(avance) {
   if (esEventoCalidad(avance)) {
-    return String(avance?.tipo || '').toUpperCase() === 'CALIDAD_VALIDADA'
-      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300'
-      : 'bg-rose-100 text-rose-800 dark:bg-rose-500/20 dark:text-rose-300'
+    return String(avance?.tipo || '').toUpperCase() === 'CALIDAD_RECHAZADA'
+      ? 'bg-rose-100 text-rose-800 dark:bg-rose-500/20 dark:text-rose-300'
+      : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300'
   }
   return avance?.tarifa === 'NORMAL'
     ? 'bg-blue-100 text-blue-800 dark:bg-blue-500/20 dark:text-blue-300'
@@ -169,7 +189,7 @@ function claseTipoAvance(avance) {
 }
 function avancesConEventosCalidad(servicio, idx) {
   const base = Array.isArray(servicio?.avances) ? [...servicio.avances] : []
-  if (idx === 0 && avancesCalidad.value.length) {
+  if (avancesCalidad.value.length) {
     for (const ev of avancesCalidad.value) {
       base.push({
         id: `calidad-${ev.id}`,
@@ -1453,7 +1473,10 @@ function aplicarFaltantesServicio(servicioId) {
                       <div class="flex-1">
                         <!-- Badges y fecha -->
                         <div class="flex items-center gap-2 mb-2 flex-wrap">
-                          <span v-if="isRechazoComentario(a?.comentario)" class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-300">
+                          <span v-if="esEventoCalidad(a)" class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold" :class="claseTipoAvance(a)">
+                            {{ etiquetaTipoAvance(a) }}
+                          </span>
+                          <span v-else-if="isRechazoComentario(a?.comentario)" class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-300">
                             RECHAZO
                           </span>
                           <span v-else-if="isFaltantesComentario(a?.comentario)" class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-500/20 dark:text-rose-300">
@@ -1470,7 +1493,7 @@ function aplicarFaltantesServicio(servicioId) {
                         </div>
                         
                         <!-- Cantidad e info -->
-                        <div class="text-xs text-slate-700 dark:text-slate-300 flex items-center gap-3">
+                        <div v-if="!esEventoCalidad(a)" class="text-xs text-slate-700 dark:text-slate-300 flex items-center gap-3">
                           <span><strong class="font-semibold">Cant:</strong> {{ a?.cantidad_registrada || a?.cantidad || 0 }}</span>
                           <span v-if="a?.precio_unitario_aplicado">
                             <strong class="font-semibold">P.U.:</strong> 
