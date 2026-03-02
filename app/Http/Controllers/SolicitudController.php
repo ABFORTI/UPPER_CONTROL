@@ -257,10 +257,9 @@ class SolicitudController extends Controller
                 'servicios' => ['required', 'array', 'min:1'],
                 'servicios.*.id_servicio' => ['required', 'integer', 'exists:servicios_empresa,id'],
                 'servicios.*.cantidad' => ['required', 'integer', 'min:1'],
-                'servicios.*.sku' => ['nullable', 'string', 'max:255'],
-                'servicios.*.origen' => ['nullable', 'string', 'max:255'],
-                'servicios.*.pedimento' => ['nullable', 'string', 'max:255'],
-                'cantidad' => ['required', 'integer', 'min:1'],
+                'sku' => ['nullable', 'string', 'max:255'],
+                'origen' => ['nullable', 'string', 'max:255'],
+                'pedimento' => ['nullable', 'string', 'max:255'],
             ]);
         } else {
             $req->validate([
@@ -354,6 +353,18 @@ class SolicitudController extends Controller
             DB::beginTransaction();
             try {
                 \Log::info('🔄 Creando solicitud con múltiples servicios', ['count' => count($req->servicios)]);
+
+                $cantidadTotalServicios = collect($req->servicios)
+                    ->sum(function ($servicioData) {
+                        return max(1, (int)($servicioData['cantidad'] ?? 1));
+                    });
+                if ($cantidadTotalServicios <= 0) {
+                    $cantidadTotalServicios = 1;
+                }
+
+                $skuGlobal = $customsFieldsEnabled ? $normalizeCustomField($req->input('sku')) : null;
+                $origenGlobal = $customsFieldsEnabled ? $normalizeCustomField($req->input('origen')) : null;
+                $pedimentoGlobal = $customsFieldsEnabled ? $normalizeCustomField($req->input('pedimento')) : null;
                 
                 // Crear la solicitud principal (sin servicio único)
                 $sol = Solicitud::create([
@@ -365,7 +376,10 @@ class SolicitudController extends Controller
                     'id_centrocosto'   => (int)$req->id_centrocosto,
                     'id_marca'         => $req->filled('id_marca') ? (int)$req->id_marca : null,
                     'id_area'          => $areaId,
-                    'cantidad'         => (int)$req->cantidad, // Cantidad total de referencia
+                    'sku'              => $skuGlobal,
+                    'origen'           => $origenGlobal,
+                    'pedimento'        => $pedimentoGlobal,
+                    'cantidad'         => (int)$cantidadTotalServicios,
                     'subtotal'         => 0, // Se calculará después
                     'iva'              => 0,
                     'total'            => 0,
@@ -397,17 +411,13 @@ class SolicitudController extends Controller
                         $precioUnitario = (float)$pricing->precioUnitario($centroId, $serv->id, null);
                     }
 
-                    $sku = $customsFieldsEnabled ? $normalizeCustomField($servicioData['sku'] ?? null) : null;
-                    $origen = $customsFieldsEnabled ? $normalizeCustomField($servicioData['origen'] ?? null) : null;
-                    $pedimento = $customsFieldsEnabled ? $normalizeCustomField($servicioData['pedimento'] ?? null) : null;
-                    
                     // Crear SolicitudServicio
                     \App\Models\SolicitudServicio::create([
                         'solicitud_id'     => $sol->id,
                         'servicio_id'      => $serv->id,
-                        'sku'              => $sku,
-                        'origen'           => $origen,
-                        'pedimento'        => $pedimento,
+                        'sku'              => $skuGlobal,
+                        'origen'           => $origenGlobal,
+                        'pedimento'        => $pedimentoGlobal,
                         'tipo_cobro'       => $usaTamanosCentro ? 'tamanos' : 'cantidad',
                         'cantidad'         => $cantidadServicio,
                         'precio_unitario'  => $precioUnitario,

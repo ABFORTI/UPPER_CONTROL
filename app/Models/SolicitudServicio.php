@@ -46,7 +46,7 @@ class SolicitudServicio extends Model
     {
         return LogOptions::defaults()
             ->useLogName('solicitud_servicios')
-            ->logOnly(['sku', 'origen', 'pedimento'])
+            ->logOnly(['cantidad', 'sku', 'origen', 'pedimento'])
             ->logOnlyDirty()
             ->dontSubmitEmptyLogs();
     }
