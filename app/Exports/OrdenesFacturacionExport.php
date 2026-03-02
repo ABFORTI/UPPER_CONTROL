@@ -4,6 +4,7 @@ namespace App\Exports;
 
 use App\Models\CentroCosto;
 use App\Models\Orden;
+use App\Models\OTServicio;
 use App\Models\User;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Builder;
@@ -49,7 +50,8 @@ class OrdenesFacturacionExport implements FromCollection, WithHeadings, ShouldAu
                 'solicitud.centroCosto',
                 'solicitud.cliente',
                 'otServicios.servicio',
-                'items:id,id_orden,cantidad_planeada,cantidad_real,precio_unitario,subtotal',
+                'otServicios.items.ajustes',
+                'items.ajustes',
             ])
             ->when(!$isPrivilegedViewer, function (Builder $sub) use ($centrosPermitidos) {
                 if (!empty($centrosPermitidos)) {
@@ -140,11 +142,14 @@ class OrdenesFacturacionExport implements FromCollection, WithHeadings, ShouldAu
                         : $otServicios;
 
                     foreach ($serviciosFiltrados as $otServicio) {
-                        $cantidad = (int) ($otServicio->cantidad ?? 0);
-                        if ($cantidad <= 0) $cantidad = null;
+                        // Regla export: cantidad cobrable = solicitado + extras - faltantes (nunca negativa)
+                        $cantidadCobrable = $this->cantidadCobrableServicio($otServicio);
+                        $cantidad = $cantidadCobrable > 0 ? $cantidadCobrable : null;
 
-                        $precio = $otServicio->precio_unitario;
-                        $precio = $precio !== null ? (float) $precio : 0.0;
+                        // Regla export: precio unitario real guardado en detalle de OT, sin recalcular por totales
+                        $precio = $otServicio->precio_unitario !== null
+                            ? (float) $otServicio->precio_unitario
+                            : $this->precioUnitarioDesdeServicioItems($otServicio);
 
                         $nombreServicio = $otServicio?->servicio?->nombre ?? null;
                         $datosOt = $nombreServicio ? ($nombreServicio . ' OT: ' . $orden->id) : ('OT: ' . $orden->id);
@@ -166,25 +171,11 @@ class OrdenesFacturacionExport implements FromCollection, WithHeadings, ShouldAu
                 }
 
                 // Tradicional: 1 fila (compat)
-                $items = $orden->relationLoaded('items') ? $orden->items : collect();
-                $cantidadPlaneada = (int) $items->sum('cantidad_planeada');
-                $cantidadReal = (int) $items->sum('cantidad_real');
-                $cantidad = $cantidadPlaneada > 0
-                    ? $cantidadPlaneada
-                    : ($cantidadReal > 0 ? $cantidadReal : (int) ($orden?->solicitud?->cantidad ?? 0));
-                if ($cantidad <= 0) $cantidad = null;
+                $cantidadCobrable = $this->cantidadCobrableTradicional($orden);
+                $cantidad = $cantidadCobrable > 0 ? $cantidadCobrable : null;
 
-                $precio = null;
-                $firstPrecio = $items->firstWhere('precio_unitario', '!=', null);
-                if ($firstPrecio) {
-                    $precio = (float) $firstPrecio->precio_unitario;
-                } else {
-                    $subtotal = (float) $items->sum('subtotal');
-                    if ($cantidad && $subtotal > 0) {
-                        $precio = $subtotal / (int) $cantidad;
-                    }
-                }
-                if ($precio === null) $precio = 0.0;
+                // Regla export: no recalcular precio por subtotal/cantidad
+                $precio = $this->precioUnitarioDesdeOrdenItems($orden);
 
                 $nombreServicio = $orden?->servicio?->nombre ?? null;
                 $datosOt = $nombreServicio ? ($nombreServicio . ' OT: ' . $orden->id) : ('OT: ' . $orden->id);
@@ -219,6 +210,42 @@ class OrdenesFacturacionExport implements FromCollection, WithHeadings, ShouldAu
             'DATOS DE LA ORDEN DE TRABAJO',
             'Fecha de entrega',
         ];
+    }
+
+    private function cantidadCobrableServicio(OTServicio $servicio): int
+    {
+        $items = $servicio->relationLoaded('items') ? $servicio->items : collect();
+        if ($items->count() > 0) {
+            return max(0, (int) $items->sum(fn ($item) => (int) ($item->calcularMetricas()['total_cobrable'] ?? 0)));
+        }
+
+        return max(0, (int) ($servicio->cantidad ?? 0));
+    }
+
+    private function cantidadCobrableTradicional(Orden $orden): int
+    {
+        $items = $orden->relationLoaded('items') ? $orden->items : collect();
+        if ($items->count() > 0) {
+            return max(0, (int) $items->sum(fn ($item) => (int) ($item->calcularMetricas()['total_cobrable'] ?? 0)));
+        }
+
+        return max(0, (int) ($orden?->solicitud?->cantidad ?? 0));
+    }
+
+    private function precioUnitarioDesdeServicioItems(OTServicio $servicio): float
+    {
+        $items = $servicio->relationLoaded('items') ? $servicio->items : collect();
+        $itemConPrecio = $items->firstWhere('precio_unitario', '!=', null);
+
+        return $itemConPrecio ? (float) $itemConPrecio->precio_unitario : 0.0;
+    }
+
+    private function precioUnitarioDesdeOrdenItems(Orden $orden): float
+    {
+        $items = $orden->relationLoaded('items') ? $orden->items : collect();
+        $itemConPrecio = $items->firstWhere('precio_unitario', '!=', null);
+
+        return $itemConPrecio ? (float) $itemConPrecio->precio_unitario : 0.0;
     }
 
     private function allowedCentroIds(User $u): array

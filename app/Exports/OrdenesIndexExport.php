@@ -60,13 +60,14 @@ class OrdenesIndexExport implements FromCollection, WithHeadings, ShouldAutoSize
                 'servicio',
                 'centro',
                 'teamLeader',
-                'items',
+                'items.ajustes',
                 'solicitud.centroCosto',
                 'solicitud.marca',
                 'factura',
                 'facturas',
                 'area',
                 'otServicios.servicio',
+                'otServicios.items.ajustes',
             ])
             ->when(!$isPrivilegedViewer, function (Builder $qq) use ($centrosPermitidos) {
                 if (!empty($centrosPermitidos)) {
@@ -153,9 +154,14 @@ class OrdenesIndexExport implements FromCollection, WithHeadings, ShouldAutoSize
                 if ($o->relationLoaded('otServicios') && $o->otServicios && $o->otServicios->count() > 0) {
                     foreach ($o->otServicios as $s) {
                         $serviceName = $s->servicio?->nombre ?? null;
-                        $cantidad = (int) ($s->cantidad ?? 0);
-                        $costoUnitario = $s->precio_unitario !== null ? (float) $s->precio_unitario : 0.0;
-                        $costoTotal = $s->subtotal !== null ? (float) $s->subtotal : ($cantidad * $costoUnitario);
+                        // Regla export: cantidad cobrable = solicitado + extras - faltantes (nunca negativa)
+                        $cantidadCobrable = $this->cantidadCobrableServicio($s);
+                        // Regla export: costo unitario debe ser el precio real guardado, sin recalcular por total
+                        $costoUnitario = $s->precio_unitario !== null
+                            ? (float) $s->precio_unitario
+                            : $this->precioUnitarioDesdeServicioItems($s);
+                        // Regla export: total = cantidad cobrable * unitario
+                        $costoTotal = $cantidadCobrable * $costoUnitario;
 
                         $marca = $o->solicitud?->marca?->nombre ?? null;
                         $departamento = trim((string) ($o->solicitud?->centroCosto?->nombre ?? '')) ?: null;
@@ -167,7 +173,7 @@ class OrdenesIndexExport implements FromCollection, WithHeadings, ShouldAutoSize
                             $fechaFactura,
                             $o->id,
                             $fechaOt,
-                            ($cantidad > 0 ? $cantidad : null),
+                            ($cantidadCobrable > 0 ? $cantidadCobrable : null),
                             $serviceName,
                             $marca,
                             $costoUnitario,
@@ -179,20 +185,14 @@ class OrdenesIndexExport implements FromCollection, WithHeadings, ShouldAutoSize
                     }
                 } else {
                     // Tradicional: usar el servicio único en orden->servicio y calcular piezas desde items/solicitud
-                    $piezas = null;
-                    if ($o->relationLoaded('items') && $o->items && $o->items->count() > 0) {
-                        $sumPlan = (int) $o->items->sum(fn ($i) => (int) ($i->cantidad_planeada ?? 0));
-                        $sumReal = (int) $o->items->sum(fn ($i) => (int) ($i->cantidad_real ?? 0));
-                        $piezas = $sumPlan > 0 ? $sumPlan : ($sumReal > 0 ? $sumReal : 0);
-                    } else {
-                        $piezas = (int) ($o->solicitud?->cantidad ?? 0);
-                    }
+                    $piezas = $this->cantidadCobrableTradicional($o);
 
                     $proceso = $o->servicio?->nombre ?? null;
                     $marca = $o->solicitud?->marca?->nombre ?? null;
 
-                    $costoTotalSinIva = (float) ($o->subtotal ?? 0);
-                    $costoUnitario = ($piezas > 0) ? (float) ($costoTotalSinIva / $piezas) : null;
+                    // Regla export: costo unitario real desde detalle de OT, sin recalcular por subtotal/cantidad
+                    $costoUnitario = $this->precioUnitarioDesdeOrdenItems($o);
+                    $costoTotalSinIva = $piezas * $costoUnitario;
 
                     $departamento = trim((string) ($o->solicitud?->centroCosto?->nombre ?? '')) ?: null;
                     $areaSolicita = $o->area?->nombre ?? null;
@@ -297,6 +297,42 @@ class OrdenesIndexExport implements FromCollection, WithHeadings, ShouldAutoSize
                 $sheet->getRowDimension(1)->setRowHeight(24);
             },
         ];
+    }
+
+    private function cantidadCobrableServicio(OTServicio $servicio): int
+    {
+        $items = $servicio->relationLoaded('items') ? $servicio->items : collect();
+        if ($items->count() > 0) {
+            return max(0, (int) $items->sum(fn ($item) => (int) ($item->calcularMetricas()['total_cobrable'] ?? 0)));
+        }
+
+        return max(0, (int) ($servicio->cantidad ?? 0));
+    }
+
+    private function cantidadCobrableTradicional(Orden $orden): int
+    {
+        $items = $orden->relationLoaded('items') ? $orden->items : collect();
+        if ($items->count() > 0) {
+            return max(0, (int) $items->sum(fn ($item) => (int) ($item->calcularMetricas()['total_cobrable'] ?? 0)));
+        }
+
+        return max(0, (int) ($orden->solicitud?->cantidad ?? 0));
+    }
+
+    private function precioUnitarioDesdeServicioItems(OTServicio $servicio): float
+    {
+        $items = $servicio->relationLoaded('items') ? $servicio->items : collect();
+        $itemConPrecio = $items->firstWhere('precio_unitario', '!=', null);
+
+        return $itemConPrecio ? (float) $itemConPrecio->precio_unitario : 0.0;
+    }
+
+    private function precioUnitarioDesdeOrdenItems(Orden $orden): float
+    {
+        $items = $orden->relationLoaded('items') ? $orden->items : collect();
+        $itemConPrecio = $items->firstWhere('precio_unitario', '!=', null);
+
+        return $itemConPrecio ? (float) $itemConPrecio->precio_unitario : 0.0;
     }
 
     private function allowedCentroIds(User $u): array
