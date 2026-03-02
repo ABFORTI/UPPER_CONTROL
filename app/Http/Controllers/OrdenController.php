@@ -1500,8 +1500,56 @@ class OrdenController extends Controller
         // Preparar datos de servicios con totales calculados (para multi-servicio)
         $todosServiciosCompletos = false;
         if ($orden->otServicios()->exists()) {
-            $serviciosData = $orden->otServicios->map(function ($otServicio) {
+            $eventosCalidad = $orden->avances
+                ->filter(function ($avance) {
+                    return in_array((string)($avance->tipo ?? ''), ['CALIDAD_VALIDADA', 'CALIDAD_RECHAZADA'], true);
+                })
+                ->map(function ($avance) {
+                    return [
+                        'id' => 'calidad-' . $avance->id,
+                        'tipo' => (string)$avance->tipo,
+                        'tarifa' => null,
+                        'precio_unitario_aplicado' => null,
+                        'cantidad_registrada' => 0,
+                        'comentario' => $avance->comentario,
+                        'created_by' => $avance->usuario ? [
+                            'id' => $avance->usuario->id,
+                            'name' => $avance->usuario->name,
+                        ] : null,
+                        'created_at' => optional($avance->created_at)->format('Y-m-d H:i'),
+                    ];
+                })
+                ->values();
+
+            $serviciosData = $orden->otServicios->values()->map(function ($otServicio, $idx) use ($eventosCalidad) {
                 $totales = $otServicio->calcularTotales();
+
+                $avancesServicio = collect($otServicio->avances->map(function ($avance) {
+                    return [
+                        'id' => $avance->id,
+                        'tipo' => null,
+                        'tarifa' => $avance->tarifa,
+                        'precio_unitario_aplicado' => $avance->precio_unitario_aplicado,
+                        'cantidad_registrada' => $avance->cantidad_registrada,
+                        'comentario' => $avance->comentario,
+                        'created_by' => $avance->createdBy ? [
+                            'id' => $avance->createdBy->id,
+                            'name' => $avance->createdBy->name,
+                        ] : null,
+                        'created_at' => $avance->created_at->format('Y-m-d H:i'),
+                    ];
+                }));
+
+                if ($idx === 0 && $eventosCalidad->isNotEmpty()) {
+                    $avancesServicio = $avancesServicio->concat($eventosCalidad);
+                }
+
+                $avancesServicio = $avancesServicio
+                    ->sortByDesc(function ($avance) {
+                        return $avance['created_at'] ?? '';
+                    })
+                    ->values()
+                    ->toArray();
                 
                 return [
                     'id' => $otServicio->id,
@@ -1549,20 +1597,7 @@ class OrdenController extends Controller
                             })->values()->toArray(),
                         ];
                     })->toArray(),
-                    'avances' => $otServicio->avances->map(function ($avance) {
-                        return [
-                            'id' => $avance->id,
-                            'tarifa' => $avance->tarifa,
-                            'precio_unitario_aplicado' => $avance->precio_unitario_aplicado,
-                            'cantidad_registrada' => $avance->cantidad_registrada,
-                            'comentario' => $avance->comentario,
-                            'created_by' => $avance->createdBy ? [
-                                'id' => $avance->createdBy->id,
-                                'name' => $avance->createdBy->name,
-                            ] : null,
-                            'created_at' => $avance->created_at->format('Y-m-d H:i'),
-                        ];
-                    })->toArray(),
+                    'avances' => $avancesServicio,
                 ];
             });
             

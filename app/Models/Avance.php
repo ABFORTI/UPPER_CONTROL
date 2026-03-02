@@ -5,7 +5,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class Avance extends Model {
   protected $table='avances';
-  protected $fillable=['id_orden','id_item','id_usuario','cantidad','comentario','evidencia_url','es_corregido'];
+  protected $fillable=['id_orden','id_item','id_usuario','user_id','tipo','cantidad','comentario','evidencia_url','es_corregido'];
   protected $casts = [
     'es_corregido' => 'boolean',
   ];

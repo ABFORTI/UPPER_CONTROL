@@ -27,6 +27,9 @@ const preciosPorServicio = computed(() => props.precios_por_servicio)
 const items   = computed(() => props.orden?.items   ?? [])
 const avances = computed(() => props.orden?.avances ?? [])
 const servicios = computed(() => props.orden?.ot_servicios ?? [])
+const avancesCalidad = computed(() =>
+  (avances.value || []).filter(a => ['CALIDAD_VALIDADA', 'CALIDAD_RECHAZADA'].includes(String(a?.tipo || '').toUpperCase()))
+)
 
 // Helper para números seguros
 const toNum = (v) => {
@@ -97,22 +100,90 @@ function isFaltantesComentario(c) {
 }
 
 // ----- Calidad / Cliente -----
-const obs = ref('')
-const acciones_correctivas = ref('')
-const showRechazoModal = ref(false)
-const validarCalidad   = () => router.post(props.urls.calidad_validar)
-function openRechazo() {
-  // debug: confirmar que el handler se ejecuta en el navegador
-  console.log('openRechazo called for OT #' + (props.orden?.id || 'unknown'))
-  // limpiar valores y abrir modal
-  obs.value = ''
-  acciones_correctivas.value = ''
-  showRechazoModal.value = true
+const showCalidadModal = ref(false)
+const calidadModo = ref('validar')
+const calidadToast = ref('')
+const calidadForm = useForm({
+  comentario: '',
+})
+function showToast(msg) {
+  calidadToast.value = msg
+  setTimeout(() => { calidadToast.value = '' }, 2600)
 }
-function rechazarCalidad() {
-  // Enviar observaciones y acciones desde el modal
-  console.log('rechazarCalidad sending', { observaciones: obs.value, acciones_correctivas: acciones_correctivas.value })
-  router.post(props.urls.calidad_rechazar, { observaciones: obs.value, acciones_correctivas: acciones_correctivas.value })
+function openValidarCalidad() {
+  calidadModo.value = 'validar'
+  calidadForm.reset('comentario')
+  calidadForm.clearErrors('comentario')
+  showCalidadModal.value = true
+}
+function openRechazo() {
+  calidadModo.value = 'rechazar'
+  calidadForm.reset('comentario')
+  calidadForm.clearErrors('comentario')
+  showCalidadModal.value = true
+}
+function confirmarCalidad() {
+  const comentario = String(calidadForm.comentario || '').trim()
+
+  if (calidadModo.value === 'rechazar' && !comentario) {
+    calidadForm.setError('comentario', 'El comentario es obligatorio para rechazar calidad.')
+    return
+  }
+
+  const url = calidadModo.value === 'validar' ? props.urls.calidad_validar : props.urls.calidad_rechazar
+  const payload = { comentario }
+
+  if (calidadModo.value === 'rechazar') {
+    payload.observaciones = comentario
+  }
+
+  calidadForm.post(url, {
+    preserveScroll: true,
+    onSuccess: () => {
+      showCalidadModal.value = false
+      showToast(calidadModo.value === 'validar' ? 'Calidad validada correctamente.' : 'Rechazo de calidad registrado.')
+      router.reload({ only: ['orden', 'can'], preserveScroll: true })
+    },
+  })
+}
+function esEventoCalidad(avance) {
+  return ['CALIDAD_VALIDADA', 'CALIDAD_RECHAZADA'].includes(String(avance?.tipo || '').toUpperCase())
+}
+function etiquetaTipoAvance(avance) {
+  const tipo = String(avance?.tipo || '').toUpperCase()
+  if (tipo === 'CALIDAD_VALIDADA') return 'CALIDAD VALIDADA'
+  if (tipo === 'CALIDAD_RECHAZADA') return 'CALIDAD RECHAZADA'
+  return String(avance?.tarifa || 'NORMAL').toUpperCase()
+}
+function claseTipoAvance(avance) {
+  if (esEventoCalidad(avance)) {
+    return String(avance?.tipo || '').toUpperCase() === 'CALIDAD_VALIDADA'
+      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300'
+      : 'bg-rose-100 text-rose-800 dark:bg-rose-500/20 dark:text-rose-300'
+  }
+  return avance?.tarifa === 'NORMAL'
+    ? 'bg-blue-100 text-blue-800 dark:bg-blue-500/20 dark:text-blue-300'
+    : avance?.tarifa === 'EXTRA'
+      ? 'bg-orange-100 text-orange-800 dark:bg-orange-500/20 dark:text-orange-300'
+      : 'bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-300'
+}
+function avancesConEventosCalidad(servicio, idx) {
+  const base = Array.isArray(servicio?.avances) ? [...servicio.avances] : []
+  if (idx === 0 && avancesCalidad.value.length) {
+    for (const ev of avancesCalidad.value) {
+      base.push({
+        id: `calidad-${ev.id}`,
+        tipo: String(ev?.tipo || '').toUpperCase(),
+        tarifa: null,
+        precio_unitario_aplicado: null,
+        cantidad_registrada: 0,
+        comentario: ev?.comentario || '',
+        created_by: ev?.usuario ? { id: ev.usuario.id, name: ev.usuario.name } : null,
+        created_at: ev?.created_at,
+      })
+    }
+  }
+  return base.sort((a, b) => new Date(b?.created_at || 0) - new Date(a?.created_at || 0))
 }
 const autorizarCliente = () => router.post(props.urls.cliente_autorizar)
 
@@ -429,6 +500,9 @@ const evForm = useForm({
 })
 function onPickEvidencias(e){ evForm.files = Array.from(e.target.files || []) }
 function tipoAvanceLabel(a) {
+  const tipo = String(a?.tipo || '').toUpperCase()
+  if (tipo === 'CALIDAD_VALIDADA') return 'CALIDAD_VALIDADA'
+  if (tipo === 'CALIDAD_RECHAZADA') return 'CALIDAD_RECHAZADA'
   if (isRechazoComentario(a?.comentario)) return 'RECHAZO'
   if (isFaltantesComentario(a?.comentario)) return 'FALTANTES'
   if ((a?.isCorregido || a?.es_corregido)) return 'CORREGIDO'
@@ -1825,7 +1899,7 @@ function aplicarFaltantesServicio(servicioId) {
                   </div>
                   
                   <!-- Avances Registrados (Historial) -->
-                  <div v-if="servicio.avances && servicio.avances.length > 0" class="mt-6 rounded-lg overflow-hidden border border-purple-200 dark:border-purple-700/40 shadow-sm">
+                  <div v-if="avancesConEventosCalidad(servicio, idx).length > 0" class="mt-6 rounded-lg overflow-hidden border border-purple-200 dark:border-purple-700/40 shadow-sm">
                     <div class="px-5 py-3 bg-gradient-to-r from-purple-500 to-fuchsia-500 dark:from-purple-600 dark:to-fuchsia-600">
                       <div class="flex items-center justify-between">
                         <div class="flex items-center gap-2">
@@ -1834,26 +1908,24 @@ function aplicarFaltantesServicio(servicioId) {
                           </svg>
                           <h3 class="text-sm font-bold text-white tracking-tight">Avances Registrados</h3>
                         </div>
-                        <span class="text-xs text-purple-100 font-semibold">{{ servicio.avances.length }} registro(s)</span>
+                        <span class="text-xs text-purple-100 font-semibold">{{ avancesConEventosCalidad(servicio, idx).length }} registro(s)</span>
                       </div>
                     </div>
                     
                     <div class="p-4 bg-white dark:bg-slate-900/50 space-y-2.5">
-                      <div v-for="avance in servicio.avances" :key="avance.id"
+                      <div v-for="avance in avancesConEventosCalidad(servicio, idx)" :key="avance.id"
                            class="bg-slate-50 border border-slate-200 rounded-md p-3 hover:border-slate-300 transition-colors dark:bg-slate-800/30 dark:border-slate-700 dark:hover:border-slate-600">
                         <div class="flex items-start justify-between">
                           <div class="flex-1">
                             <div class="flex items-center gap-2 mb-2 flex-wrap">
                               <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold"
-                                    :class="avance.tarifa === 'NORMAL' ? 'bg-blue-100 text-blue-800 dark:bg-blue-500/20 dark:text-blue-300' : 
-                                            avance.tarifa === 'EXTRA' ? 'bg-orange-100 text-orange-800 dark:bg-orange-500/20 dark:text-orange-300' : 
-                                            'bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-300'">
-                                {{ avance.tarifa || 'NORMAL' }}
+                                    :class="claseTipoAvance(avance)">
+                                {{ etiquetaTipoAvance(avance) }}
                               </span>
                               <span class="text-[10px] text-slate-500 dark:text-slate-400">{{ new Date(avance.created_at).toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) }}</span>
                               <span class="text-[10px] text-slate-500 dark:text-slate-400">• {{ avance.created_by?.name || 'Usuario' }}</span>
                             </div>
-                            <div class="text-xs text-slate-700 dark:text-slate-300 flex items-center gap-3">
+                            <div v-if="!esEventoCalidad(avance)" class="text-xs text-slate-700 dark:text-slate-300 flex items-center gap-3">
                               <span><strong class="font-semibold">Cant:</strong> {{ avance.cantidad_registrada }}</span>
                               <span v-if="avance.precio_unitario_aplicado">
                                 <strong class="font-semibold">P.U.:</strong> 
@@ -2331,7 +2403,7 @@ function aplicarFaltantesServicio(servicioId) {
             <div class="p-5 space-y-3">
               <!-- Validar Calidad -->
               <button v-if="can?.calidad_validar"
-                      @click="validarCalidad" 
+                      @click="openValidarCalidad" 
                       class="w-full px-5 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold rounded-xl shadow-lg hover:shadow-xl hover:scale-105 transform transition-all duration-200 flex items-center justify-center gap-2 dark:from-emerald-500 dark:to-teal-500">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
@@ -2404,32 +2476,44 @@ function aplicarFaltantesServicio(servicioId) {
     <!-- Modal de preview -->
     <FilePreview v-if="archivoPreview" :archivo="archivoPreview" @close="closePreview" />
 
-    <!-- Modal Rechazo Calidad -->
-    <div v-if="showRechazoModal" class="fixed inset-0 z-[9999] flex items-center justify-center px-4">
-      <div class="fixed inset-0 bg-black/40 z-40" @click="showRechazoModal = false"></div>
-      <div class="relative w-full max-w-2xl bg-white rounded-2xl shadow-xl p-6 z-50 dark:bg-slate-900">
-        <h3 class="text-lg font-semibold dark:text-slate-100">Rechazar OT #{{ orden.id }}</h3>
-        <p class="text-sm text-gray-500 mt-1 dark:text-slate-400">Servicio: <strong>{{ orden.servicio?.nombre }}</strong></p>
-        <div v-if="orden?.descripcion_general" class="mt-3 p-3 bg-gray-50 border border-gray-100 rounded-lg dark:bg-slate-800 dark:border-slate-700">
-          <div class="text-xs text-gray-500 dark:text-slate-400">Producto/Servicio (general)</div>
-          <div class="text-sm font-semibold text-gray-800 dark:text-slate-100">{{ orden.descripcion_general }}</div>
-        </div>
+    <!-- Modal Calidad -->
+    <div v-if="showCalidadModal" class="fixed inset-0 z-[9999] flex items-center justify-center px-4">
+      <div class="fixed inset-0 bg-black/40 z-40" @click="showCalidadModal = false"></div>
+      <div class="relative w-full max-w-xl bg-white rounded-2xl shadow-xl p-6 z-50 dark:bg-slate-900">
+        <h3 class="text-lg font-semibold dark:text-slate-100">
+          {{ calidadModo === 'validar' ? 'Validar calidad' : 'Rechazar calidad' }}
+        </h3>
+        <p class="text-sm text-gray-500 mt-1 dark:text-slate-400">OT #{{ orden.id }}</p>
 
         <div class="mt-4">
-          <label class="text-sm font-semibold dark:text-slate-100">Motivo del Rechazo</label>
-          <textarea v-model="obs" rows="4" class="w-full mt-2 p-3 border rounded-md dark:bg-slate-900 dark:border-slate-700 dark:text-slate-100" placeholder="Describe el motivo del rechazo (requerido)"></textarea>
+          <label class="text-sm font-semibold dark:text-slate-100">
+            {{ calidadModo === 'validar' ? 'Comentario (opcional)' : 'Motivo de rechazo (obligatorio)' }}
+          </label>
+          <textarea
+            v-model="calidadForm.comentario"
+            rows="4"
+            class="w-full mt-2 p-3 border rounded-md dark:bg-slate-900 dark:border-slate-700 dark:text-slate-100"
+            :placeholder="calidadModo === 'validar' ? 'Agrega un comentario si deseas' : 'Describe el motivo del rechazo'"
+          ></textarea>
+          <p v-if="calidadForm.errors.comentario" class="text-xs text-red-600 mt-1">{{ calidadForm.errors.comentario }}</p>
         </div>
 
-        <div class="mt-4">
-          <label class="text-sm font-semibold dark:text-slate-100">Acciones Correctivas (opcional)</label>
-          <textarea v-model="acciones_correctivas" rows="3" class="w-full mt-2 p-3 border rounded-md dark:bg-slate-900 dark:border-slate-700 dark:text-slate-100" placeholder="Describe acciones sugeridas para corregir la OT"></textarea>
-        </div>
-
-        <div class="mt-4 flex justify-end gap-3">
-          <button @click="showRechazoModal = false" class="px-4 py-2 rounded bg-gray-200 dark:bg-slate-700 dark:text-slate-100">Cancelar</button>
-          <button @click="rechazarCalidad" class="px-4 py-2 rounded bg-red-600 text-white">Enviar Rechazo</button>
+        <div class="mt-5 flex justify-end gap-3">
+          <button @click="showCalidadModal = false" class="px-4 py-2 rounded bg-gray-200 dark:bg-slate-700 dark:text-slate-100">Cancelar</button>
+          <button
+            @click="confirmarCalidad"
+            :disabled="calidadForm.processing"
+            class="px-4 py-2 rounded text-white"
+            :class="calidadModo === 'validar' ? 'bg-emerald-600' : 'bg-red-600'"
+          >
+            {{ calidadForm.processing ? 'Guardando...' : (calidadModo === 'validar' ? 'Confirmar validación' : 'Confirmar rechazo') }}
+          </button>
         </div>
       </div>
+    </div>
+
+    <div v-if="calidadToast" class="fixed top-4 right-4 z-[10000] px-4 py-2 rounded-lg bg-slate-900 text-white text-sm shadow-lg">
+      {{ calidadToast }}
     </div>
     
     <!-- Modal Definir Tamaños para Servicio -->

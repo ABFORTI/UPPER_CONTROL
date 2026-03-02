@@ -5,12 +5,14 @@ namespace App\Http\Controllers;
 
 use App\Models\Orden;
 use App\Models\Aprobacion;
+use App\Models\Avance;
 use App\Notifications\CalidadResultadoNotification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use App\Services\Notifier;
 use Illuminate\Support\Facades\Auth;
@@ -60,21 +62,41 @@ class CalidadController extends Controller
       // En caso de error en relaciones, aplicar un fallback conservador
       abort(422, 'Debe definir el desglose por tamaños antes de validar calidad.');
     }
-    Aprobacion::create([
-      'aprobable_type'=> Orden::class,
-      'aprobable_id'  => $orden->id,
-      'tipo'          => 'calidad',
-      'resultado'     => 'aprobado',
-      'observaciones' => $req->input('observaciones'),
-      'id_usuario'    => $req->user()->id,
+    $data = $req->validate([
+      'comentario' => ['nullable','string','max:1000'],
+      'observaciones' => ['nullable','string','max:2000'],
     ]);
+
+    $comentario = trim((string)($data['comentario'] ?? $data['observaciones'] ?? ''));
+    $comentario = $comentario !== '' ? $comentario : null;
+
     // Al validar, limpiar el motivo y las acciones correctivas para que el mensaje
     // de rechazo desaparezca de la vista de la OT.
-    DB::transaction(function() use ($orden) {
+    DB::transaction(function() use ($orden, $req, $comentario) {
+      Aprobacion::create([
+        'aprobable_type'=> Orden::class,
+        'aprobable_id'  => $orden->id,
+        'tipo'          => 'calidad',
+        'resultado'     => 'aprobado',
+        'observaciones' => $comentario,
+        'id_usuario'    => $req->user()->id,
+      ]);
+
       $orden->calidad_resultado = 'validado';
       $orden->motivo_rechazo = null;
       $orden->acciones_correctivas = null;
       $orden->save();
+
+      Avance::create([
+        'id_orden' => $orden->id,
+        'id_item' => null,
+        'id_usuario' => $req->user()->id,
+        'user_id' => $req->user()->id,
+        'tipo' => 'CALIDAD_VALIDADA',
+        'cantidad' => 0,
+        'comentario' => $comentario,
+        'es_corregido' => 0,
+      ]);
     });
 
   // Notificar al cliente (dueño de la solicitud) — no bloquear si el mail falla
@@ -101,25 +123,33 @@ class CalidadController extends Controller
     $this->authorize('calidad', $orden);
     $this->authCalidad($orden);
     if ($orden->estatus !== 'completada') abort(422);
-    $req->validate([
-      'observaciones' => ['required','string','max:2000'],
+    $data = $req->validate([
+      'comentario' => ['nullable','string','max:1000'],
+      'observaciones' => ['nullable','string','max:2000'],
       'acciones_correctivas' => ['nullable','string','max:4000'],
     ]);
 
-    Aprobacion::create([
-      'aprobable_type'=> Orden::class,
-      'aprobable_id'  => $orden->id,
-      'tipo'          => 'calidad',
-      'resultado'     => 'rechazado',
-      'observaciones' => $req->observaciones,
-      'id_usuario'    => $req->user()->id,
-    ]);
+    $comentario = trim((string)($data['comentario'] ?? $data['observaciones'] ?? ''));
+    if ($comentario === '') {
+      throw ValidationException::withMessages([
+        'comentario' => 'El comentario es obligatorio para rechazar calidad.',
+      ]);
+    }
 
     // Reset progress so the OT can be corrected and worked again:
     // - delete avances (work reports)
     // - reset cantidad_real and subtotal on orden_items
     // - reset orden totals and mark as en_progreso so team can continue work
-  DB::transaction(function() use ($orden, $req) {
+  DB::transaction(function() use ($orden, $req, $data, $comentario) {
+  Aprobacion::create([
+    'aprobable_type'=> Orden::class,
+    'aprobable_id'  => $orden->id,
+    'tipo'          => 'calidad',
+    'resultado'     => 'rechazado',
+    'observaciones' => $comentario,
+    'id_usuario'    => $req->user()->id,
+  ]);
+
   // Keep historical avances: do NOT delete them so history remains available for audit.
 
       // Reiniciar producción efectiva en OTs tradicionales eliminando segmentos previos
@@ -146,8 +176,8 @@ class CalidadController extends Controller
     // Update orden totals and calidad status
     $orden->total_real = 0;
     $orden->calidad_resultado = 'rechazado';
-    $orden->motivo_rechazo = $req->observaciones;
-    $orden->acciones_correctivas = $req->input('acciones_correctivas');
+    $orden->motivo_rechazo = $comentario;
+    $orden->acciones_correctivas = $data['acciones_correctivas'] ?? null;
     // Move back to en_proceso so TL can re-open work (if previously completed)
     $orden->estatus = 'en_proceso';
     // Reabrir OT para producción en caso de que hubiera quedado cerrada por estatus de corte
@@ -157,24 +187,22 @@ class CalidadController extends Controller
       $orden->fecha_completada = null;
     }
     $orden->save();
-    });
-    // Registrar un avance informativo en el historial con motivo y acciones
-    $coment = '[RECHAZO CALIDAD] ' . $req->observaciones;
-    if ($req->filled('acciones_correctivas')) {
-      $coment .= ' | Acciones: ' . $req->input('acciones_correctivas');
-    }
-    \App\Models\Avance::create([
+
+    Avance::create([
       'id_orden' => $orden->id,
       'id_item' => null,
       'id_usuario' => $req->user()->id,
+      'user_id' => $req->user()->id,
+      'tipo' => 'CALIDAD_RECHAZADA',
       'cantidad' => 0,
-      'comentario' => $coment,
+      'comentario' => $comentario,
       'es_corregido' => 0,
     ]);
+    });
   // Notificar a cliente (y/o TL/Coordinador) si quieres:
   $cliente = $orden->solicitud->cliente;
   try {
-    Notification::send($cliente, new CalidadResultadoNotification($orden, 'RECHAZADO', $req->observaciones));
+    Notification::send($cliente, new CalidadResultadoNotification($orden, 'RECHAZADO', $comentario));
   } catch (\Throwable $e) {
     Log::warning('Calidad.rechazar: fallo al enviar notificación (ignorado)', [
       'orden_id' => $orden->id,
@@ -184,7 +212,7 @@ class CalidadController extends Controller
     $this->act('ordenes')
       ->performedOn($orden)
       ->event('calidad_rechazar')
-      ->withProperties(['observaciones' => $req->observaciones])
+      ->withProperties(['observaciones' => $comentario])
       ->log("OT #{$orden->id} rechazada por calidad");
     return redirect()->route('ordenes.show',$orden->id)->with('ok','Calidad rechazó la OT');
   }
