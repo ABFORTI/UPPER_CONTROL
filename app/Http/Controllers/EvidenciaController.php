@@ -4,8 +4,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\Evidencia;
+use App\Models\Avance;
 use App\Models\Orden;
-use App\Models\OrdenItem;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
@@ -17,17 +17,30 @@ class EvidenciaController extends Controller
     $this->authorize('reportarAvance', $orden);
 
     $data = $req->validate([
-      'id_item'      => ['nullable','integer','exists:orden_items,id'],
-      'evidencias'   => ['required','array','min:1'],
+      'avance_id'    => ['required','integer','exists:avances,id'],
+      'files'        => ['required_without:evidencias','array','min:1'],
+      'evidencias'   => ['required_without:files','array','min:1'],
+      'files.*'      => ['file','max:10240', 'mimetypes:image/jpeg,image/png,image/webp,application/pdf,video/mp4'],
       'evidencias.*' => ['file','max:10240', 'mimetypes:image/jpeg,image/png,image/webp,application/pdf,video/mp4'],
     ]);
 
+    $avance = Avance::query()
+      ->where('id', (int)$data['avance_id'])
+      ->where('id_orden', $orden->id)
+      ->first();
+
+    if (!$avance) {
+      return back()->withErrors(['avance_id' => 'El avance seleccionado no pertenece a esta OT.']);
+    }
+
     $saved = [];
-    foreach ($req->file('evidencias', []) as $file) {
+    $files = $req->file('files', $req->file('evidencias', []));
+    foreach ($files as $file) {
       $path = $file->store("evidencias/orden-{$orden->id}", 'public');
       $saved[] = Evidencia::create([
         'id_orden'      => $orden->id,
-        'id_item'       => $data['id_item'] ?? null,
+        'id_item'       => $avance->id_item,
+        'avance_id'     => $avance->id,
         'id_usuario'    => $req->user()->id,
         'path'          => $path,
         'original_name' => $file->getClientOriginalName(),

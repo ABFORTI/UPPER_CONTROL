@@ -12,7 +12,9 @@ class AvanceStoreRequest extends FormRequest {
       'id_item'   => ['nullable','integer','exists:orden_items,id'],
       'cantidad'  => ['required','integer','min:1'],
       'comentario'=> ['nullable','string','max:1000'],
-      'evidencia' => ['nullable','file','max:6144'] // 6MB
+      'evidencia' => ['nullable','file','max:6144'], // legacy
+      'evidencias' => ['nullable','array','min:1'],
+      'evidencias.*' => ['file','max:10240', 'mimetypes:image/jpeg,image/png,image/webp,application/pdf,video/mp4']
     ];
   }
 }

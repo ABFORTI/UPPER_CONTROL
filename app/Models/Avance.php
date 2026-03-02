@@ -14,6 +14,7 @@ class Avance extends Model {
   public function orden(){ return $this->belongsTo(Orden::class,'id_orden'); }
   public function item(){ return $this->belongsTo(OrdenItem::class,'id_item'); }
   public function usuario(){ return $this->belongsTo(User::class,'id_usuario'); }
+  public function evidencias(){ return $this->hasMany(Evidencia::class,'avance_id'); }
 
   public function getIsCorregidoAttribute() {
     return (bool)($this->es_corregido ?? false);

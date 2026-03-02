@@ -581,6 +581,8 @@ class OrdenController extends Controller
             'comentario'            => ['nullable','string','max:500'],
             'tarifa_tipo'           => ['nullable','in:NORMAL,EXTRA,FIN_DE_SEMANA'],
             'precio_unitario_manual'=> ['nullable','numeric','min:0.0001'],
+            'evidencias'            => ['nullable','array','min:1'],
+            'evidencias.*'          => ['file','max:10240', 'mimetypes:image/jpeg,image/png,image/webp,application/pdf,video/mp4'],
         ];
         
         // Validar tabla correcta según tipo de OT
@@ -758,6 +760,16 @@ class OrdenController extends Controller
                             'invocation_id' => $invocationId,
                             'request_id' => $requestId,
                             'avance_id' => $avanceCreado->id,
+                        ]);
+                    } else {
+                        $marker = '[OT_SERVICIO_AVANCE_ID:' . $avanceCreado->id . ']';
+                        \App\Models\Avance::create([
+                            'id_orden' => $orden->id,
+                            'id_item' => null,
+                            'id_usuario' => Auth::id(),
+                            'cantidad' => (int)$totalCantidadRegistrada,
+                            'comentario' => trim($marker . ' ' . (string)($comentarioFinal ?? '')),
+                            'es_corregido' => false,
                         ]);
                     }
                     
@@ -966,6 +978,7 @@ class OrdenController extends Controller
             // SOLO para OTs tradicionales (no multi-servicio)
             // Para multi-servicio se usa ot_servicio_avances más abajo
             if (!$esMultiServicio) {
+                $avancesCreados = [];
                 // Marcar como corregido SOLO si:
                 // 1. Existe un rechazo de calidad registrado para esta orden
                 // 2. Y ese rechazo fue DESPUÉS de que ya había avances (es decir, es una corrección real)
@@ -988,13 +1001,32 @@ class OrdenController extends Controller
                 foreach ($data['items'] as $d) {
                     $aplicada = (int)($cantAplicada[(int)$d['id_item']] ?? 0);
                     if ($aplicada > 0) {
-                        \App\Models\Avance::create([
+                        $avanceCreado = \App\Models\Avance::create([
                             'id_orden' => $orden->id,
                             'id_item' => $d['id_item'],
                             'id_usuario' => Auth::id(),
                             'cantidad' => $aplicada,
                             'comentario' => $comentarioFinal ?: null,
                             'es_corregido' => $isCorregido,
+                        ]);
+                        $avancesCreados[] = $avanceCreado;
+                    }
+                }
+
+                $archivos = $req->file('evidencias', []);
+                if (!empty($archivos) && !empty($avancesCreados)) {
+                    $avanceDestino = end($avancesCreados);
+                    foreach ($archivos as $file) {
+                        $path = $file->store("evidencias/orden-{$orden->id}", 'public');
+                        \App\Models\Evidencia::create([
+                            'id_orden'      => $orden->id,
+                            'id_item'       => $avanceDestino->id_item,
+                            'avance_id'     => $avanceDestino->id,
+                            'id_usuario'    => Auth::id(),
+                            'path'          => $path,
+                            'original_name' => $file->getClientOriginalName(),
+                            'mime'          => $file->getClientMimeType(),
+                            'size'          => $file->getSize(),
                         ]);
                     }
                 }
@@ -1196,12 +1228,49 @@ class OrdenController extends Controller
             'items.ajustes.user',
             'items.segmentosProduccion' => fn($q) => $q->with('usuario')->orderBy('created_at'),
             'avances' => fn($q) => $q->with(['usuario', 'item'])->orderByDesc('created_at'),
-            'evidencias' => fn($q)=>$q->with('usuario')->orderByDesc('id'),
+            'evidencias' => fn($q)=>$q->with(['usuario','avance.usuario','avance.item'])->orderByDesc('id'),
             'otServicios.servicio',
             'otServicios.items.ajustes.user',
             'otServicios.avances' => fn($q) => $q->with('createdBy')->orderBy('created_at'),
             'otServicios.addedBy', // Cargar usuario que agregó servicio adicional
         ]);
+
+        $servicioPorOtServicioAvanceId = [];
+        foreach ($orden->otServicios as $otServicio) {
+            $nombreServicio = $otServicio->servicio->nombre ?? null;
+            foreach (($otServicio->avances ?? collect()) as $avanceServicio) {
+                $servicioPorOtServicioAvanceId[(int)$avanceServicio->id] = $nombreServicio;
+            }
+        }
+
+        $orden->setRelation('evidencias', $orden->evidencias->map(function ($evidencia) use ($orden, $servicioPorOtServicioAvanceId) {
+            $servicioNombre = $orden->servicio->nombre ?? null;
+            $comentarioAvance = $evidencia->avance?->comentario;
+
+            if (is_string($comentarioAvance) && preg_match('/^\[OT_SERVICIO_AVANCE_ID:(\d+)\]/', $comentarioAvance, $m)) {
+                $idOtServicioAvance = (int)$m[1];
+                if (!empty($servicioPorOtServicioAvanceId[$idOtServicioAvance])) {
+                    $servicioNombre = $servicioPorOtServicioAvanceId[$idOtServicioAvance];
+                }
+            }
+
+            $evidencia->setAttribute('servicio_nombre', $servicioNombre);
+            return $evidencia;
+        }));
+
+        $orden->setRelation('avances', $orden->avances->map(function ($avance) use ($orden, $servicioPorOtServicioAvanceId) {
+            if (is_string($avance->comentario)) {
+                if (preg_match('/^\[OT_SERVICIO_AVANCE_ID:(\d+)\]/', $avance->comentario, $m)) {
+                    $idOtServicioAvance = (int)$m[1];
+                    $avance->setAttribute('servicio_nombre', $servicioPorOtServicioAvanceId[$idOtServicioAvance] ?? ($orden->servicio->nombre ?? null));
+                }
+                $avance->comentario = preg_replace('/^\[OT_SERVICIO_AVANCE_ID:\d+\]\s*/', '', $avance->comentario);
+            }
+            if (!$avance->getAttribute('servicio_nombre')) {
+                $avance->setAttribute('servicio_nombre', $orden->servicio->nombre ?? null);
+            }
+            return $avance;
+        }));
 
         // Flag per-centro: servicio con tamaños SI existe configuración de tamaños en el centro y aún no hay desglose capturado
         $usaTamanosCentro = \App\Models\ServicioCentro::where('id_centrotrabajo',$orden->id_centrotrabajo)

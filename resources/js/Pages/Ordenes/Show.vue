@@ -422,20 +422,97 @@ function registrarAjusteTradicional() {
   })
 }
 
-// ----- Evidencias (archivos por avance / ítem) -----
+// ----- Evidencias (archivos por avance) -----
 const evForm = useForm({
-  id_item: null,
-  evidencias: []
+  avance_id: null,
+  files: []
 })
-function onPickEvidencias(e){ evForm.evidencias = Array.from(e.target.files || []) }
+function onPickEvidencias(e){ evForm.files = Array.from(e.target.files || []) }
+function tipoAvanceLabel(a) {
+  if (isRechazoComentario(a?.comentario)) return 'RECHAZO'
+  if (isFaltantesComentario(a?.comentario)) return 'FALTANTES'
+  if ((a?.isCorregido || a?.es_corregido)) return 'CORREGIDO'
+  return 'NORMAL'
+}
+const avancesParaEvidencias = computed(() => (avances.value || []).map(a => ({
+  ...a,
+  tipo_label: tipoAvanceLabel(a),
+  fecha_label: fmtDate(a?.created_at),
+  cantidad_label: Number(a?.cantidad_registrada || a?.cantidad || 0),
+  pu_label: a?.precio_unitario_aplicado ? Number(a.precio_unitario_aplicado).toFixed(2) : null,
+  usuario_label: a?.usuario?.name || 'Usuario',
+  servicio_label: a?.servicio_nombre || 'Servicio no disponible',
+})))
+function formatoAvanceOption(av) {
+  const pu = av?.pu_label ? ` | PU: $${av.pu_label}` : ''
+  return `#${av.id} | ${av.tipo_label} | ${av.fecha_label} | Cant: ${av.cantidad_label}${pu} | ${av.usuario_label} | ${av.servicio_label}`
+}
 function subirEvidencias(){
-  if (!evForm.evidencias.length) return
-  const fd = new FormData()
-  if (evForm.id_item) fd.append('id_item', evForm.id_item)
-  evForm.evidencias.forEach(f => fd.append('evidencias[]', f))
-  evForm.post(props.urls.evidencias_store, { forceFormData:true, preserveScroll:true })
+  evForm.clearErrors('avance_id', 'files')
+  if (!evForm.avance_id) {
+    evForm.setError('avance_id', 'Selecciona un avance.')
+    return
+  }
+  if (!evForm.files.length) {
+    evForm.setError('files', 'Selecciona al menos un archivo.')
+    return
+  }
+
+  evForm.post(props.urls.evidencias_store, {
+    forceFormData: true,
+    preserveScroll: true,
+    onSuccess: () => {
+      evForm.reset('files')
+    }
+  })
 }
 const vistaEvidencias = computed(() => props.orden?.evidencias ?? [])
+function limpiarComentarioAvance(texto) {
+  if (!texto || typeof texto !== 'string') return ''
+  return texto.replace(/^\[OT_SERVICIO_AVANCE_ID:\d+\]\s*/, '').trim()
+}
+function obtenerTarifaInfo(texto) {
+  const limpio = limpiarComentarioAvance(texto)
+  const m = limpio.match(/^\[TARIFA\s+([^\]]+):\s*\$([\d.]+)\]\s*/i)
+  if (!m) return { tipo: 'NORMAL', pu: null, comentario: limpio }
+  const tipo = String(m[1] || 'NORMAL').trim().toUpperCase().replace(/\s+/g, '_')
+  const pu = Number(m[2] || 0)
+  const comentario = limpio.replace(m[0], '').trim()
+  return { tipo, pu: Number.isFinite(pu) && pu > 0 ? pu : null, comentario }
+}
+function detalleAvanceEvidencia(ev) {
+  const a = ev?.avance || null
+  if (!a) {
+    return {
+      id: ev?.avance_id || null,
+      fecha: null,
+      usuario: null,
+      cantidad: null,
+      tipo: 'N/A',
+      pu: null,
+      comentario: '',
+      itemTexto: ev?.id_item ? `Ítem #${ev.id_item}` : null,
+    }
+  }
+  const tarifa = obtenerTarifaInfo(a?.comentario)
+  const itemId = a?.id_item || ev?.id_item || null
+  const itemDesc = a?.item?.tamano ? `Tamaño: ${a.item.tamano}` : (a?.item?.descripcion || null)
+  return {
+    id: a?.id || ev?.avance_id || null,
+    fecha: a?.created_at || null,
+    usuario: a?.usuario?.name || null,
+    cantidad: Number(a?.cantidad || 0),
+    tipo: tarifa.tipo,
+    pu: tarifa.pu,
+    comentario: tarifa.comentario,
+    itemTexto: itemId ? `Ítem #${itemId}${itemDesc ? ` — ${itemDesc}` : ''}` : null,
+  }
+}
+function evidenciasDeAvance(avanceId) {
+  const target = Number(avanceId || 0)
+  if (!target) return []
+  return vistaEvidencias.value.filter(ev => Number(ev?.avance_id || 0) === target)
+}
 function borrarEvidencia(id){
   // urls.evidencias_destroy viene como .../evidencias/0 -> reemplazamos el 0 por el id real
   const url = props.urls.evidencias_destroy.replace(/\/0$/, '/'+id)
@@ -1336,6 +1413,16 @@ function aplicarFaltantesServicio(servicioId) {
                         <div v-if="isFaltantesComentario(a?.comentario)" class="text-xs text-slate-600 dark:text-slate-400 mt-1">
                           {{ a.comentario }}
                         </div>
+
+                        <div v-if="evidenciasDeAvance(a?.id).length" class="mt-2.5 p-2 rounded-md border border-indigo-100 bg-indigo-50/60 dark:border-indigo-500/30 dark:bg-indigo-500/10">
+                          <div class="text-[11px] font-semibold text-indigo-700 dark:text-indigo-300 mb-1">Evidencias ({{ evidenciasDeAvance(a?.id).length }})</div>
+                          <div class="flex flex-wrap gap-1.5">
+                            <a v-for="ev in evidenciasDeAvance(a?.id)" :key="ev.id" :href="ev.url" target="_blank"
+                               class="inline-flex items-center px-2 py-1 rounded bg-white text-[11px] text-indigo-700 border border-indigo-200 hover:bg-indigo-100 dark:bg-slate-900/40 dark:text-indigo-300 dark:border-indigo-500/40 dark:hover:bg-indigo-500/20">
+                              {{ ev.original_name || ('Evidencia #' + ev.id) }}
+                            </a>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1811,13 +1898,13 @@ function aplicarFaltantesServicio(servicioId) {
             </div>
             <div class="p-6 space-y-4">
               <div>
-                <label class="block text-sm font-semibold text-gray-700 mb-2 dark:text-slate-200">Asociar a ítem (opcional)</label>
+                <label class="block text-sm font-semibold text-gray-700 mb-2 dark:text-slate-200">Asociar a avance</label>
                 <div class="relative">
-      <select v-model="evForm.id_item" 
+      <select v-model="evForm.avance_id" 
         class="w-full px-4 py-3 pr-10 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-orange-100 focus:border-orange-400 transition-all duration-200 appearance-none bg-white text-gray-800 font-medium dark:bg-slate-900/60 dark:border-slate-700 dark:text-slate-100 dark:focus:ring-orange-400/40 dark:focus:border-orange-400/60">
-                    <option :value="null">— Sin asociar a ítem específico —</option>
-                    <option v-for="it in orden.items" :key="it.id" :value="it.id">
-                      #{{it.id}} — {{ it.tamano ? ('Tamaño: '+it.tamano) : it.descripcion }}
+                    <option :value="null">— Selecciona un avance —</option>
+                    <option v-for="av in avancesParaEvidencias" :key="av.id" :value="av.id">
+                      {{ formatoAvanceOption(av) }}
                     </option>
                   </select>
                   <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-400 dark:text-slate-500">
@@ -1827,6 +1914,12 @@ function aplicarFaltantesServicio(servicioId) {
                   </div>
                 </div>
               </div>
+              <p v-if="evForm.errors.avance_id" class="text-sm text-red-600 flex items-center gap-1">
+                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                </svg>
+                {{ evForm.errors.avance_id }}
+              </p>
               
               <div>
                 <label class="block text-sm font-semibold text-gray-700 mb-2 dark:text-slate-200">Seleccionar archivos</label>
@@ -1850,6 +1943,12 @@ function aplicarFaltantesServicio(servicioId) {
                   <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
                 </svg>
                 {{ evForm.errors.evidencias }}
+              </p>
+              <p v-if="evForm.errors.files" class="text-sm text-red-600 flex items-center gap-1">
+                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                </svg>
+                {{ evForm.errors.files }}
               </p>
             </div>
           </div>
@@ -1968,19 +2067,38 @@ function aplicarFaltantesServicio(servicioId) {
 
                   <!-- Info -->
                   <div class="p-4">
+                    <div class="text-[10px] text-indigo-700 font-bold mb-2 dark:text-indigo-300">Avance #{{ detalleAvanceEvidencia(ev).id || '—' }}</div>
                     <div class="text-xs text-gray-600 mb-2 flex items-center gap-1 dark:text-slate-400">
                       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
                       </svg>
-                      {{ fmtDate(ev.created_at) }}
+                      {{ fmtDate(detalleAvanceEvidencia(ev).fecha || ev.created_at) }}
                     </div>
                     <div class="text-sm font-semibold text-gray-800 mb-1 flex items-center gap-1 dark:text-slate-100">
                       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
                       </svg>
-                      {{ ev.usuario?.name || 'Usuario' }}
+                      {{ detalleAvanceEvidencia(ev).usuario || ev.usuario?.name || 'Usuario' }}
                     </div>
-                        <div v-if="ev.id_item" class="text-xs text-indigo-600 font-medium mb-3 dark:text-indigo-300">Ítem #{{ ev.id_item }}</div>
+                    <div v-if="ev.servicio_nombre" class="text-xs text-emerald-700 mb-1 dark:text-emerald-300">
+                      <span class="font-semibold">Servicio:</span> {{ ev.servicio_nombre }}
+                    </div>
+                    <div class="text-xs text-slate-700 mb-1 dark:text-slate-300">
+                      <span class="font-semibold">Tipo:</span> {{ detalleAvanceEvidencia(ev).tipo || 'NORMAL' }}
+                    </div>
+                    <div class="text-xs text-slate-700 mb-1 dark:text-slate-300">
+                      <span class="font-semibold">Cantidad:</span> {{ detalleAvanceEvidencia(ev).cantidad ?? 0 }}
+                    </div>
+                    <div v-if="detalleAvanceEvidencia(ev).pu" class="text-xs text-slate-700 mb-1 dark:text-slate-300">
+                      <span class="font-semibold">P.U.:</span> ${{ Number(detalleAvanceEvidencia(ev).pu).toFixed(2) }}
+                    </div>
+                    <div v-if="detalleAvanceEvidencia(ev).itemTexto" class="text-xs text-slate-500 mb-1 dark:text-slate-400">
+                      {{ detalleAvanceEvidencia(ev).itemTexto }}
+                    </div>
+                    <div v-if="detalleAvanceEvidencia(ev).comentario" class="text-xs text-slate-600 mb-3 dark:text-slate-400">
+                      <span class="font-semibold">Comentario:</span> {{ detalleAvanceEvidencia(ev).comentario }}
+                    </div>
+                    <div v-else class="mb-3"></div>
                     
                     <button v-if="can?.reportarAvance" @click="borrarEvidencia(ev.id)"
                           class="w-full px-3 py-2 bg-red-50 text-red-700 font-semibold rounded-lg hover:bg-red-600 hover:text-white transition-all duration-200 flex items-center justify-center gap-1 dark:bg-rose-500/10 dark:text-rose-300 dark:hover:bg-rose-500">

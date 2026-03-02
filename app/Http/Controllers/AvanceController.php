@@ -7,6 +7,7 @@ use App\Http\Requests\AvanceStoreRequest;
 use App\Models\Orden;
 use App\Models\OrdenItem;
 use App\Models\Avance;
+use App\Models\Evidencia;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
 
@@ -52,7 +53,7 @@ class AvanceController extends Controller
         $isCorregido = $avancesAntesDeRechazo;
       }
 
-      Avance::create([
+      $avance = Avance::create([
         'id_orden'  => $orden->id,
         'id_item'   => $item?->id,
         'id_usuario'=> $u->id,
@@ -61,6 +62,28 @@ class AvanceController extends Controller
         'evidencia_url' => $path,
         'es_corregido' => $isCorregido,
       ]);
+
+      $files = [];
+      if ($req->hasFile('evidencias')) {
+        $files = array_merge($files, $req->file('evidencias', []));
+      }
+      if ($req->hasFile('evidencia')) {
+        $files[] = $req->file('evidencia');
+      }
+
+      foreach ($files as $file) {
+        $storedPath = $file->store("evidencias/orden-{$orden->id}", 'public');
+        Evidencia::create([
+          'id_orden'      => $orden->id,
+          'id_item'       => $item?->id,
+          'avance_id'     => $avance->id,
+          'id_usuario'    => $u->id,
+          'path'          => $storedPath,
+          'original_name' => $file->getClientOriginalName(),
+          'mime'          => $file->getClientMimeType(),
+          'size'          => $file->getSize(),
+        ]);
+      }
 
       // Actualiza acumulados
       if ($item) {

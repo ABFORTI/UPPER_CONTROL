@@ -9,11 +9,12 @@ class Evidencia extends Model
 {
   protected $table = 'evidencias';
   protected $fillable = [
-    'id_orden','id_item','id_avance','id_usuario','path','original_name','mime','size'
+    'id_orden','id_item','id_avance','avance_id','id_usuario','path','original_name','mime','size'
   ];
 
   public function orden(){ return $this->belongsTo(Orden::class,'id_orden'); }
   public function item(){ return $this->belongsTo(OrdenItem::class,'id_item'); }
+  public function avance(){ return $this->belongsTo(Avance::class,'avance_id'); }
   public function usuario(){ return $this->belongsTo(User::class,'id_usuario'); }
 
   // URL pública del archivo
