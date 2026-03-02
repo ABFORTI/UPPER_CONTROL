@@ -12,9 +12,11 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Carbon;
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\ShouldAutoSize;
+use Maatwebsite\Excel\Concerns\WithColumnFormatting;
 use Maatwebsite\Excel\Concerns\WithHeadings;
+use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
 
-class OrdenesFacturacionExport implements FromCollection, WithHeadings, ShouldAutoSize
+class OrdenesFacturacionExport implements FromCollection, WithHeadings, ShouldAutoSize, WithColumnFormatting
 {
     public function __construct(
         protected array $filters,
@@ -209,6 +211,14 @@ class OrdenesFacturacionExport implements FromCollection, WithHeadings, ShouldAu
             'Precio',
             'DATOS DE LA ORDEN DE TRABAJO',
             'Fecha de entrega',
+        ];
+    }
+
+    public function columnFormats(): array
+    {
+        return [
+            // Precio
+            'G' => '"$" #,##0.00',
         ];
     }
 

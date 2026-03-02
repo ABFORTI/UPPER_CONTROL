@@ -241,8 +241,10 @@ class OrdenesIndexExport implements FromCollection, WithHeadings, ShouldAutoSize
     public function columnFormats(): array
     {
         return [
-            'I' => NumberFormat::FORMAT_CURRENCY_USD_SIMPLE,
-            'J' => NumberFormat::FORMAT_CURRENCY_USD_SIMPLE,
+            // Costo unitario (MxN)
+            'I' => '"$" #,##0.00',
+            // Costo total s/iva
+            'J' => '"$" #,##0.00',
         ];
     }
 
