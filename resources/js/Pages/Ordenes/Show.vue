@@ -445,6 +445,9 @@ const canEditSegmentPrices = computed(() =>
 const canManageEvidencias = computed(() =>
   !!(props.can?.gestionar_evidencias || props.can?.reportarAvance || props.can?.calidad_validar)
 )
+const canDownloadEvidencias = computed(() =>
+  !!(props.can?.descargar_evidencias || canManageEvidencias.value)
+)
 const segPriceDraft = ref({}) // { [id]: number|string }
 const segNotaDraft = ref({})
 function segsOf(it) { return it?.segmentos_produccion || [] }
@@ -2164,7 +2167,7 @@ function aplicarFaltantesServicio(servicioId) {
                   </svg>
                   Galería de Evidencias
                 </h3>
-                <a v-if="canManageEvidencias && vistaEvidencias.length && urls?.evidencias_download_all"
+                 <a v-if="canDownloadEvidencias && vistaEvidencias.length && urls?.evidencias_download_all"
                    :href="urls.evidencias_download_all"
                    class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/20 border border-white/30 text-white text-xs font-bold hover:bg-white/30 transition-colors">
                   <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

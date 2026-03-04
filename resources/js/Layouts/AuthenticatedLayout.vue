@@ -1,7 +1,8 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { usePage, router, Link } from '@inertiajs/vue3'
 import Icon from '@/Components/Icon.vue'
+import AnnouncementModal from '@/Components/AnnouncementModal.vue'
 import { useAssetUrl } from '@/Support/useAssetUrl'
 import { useTheme } from '@/Support/useTheme'
 
@@ -84,6 +85,100 @@ function logout (e) {
   try { window.__lastExplicitLogoutAt = Date.now(); } catch {}
   router.post(route('logout'), {}, { replace: true });
 }
+
+const pendingAnnouncement = ref(null)
+const showAnnouncementModal = ref(false)
+const announcementProcessing = ref(false)
+const announcementCheckedUserId = ref(null)
+
+function csrfToken() {
+  return document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+}
+
+async function loadPendingAnnouncement() {
+  const currentUserId = Number(user.value?.id || 0)
+  if (!currentUserId) return
+  if (announcementCheckedUserId.value === currentUserId) return
+  announcementCheckedUserId.value = currentUserId
+
+  try {
+    const response = await fetch(route('announcements.pending'), {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+      credentials: 'same-origin',
+    })
+
+    if (!response.ok) return
+    const payload = await response.json()
+    if (payload?.data?.id) {
+      pendingAnnouncement.value = payload.data
+      showAnnouncementModal.value = true
+    }
+  } catch (error) {
+    console.warn('No se pudo consultar anuncio pendiente', error)
+  }
+}
+
+async function markAnnouncementSeen() {
+  if (!pendingAnnouncement.value?.id || announcementProcessing.value) return
+
+  announcementProcessing.value = true
+  try {
+    await fetch(route('announcements.seen', pendingAnnouncement.value.id), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-CSRF-TOKEN': csrfToken(),
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+      credentials: 'same-origin',
+      body: JSON.stringify({}),
+    })
+  } finally {
+    showAnnouncementModal.value = false
+    announcementProcessing.value = false
+  }
+}
+
+async function dismissAnnouncementForever() {
+  if (!pendingAnnouncement.value?.id || announcementProcessing.value) return
+
+  announcementProcessing.value = true
+  try {
+    await fetch(route('announcements.dismiss', pendingAnnouncement.value.id), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-CSRF-TOKEN': csrfToken(),
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+      credentials: 'same-origin',
+      body: JSON.stringify({}),
+    })
+  } finally {
+    showAnnouncementModal.value = false
+    announcementProcessing.value = false
+  }
+}
+
+onMounted(() => {
+  loadPendingAnnouncement()
+})
+
+watch(() => Number(user.value?.id || 0), (newUserId, oldUserId) => {
+  if (!newUserId) return
+  if (newUserId !== oldUserId) {
+    pendingAnnouncement.value = null
+    showAnnouncementModal.value = false
+    announcementCheckedUserId.value = null
+    loadPendingAnnouncement()
+  }
+})
 
 </script>
 
@@ -291,6 +386,16 @@ function logout (e) {
                 <span :class="['overflow-hidden transition-all duration-200', labelVisibilityClasses]">Backups</span>
               </Link>
             </li>
+            <li v-if="isAdmin">
+              <Link :href="route('admin.announcements.index')" :class="[
+                'flex items-center p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all',
+                navArrangementClasses,
+                { 'bg-blue-50 text-blue-700 dark:bg-slate-800': url.includes('/admin/announcements') }
+              ]">
+                <Icon name="document" :size="24" />
+                <span :class="['overflow-hidden transition-all duration-200', labelVisibilityClasses]">Anuncios</span>
+              </Link>
+            </li>
           </ul>
         </nav>
 
@@ -373,5 +478,13 @@ function logout (e) {
         </main>
       </div>
     </div>
+
+    <AnnouncementModal
+      :show="showAnnouncementModal"
+      :announcement="pendingAnnouncement"
+      :processing="announcementProcessing"
+      @close="markAnnouncementSeen"
+      @dismiss="dismissAnnouncementForever"
+    />
   </div>
 </template>

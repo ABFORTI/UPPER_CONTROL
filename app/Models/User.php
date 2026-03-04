@@ -70,6 +70,11 @@ class User extends Authenticatable
             ->withTimestamps();
     }
 
+    public function announcementViews()
+    {
+        return $this->hasMany(\App\Models\AnnouncementView::class);
+    }
+
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()

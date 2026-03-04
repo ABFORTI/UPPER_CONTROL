@@ -16,7 +16,8 @@ use App\Http\Controllers\{
     DashboardController,
     PrecioController,
     EvidenciaController,
-    HomeController
+    HomeController,
+    AnnouncementController
 };
 
 use App\Http\Controllers\ClientPublicQuotationController;
@@ -27,7 +28,8 @@ use App\Http\Controllers\Admin\{
     ImpersonateController,
     CentroController,
     BackupController,
-    CentroFeatureController
+    CentroFeatureController,
+    AnnouncementController as AdminAnnouncementController
 };
 
 // Home -> Redirige a dashboard (o login si no está autenticado)
@@ -38,6 +40,10 @@ Route::match(['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'], '/', 
  |  DASHBOARD & NOTIFICACIONES
  * =========================== */
 Route::middleware('auth')->group(function () {
+    Route::get('/announcements/pending', [AnnouncementController::class, 'pending'])->name('announcements.pending');
+    Route::post('/announcements/{announcement}/seen', [AnnouncementController::class, 'seen'])->name('announcements.seen');
+    Route::post('/announcements/{announcement}/dismiss', [AnnouncementController::class, 'dismiss'])->name('announcements.dismiss');
+
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
     Route::get('/dashboard/export/ots', [DashboardController::class, 'exportOts'])->name('dashboard.export.ots');
     Route::get('/dashboard/export/facturas', [DashboardController::class, 'exportFacturas'])->name('dashboard.export.facturas');
@@ -381,6 +387,14 @@ Route::middleware(['auth','role:admin'])->prefix('admin')->name('admin.')->group
     // Funcionalidades por centro
     Route::get('/centros/features', [CentroFeatureController::class, 'index'])->name('centros.features.index');
     Route::put('/centros/{centro}/features', [CentroFeatureController::class, 'update'])->name('centros.features.update');
+
+    // Announcements
+    Route::get('/announcements', [AdminAnnouncementController::class, 'index'])->name('announcements.index');
+    Route::get('/announcements/create', [AdminAnnouncementController::class, 'create'])->name('announcements.create');
+    Route::post('/announcements', [AdminAnnouncementController::class, 'store'])->name('announcements.store');
+    Route::get('/announcements/{announcement}/edit', [AdminAnnouncementController::class, 'edit'])->name('announcements.edit');
+    Route::patch('/announcements/{announcement}', [AdminAnnouncementController::class, 'update'])->name('announcements.update');
+    Route::delete('/announcements/{announcement}', [AdminAnnouncementController::class, 'destroy'])->name('announcements.destroy');
 });
 
 // Arranque de impersonación (solo admin)

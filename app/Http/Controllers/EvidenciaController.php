@@ -65,7 +65,7 @@ class EvidenciaController extends Controller
 
   public function downloadAll(Orden $orden)
   {
-    $this->authorize('gestionarEvidencias', $orden);
+    $this->authorize('view', $orden);
 
     $evidencias = $orden->evidencias()->orderBy('id')->get();
     if ($evidencias->isEmpty()) {

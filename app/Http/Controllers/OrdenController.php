@@ -1660,6 +1660,7 @@ class OrdenController extends Controller
             'can'         => [
                 'reportarAvance'     => $canReportar,
                 'gestionar_evidencias' => Gate::allows('gestionarEvidencias', $orden),
+                'descargar_evidencias' => Gate::allows('view', $orden),
                 'asignar_tl'         => $canAsignar,
                 'calidad_validar'    => $canCalidad,
                 'cliente_autorizar'  => $canClienteAutorizar,
