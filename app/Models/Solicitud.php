@@ -3,12 +3,13 @@
 // app/Models/Solicitud.php
 namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Spatie\Activitylog\Traits\LogsActivity;
 use Spatie\Activitylog\LogOptions;
 use App\Models\User;
 
 class Solicitud extends Model {
-  use LogsActivity;
+  use LogsActivity, SoftDeletes;
   protected $table='solicitudes';
   protected $casts = [
     'tamanos_json' => 'array',

@@ -9,11 +9,13 @@ const props = defineProps({
   servicios: Array,
   centros: Array,
   centrosCostos: Array,
-  urls: Object
+  urls: Object,
+  can: Object,
 })
 
 const rows = computed(()=> props.data?.data ?? [])
 const isPeriod = computed(()=> !!(props.filters?.week))
+const hasPagination = computed(() => Array.isArray(props.data?.links) && props.data.links.length > 0)
 
 // Permisos: solo admin o facturacion pueden marcar y facturar
 const page = usePage()
@@ -41,8 +43,15 @@ const sel = ref(props.filters?.estatus || '')
 const factSel = ref(props.filters?.facturacion || '')
 const centroSel = ref(props.filters?.centro || '')
 const centroCostoSel = ref(props.filters?.centro_costo || '')
-const yearSel = ref(props.filters?.year || new Date().getFullYear())
+const desdeSel = ref(props.filters?.desde || '')
+const hastaSel = ref(props.filters?.hasta || '')
+const yearSel = ref(props.filters?.year || '')
 const weekSel = ref(props.filters?.week || '')
+const showDeleted = ref(!!props.filters?.show_deleted)
+const availableYears = computed(() => {
+  const y = new Date().getFullYear()
+  return [y - 2, y - 1, y, y + 1]
+})
 const estatuses = computed(() => [
   'generada',
   'asignada',
@@ -70,9 +79,46 @@ function applyFilter(){
   if (factSel.value) params.facturacion = factSel.value
   if (centroSel.value) params.centro = centroSel.value
   if (centroCostoSel.value) params.centro_costo = centroCostoSel.value
+  if (desdeSel.value) params.desde = desdeSel.value
+  if (hastaSel.value) params.hasta = hastaSel.value
   if (yearSel.value) params.year = yearSel.value
   if (weekSel.value) params.week = weekSel.value
+  if (showDeleted.value) params.show_deleted = 1
   router.get(props.urls.index, params, { preserveState: true, replace: true })
+}
+
+function clearFilters(){
+  sel.value = ''
+  factSel.value = ''
+  centroSel.value = ''
+  centroCostoSel.value = ''
+  desdeSel.value = ''
+  hastaSel.value = ''
+  yearSel.value = ''
+  weekSel.value = ''
+  showDeleted.value = false
+  router.get(props.urls.index, {}, { preserveState: true, replace: true })
+}
+
+function eliminarOt(o){
+  if (!confirm('¿Seguro? Esto se puede restaurar')) return
+  router.delete(o.urls.destroy)
+}
+
+function restaurarOt(o){
+  router.post(o.urls.restore)
+}
+
+function forzarOt(o){
+  const motivo = prompt('Motivo para eliminar definitivamente la OT:')
+  if (!motivo || motivo.trim().length < 5) return
+  router.delete(o.urls.force, { data: { motivo } })
+}
+
+function cancelarOt(o){
+  const motivo = prompt('Motivo para cancelar la OT:')
+  if (!motivo || motivo.trim().length < 5) return
+  router.post(o.urls.cancelar, { motivo })
 }
 
 const exportParams = computed(() => {
@@ -90,6 +136,12 @@ const exportParams = computed(() => {
 
   if (centroCostoSel.value) base.centro_costo = centroCostoSel.value
   else delete base.centro_costo
+
+  if (desdeSel.value) base.desde = desdeSel.value
+  else delete base.desde
+
+  if (hastaSel.value) base.hasta = hastaSel.value
+  else delete base.hasta
 
   if (yearSel.value) base.year = yearSel.value
   else delete base.year
@@ -180,13 +232,30 @@ function isoWeekNumber(dateStr){
           </select>
 
           <select v-model="yearSel" @change="applyFilter" class="border p-2 rounded w-full lg:w-auto lg:min-w-[120px]">
-            <option v-for="y in [yearSel-2, yearSel-1, yearSel, yearSel+1]" :key="y" :value="y">{{ y }}</option>
+            <option value="">Año</option>
+            <option v-for="y in availableYears" :key="y" :value="y">{{ y }}</option>
           </select>
 
           <select v-model="weekSel" @change="applyFilter" class="border p-2 rounded w-full lg:w-auto lg:min-w-[140px]">
             <option value="">Periodos</option>
             <option v-for="w in 53" :key="w" :value="w">Periodo {{ w }}</option>
           </select>
+
+          <input
+            v-model="desdeSel"
+            type="date"
+            @change="applyFilter"
+            class="border p-2 rounded w-full lg:w-auto lg:min-w-[165px]"
+            title="Fecha inicial"
+          />
+
+          <input
+            v-model="hastaSel"
+            type="date"
+            @change="applyFilter"
+            class="border p-2 rounded w-full lg:w-auto lg:min-w-[165px]"
+            title="Fecha final"
+          />
 
           <a :href="exportUrl"
              class="w-full lg:w-auto inline-flex items-center justify-center px-4 py-2 rounded font-semibold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors">
@@ -210,6 +279,19 @@ function isoWeekNumber(dateStr){
               Sin factura
             </button>
           </div>
+
+          <label v-if="props.can?.manage_deleted" class="inline-flex items-center gap-2 text-sm text-slate-700">
+            <input type="checkbox" v-model="showDeleted" @change="applyFilter" />
+            Mostrar eliminados
+          </label>
+
+          <button
+            type="button"
+            @click="clearFilters"
+            class="w-full lg:w-auto inline-flex items-center justify-center px-4 py-2 rounded border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 transition-colors"
+          >
+            Limpiar filtros
+          </button>
         </div>
       </div>
 
@@ -233,7 +315,7 @@ function isoWeekNumber(dateStr){
                     <th class="hidden xl:table-cell px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal">TL</th>
                     <th class="hidden 2xl:table-cell w-16 px-1.5 sm:px-2 py-2 text-center align-top whitespace-nowrap">Periodo</th>
                     <th class="w-28 px-1.5 sm:px-2 py-2 text-center align-top whitespace-nowrap">Fecha</th>
-                    <th class="w-36 px-1.5 sm:px-2 py-2 text-center align-top whitespace-nowrap">Acciones</th>
+                    <th class="w-44 px-1.5 sm:px-2 py-2 text-center align-top whitespace-nowrap">Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -274,27 +356,45 @@ function isoWeekNumber(dateStr){
                     <td class="hidden xl:table-cell px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words">{{ o.team_leader?.name || '—' }}</td>
                     <td class="hidden 2xl:table-cell w-16 px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-nowrap">{{ isoWeekNumber(o.created_at_raw || o.fecha_iso || o.fecha) || '—' }}</td>
                     <td class="w-28 px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-nowrap">{{ o.fecha }}</td>
-                    <td class="w-36 px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words">
-                      <div class="flex flex-wrap items-center justify-center gap-2 xl:flex-col xl:items-center xl:gap-1 2xl:flex-row">
-                        <a :href="o.urls.show" class="inline-flex items-center gap-1.5 xl:gap-1 px-3 xl:px-2 py-1.5 xl:py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs xl:text-[0.6rem] font-medium rounded-lg transition-colors">
-                          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <td class="w-44 px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-nowrap">
+                      <div class="inline-flex items-center justify-center gap-1.5 flex-nowrap whitespace-nowrap">
+                        <a :href="o.urls.show" title="Ver" aria-label="Ver" class="inline-flex h-7 w-7 items-center justify-center bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-sm transition-colors">
+                          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
                           </svg>
-                          Ver
                         </a>
-                        <a v-if="o.estatus==='completada' && o.calidad_resultado==='pendiente'" :href="o.urls.calidad" class="inline-flex items-center gap-1.5 xl:gap-1 px-3 xl:px-2 py-1.5 xl:py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs xl:text-[0.6rem] font-medium rounded-lg transition-colors">
-                          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <a v-if="o.estatus==='completada' && o.calidad_resultado==='pendiente'" :href="o.urls.calidad" title="Calidad" aria-label="Calidad" class="inline-flex h-7 w-7 items-center justify-center bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow-sm transition-colors">
+                          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
                           </svg>
-                          Calidad
                         </a>
-                        <a v-if="canFacturar && o.estatus==='autorizada_cliente'" :href="o.urls.facturar" class="inline-flex items-center gap-1.5 xl:gap-1 px-3 xl:px-2 py-1.5 xl:py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-xs xl:text-[0.6rem] font-medium rounded-lg transition-colors">
-                          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <a v-if="canFacturar && o.estatus==='autorizada_cliente'" :href="o.urls.facturar" title="Facturar" aria-label="Facturar" class="inline-flex h-7 w-7 items-center justify-center bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-sm transition-colors">
+                          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                           </svg>
-                          Facturar
                         </a>
+                        <button v-if="props.can?.manage_deleted && !o.deleted_at" @click="eliminarOt(o)" title="Eliminar" aria-label="Eliminar" class="inline-flex h-7 w-7 items-center justify-center bg-red-600 hover:bg-red-700 text-white rounded-lg shadow-sm">
+                          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 7h12M9 7V5h6v2m-7 4v6m4-6v6M5 7l1 12h12l1-12"/>
+                          </svg>
+                        </button>
+                        <button v-if="props.can?.manage_deleted && !o.deleted_at" @click="cancelarOt(o)" title="Cancelar" aria-label="Cancelar" class="inline-flex h-7 w-7 items-center justify-center bg-amber-600 hover:bg-amber-700 text-white rounded-lg shadow-sm">
+                          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 6l12 12M18 6L6 18"/>
+                          </svg>
+                        </button>
+                        <button v-if="props.can?.manage_deleted && o.deleted_at" @click="restaurarOt(o)" title="Restaurar" aria-label="Restaurar" class="inline-flex h-7 w-7 items-center justify-center bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow-sm">
+                          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                          </svg>
+                        </button>
+                        <button v-if="props.can?.manage_deleted && o.deleted_at" @click="forzarOt(o)" title="Definitivo" aria-label="Definitivo" class="inline-flex h-7 w-7 items-center justify-center bg-black hover:bg-slate-900 text-white rounded-lg shadow-sm">
+                          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 7h12M9 7V5h6v2m-7 4v6m4-6v6M5 7l1 12h12l1-12"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 8l8 8"/>
+                          </svg>
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -325,7 +425,7 @@ function isoWeekNumber(dateStr){
                     <th class="hidden xl:table-cell px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal">TL</th>
                     <th class="hidden 2xl:table-cell w-16 px-1.5 sm:px-2 py-2 text-center align-top whitespace-nowrap">Periodo</th>
                     <th class="w-28 px-1.5 sm:px-2 py-2 text-center align-top whitespace-nowrap">Fecha</th>
-                    <th class="w-36 px-1.5 sm:px-2 py-2 text-center align-top whitespace-nowrap">Acciones</th>
+                    <th class="w-44 px-1.5 sm:px-2 py-2 text-center align-top whitespace-nowrap">Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -366,27 +466,45 @@ function isoWeekNumber(dateStr){
                     <td class="hidden xl:table-cell px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words">{{ o.team_leader?.name || '—' }}</td>
                     <td class="hidden 2xl:table-cell w-16 px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-nowrap">{{ isoWeekNumber(o.created_at_raw || o.fecha_iso || o.fecha) || '—' }}</td>
                     <td class="w-28 px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-nowrap">{{ o.fecha }}</td>
-                    <td class="w-36 px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words">
-                      <div class="flex flex-wrap items-center justify-center gap-2 xl:flex-col xl:items-center xl:gap-1 2xl:flex-row">
-                        <a :href="o.urls.show" class="inline-flex items-center gap-1.5 xl:gap-1 px-3 xl:px-2 py-1.5 xl:py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs xl:text-[0.6rem] font-medium rounded-lg transition-colors">
-                          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <td class="w-44 px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-nowrap">
+                      <div class="inline-flex items-center justify-center gap-1.5 flex-nowrap whitespace-nowrap">
+                        <a :href="o.urls.show" title="Ver" aria-label="Ver" class="inline-flex h-7 w-7 items-center justify-center bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-sm transition-colors">
+                          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
                           </svg>
-                          Ver
                         </a>
-                        <a v-if="o.estatus==='completada' && o.calidad_resultado==='pendiente'" :href="o.urls.calidad" class="inline-flex items-center gap-1.5 xl:gap-1 px-3 xl:px-2 py-1.5 xl:py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs xl:text-[0.6rem] font-medium rounded-lg transition-colors">
-                          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <a v-if="o.estatus==='completada' && o.calidad_resultado==='pendiente'" :href="o.urls.calidad" title="Calidad" aria-label="Calidad" class="inline-flex h-7 w-7 items-center justify-center bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow-sm transition-colors">
+                          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
                           </svg>
-                          Calidad
                         </a>
-                        <a v-if="canFacturar && o.estatus==='autorizada_cliente'" :href="o.urls.facturar" class="inline-flex items-center gap-1.5 xl:gap-1 px-3 xl:px-2 py-1.5 xl:py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-xs xl:text-[0.6rem] font-medium rounded-lg transition-colors">
-                          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <a v-if="canFacturar && o.estatus==='autorizada_cliente'" :href="o.urls.facturar" title="Facturar" aria-label="Facturar" class="inline-flex h-7 w-7 items-center justify-center bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-sm transition-colors">
+                          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                           </svg>
-                          Facturar
                         </a>
+                        <button v-if="props.can?.manage_deleted && !o.deleted_at" @click="eliminarOt(o)" title="Eliminar" aria-label="Eliminar" class="inline-flex h-7 w-7 items-center justify-center bg-red-600 hover:bg-red-700 text-white rounded-lg shadow-sm">
+                          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 7h12M9 7V5h6v2m-7 4v6m4-6v6M5 7l1 12h12l1-12"/>
+                          </svg>
+                        </button>
+                        <button v-if="props.can?.manage_deleted && !o.deleted_at" @click="cancelarOt(o)" title="Cancelar" aria-label="Cancelar" class="inline-flex h-7 w-7 items-center justify-center bg-amber-600 hover:bg-amber-700 text-white rounded-lg shadow-sm">
+                          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 6l12 12M18 6L6 18"/>
+                          </svg>
+                        </button>
+                        <button v-if="props.can?.manage_deleted && o.deleted_at" @click="restaurarOt(o)" title="Restaurar" aria-label="Restaurar" class="inline-flex h-7 w-7 items-center justify-center bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow-sm">
+                          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                          </svg>
+                        </button>
+                        <button v-if="props.can?.manage_deleted && o.deleted_at" @click="forzarOt(o)" title="Definitivo" aria-label="Definitivo" class="inline-flex h-7 w-7 items-center justify-center bg-black hover:bg-slate-900 text-white rounded-lg shadow-sm">
+                          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 7h12M9 7V5h6v2m-7 4v6m4-6v6M5 7l1 12h12l1-12"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 8l8 8"/>
+                          </svg>
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -486,7 +604,7 @@ function isoWeekNumber(dateStr){
         </div>
       </div>
 
-      <div v-if="!isPeriod" class="px-4 sm:px-6 lg:px-8 py-3 flex flex-wrap items-center justify-center md:justify-end gap-2">
+      <div v-if="!isPeriod && hasPagination" class="px-4 sm:px-6 lg:px-8 py-3 flex flex-wrap items-center justify-center md:justify-end gap-2">
         <Link v-for="link in data.links" :key="link.label" :href="link.url || '#'"
               class="px-3 py-1.5 rounded border text-sm min-w-[2.5rem] text-center"
               :class="{'bg-slate-900 text-white border-slate-900': link.active}"

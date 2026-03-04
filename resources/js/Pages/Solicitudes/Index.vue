@@ -6,7 +6,8 @@ const props = defineProps({
   data: Object, // paginator
   filters: Object, // { estatus, servicio, year, week }
   servicios: Array,
-  urls: Object // { index }
+  urls: Object, // { index }
+  can: Object,
 })
 
 // Filtros tipo píldoras por estatus (idénticos a Facturación)
@@ -17,13 +18,37 @@ const estatuses = computed(() => ['pendiente', 'aprobada', 'rechazada'])
 const servicioSel = ref(props.filters?.servicio || '')
 const yearSel = ref(props.filters?.year || new Date().getFullYear())
 const weekSel = ref(props.filters?.week || '')
+const showDeleted = ref(!!props.filters?.show_deleted)
+const solicitudesBaseUrl = computed(() => String(props.urls?.index || '/solicitudes').replace(/\/+$/, ''))
 
 function applyFilter(){
   const params = { estatus: sel.value }
   if (servicioSel.value) params.servicio = servicioSel.value
   if (yearSel.value) params.year = yearSel.value
   if (weekSel.value) params.week = weekSel.value
+  if (showDeleted.value) params.show_deleted = 1
   router.get(props.urls.index, params, { preserveState: true, replace: true })
+}
+
+function eliminarSolicitud(id){
+  if (!confirm('¿Seguro? Esto se puede restaurar')) return
+  router.delete(`${solicitudesBaseUrl.value}/${id}`)
+}
+
+function restaurarSolicitud(id){
+  router.post(`${solicitudesBaseUrl.value}/${id}/restore`)
+}
+
+function forzarSolicitud(id){
+  const motivo = prompt('Motivo para eliminar definitivamente:')
+  if (!motivo || motivo.trim().length < 5) return
+  router.delete(`${solicitudesBaseUrl.value}/${id}/force`, { data: { motivo } })
+}
+
+function cancelarSolicitud(id){
+  const motivo = prompt('Motivo de cancelación:')
+  if (!motivo || motivo.trim().length < 5) return
+  router.post(`${solicitudesBaseUrl.value}/${id}/cancelar`, { motivo })
 }
 
 function toPage(link){ if(link.url){ router.get(link.url, {}, {preserveState:true}) } }
@@ -115,6 +140,11 @@ const isCoordinador = computed(() => roles.value.includes('coordinador'))
             <button @click="sel=''; applyFilter()" :class="['flex-shrink-0 px-4 py-2 rounded-full text-sm font-semibold border transition-colors', sel==='' ? 'text-white border-[#1A73E8]' : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-700']" :style="sel==='' ? 'background-color: #1A73E8' : ''">Todos</button>
             <button v-for="e in estatuses" :key="e" @click="sel=e; applyFilter()" :class="['flex-shrink-0 px-4 py-2 rounded-full text-sm font-semibold border capitalize transition-colors', sel===e ? 'text-white border-[#1A73E8]' : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-700']" :style="sel===e ? 'background-color: #1A73E8' : ''">{{ e }}</button>
           </div>
+
+          <label v-if="can?.manage_deleted" class="inline-flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+            <input type="checkbox" v-model="showDeleted" @change="applyFilter" />
+            Mostrar eliminados
+          </label>
         </div>
       </div>
 
@@ -136,7 +166,7 @@ const isCoordinador = computed(() => roles.value.includes('coordinador'))
                 <th class="px-2 py-2 text-center align-top break-words xl:whitespace-nowrap">Archivo</th>
                 <th class="px-2 py-2 text-center align-top break-words xl:whitespace-nowrap">Estatus</th>
                 <th class="px-2 py-2 text-center align-top break-words xl:whitespace-nowrap">Fecha</th>
-                <th class="px-2 py-2 text-center align-top break-words xl:whitespace-nowrap">Acciones</th>
+                <th class="w-44 px-2 py-2 text-center align-top break-words xl:whitespace-nowrap">Acciones</th>
               </tr>
             </thead>
             <tbody>
@@ -167,14 +197,38 @@ const isCoordinador = computed(() => roles.value.includes('coordinador'))
                         }">{{ s.estatus }}</span>
                 </td>
                 <td class="px-2 py-2 leading-snug text-center break-words whitespace-normal xl:max-w-[9rem] xl:px-3">{{ s.fecha || '' }}</td>
-                <td class="px-2 py-2 leading-snug text-center break-words whitespace-normal xl:max-w-[10rem] xl:px-3">
-                  <a :href="`./solicitudes/${s.id}`" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-400 text-white text-sm font-medium rounded-lg transition-colors">
+                <td class="w-44 px-2 py-2 leading-snug text-center whitespace-nowrap xl:max-w-[10rem] xl:px-3">
+                  <div class="inline-flex items-center justify-center gap-1.5 flex-nowrap whitespace-nowrap">
+                  <a v-if="!s.deleted_at" :href="`./solicitudes/${s.id}`" title="Ver" aria-label="Ver" class="inline-flex h-7 w-7 items-center justify-center bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-400 text-white rounded-lg shadow-sm transition-colors">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
                     </svg>
-                    Ver
                   </a>
+                  <div v-if="can?.manage_deleted" class="inline-flex items-center justify-center gap-1.5 flex-nowrap whitespace-nowrap">
+                    <button v-if="!s.deleted_at" @click="eliminarSolicitud(s.id)" title="Eliminar" aria-label="Eliminar" class="inline-flex h-7 w-7 items-center justify-center rounded-lg shadow-sm bg-red-600 text-white hover:bg-red-700">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 7h12M9 7V5h6v2m-7 4v6m4-6v6M5 7l1 12h12l1-12"/>
+                      </svg>
+                    </button>
+                    <button v-if="!s.deleted_at" @click="cancelarSolicitud(s.id)" title="Cancelar" aria-label="Cancelar" class="inline-flex h-7 w-7 items-center justify-center rounded-lg shadow-sm bg-amber-600 text-white hover:bg-amber-700">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 6l12 12M18 6L6 18"/>
+                      </svg>
+                    </button>
+                    <button v-if="s.deleted_at" @click="restaurarSolicitud(s.id)" title="Restaurar" aria-label="Restaurar" class="inline-flex h-7 w-7 items-center justify-center rounded-lg shadow-sm bg-emerald-600 text-white hover:bg-emerald-700">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                      </svg>
+                    </button>
+                    <button v-if="s.deleted_at" @click="forzarSolicitud(s.id)" title="Definitivo" aria-label="Definitivo" class="inline-flex h-7 w-7 items-center justify-center rounded-lg shadow-sm bg-black text-white hover:bg-slate-900">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 7h12M9 7V5h6v2m-7 4v6m4-6v6M5 7l1 12h12l1-12"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 8l8 8"/>
+                      </svg>
+                    </button>
+                  </div>
+                  </div>
                 </td>
               </tr>
             </tbody>

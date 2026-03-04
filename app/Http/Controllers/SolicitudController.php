@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\Auth;
 use App\Domain\Servicios\PricingService;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
+use Spatie\Activitylog\Models\Activity;
 
 class SolicitudController extends Controller
 {
@@ -32,9 +33,13 @@ class SolicitudController extends Controller
             'hasta'    => $req->date('hasta'),
             'year'     => $req->integer('year') ?: null,
             'week'     => $req->integer('week') ?: null,
+            'show_deleted' => $req->boolean('show_deleted'),
         ];
 
+        $canSeeDeleted = $u->hasAnyRole(['admin', 'superadmin']);
+
     $q = Solicitud::with(['servicio','centro','centroCosto','marca'])
+            ->when($canSeeDeleted && $filters['show_deleted'], fn($qq) => $qq->withTrashed())
             ->when(!$u->hasAnyRole(['admin','facturacion','calidad','control','comercial','gerente_upper']),
                 fn($qq) => $qq->where('id_centrotrabajo', $u->centro_trabajo_id))
             ->when($u->hasAnyRole(['facturacion','calidad','control','comercial','gerente_upper']) && !$u->hasRole('admin'), function($qq) use ($u) {
@@ -88,6 +93,7 @@ class SolicitudController extends Controller
                 'cantidad' => $s->cantidad,
                 'archivos' => $s->archivos ?? [],
                 'estatus' => $s->estatus,
+                'deleted_at' => optional($s->deleted_at)?->toIso8601String(),
                 'fecha' => $fecha,
                 'fecha_humana' => $fechaHumana,
                 'fecha_iso' => $fechaIso,
@@ -97,9 +103,12 @@ class SolicitudController extends Controller
 
         return Inertia::render('Solicitudes/Index', [
             'data' => $paginator,
-            'filters' => $req->only(['estatus','servicio','folio','desde','hasta','year','week']),
+            'filters' => $req->only(['estatus','servicio','folio','desde','hasta','year','week','show_deleted']),
             'servicios'=> ServicioEmpresa::select('id','nombre')->orderBy('nombre')->get(),
             'urls' => ['index' => route('solicitudes.index')],
+            'can' => [
+                'manage_deleted' => $canSeeDeleted,
+            ],
         ]);
     }
 
@@ -712,6 +721,8 @@ class SolicitudController extends Controller
 
     public function show(Request $req, Solicitud $solicitud)
     {
+        $this->authorize('view', $solicitud);
+
         $solicitud->load([
             'cliente',
             'servicio',
@@ -732,6 +743,33 @@ class SolicitudController extends Controller
         $canGenerarOt = $user->hasAnyRole(['coordinador','admin'])
             && $solicitud->estatus === 'aprobada';
 
+        $canDelete = $user ? $user->can('delete', $solicitud) : false;
+        $canRestore = $user ? $user->can('restore', $solicitud) : false;
+        $canForceDelete = $user ? $user->can('forceDelete', $solicitud) : false;
+        $canCancelar = $user ? $user->can('cancelar', $solicitud) : false;
+
+        $flowCheck = $this->solicitudCriticalFlowStatus($solicitud);
+
+        $auditoria = Activity::query()
+            ->where('subject_type', Solicitud::class)
+            ->where('subject_id', $solicitud->id)
+            ->whereIn('event', ['solicitud.deleted', 'solicitud.restored', 'solicitud.force_deleted', 'solicitud.cancelled'])
+            ->with('causer')
+            ->latest('id')
+            ->limit(50)
+            ->get()
+            ->map(fn ($a) => [
+                'id' => $a->id,
+                'event' => $a->event,
+                'description' => $a->description,
+                'motivo' => data_get($a->properties, 'motivo'),
+                'user' => [
+                    'id' => $a->causer?->id,
+                    'name' => $a->causer?->name,
+                ],
+                'created_at' => optional($a->created_at)->format('Y-m-d H:i'),
+            ]);
+
         // Cotización para visualizar precios con IVA
         $cotizacion = $this->buildCotizacion($solicitud);
 
@@ -741,20 +779,150 @@ class SolicitudController extends Controller
                 'aprobar'  => $canAprobar,
                 'rechazar' => $canAprobar,
                 'generar_ot' => $canGenerarOt,
+                'delete' => $canDelete,
+                'restore' => $canRestore,
+                'force_delete' => $canForceDelete,
+                'cancelar' => $canCancelar,
             ],
             'urls' => [
                 'aprobar'    => route('solicitudes.aprobar', $solicitud),
                 'rechazar'   => route('solicitudes.rechazar', $solicitud),
                 'generar_ot' => route('ordenes.createFromSolicitud', $solicitud),
+                'destroy'    => route('solicitudes.destroy', $solicitud->id),
+                'restore'    => route('solicitudes.restore', $solicitud->id),
+                'force'      => route('solicitudes.force', $solicitud->id),
+                'cancelar'   => route('solicitudes.cancelar', $solicitud->id),
                 'excel_origen' => $solicitud->archivo_excel_stored_name
                     ? route('solicitudes.excel.origen', $solicitud)
                     : null,
             ],
             'flags' => [
                 'tiene_ot' => $solicitud->ordenes->count() > 0,
+                'has_critical_flow' => $flowCheck['blocked'],
+                'flow_message' => $flowCheck['message'],
             ],
             'cotizacion' => $cotizacion,
+            'auditoria' => $auditoria,
         ]);
+    }
+
+    public function destroy(Request $request, int $id)
+    {
+        $solicitud = Solicitud::query()->findOrFail($id);
+        $this->authorize('delete', $solicitud);
+
+        $flowCheck = $this->solicitudCriticalFlowStatus($solicitud);
+        if ($flowCheck['blocked']) {
+            return back()->withErrors([
+                'delete' => $flowCheck['message'],
+            ]);
+        }
+
+        $solicitud->delete();
+        $this->logSolicitudEvent('solicitud.deleted', $solicitud, null);
+
+        return back()->with('ok', 'Solicitud enviada a papelera.');
+    }
+
+    public function restore(Request $request, int $id)
+    {
+        $solicitud = Solicitud::withTrashed()->findOrFail($id);
+        $this->authorize('restore', $solicitud);
+
+        if (!$solicitud->trashed()) {
+            return back()->with('ok', 'La solicitud ya estaba activa.');
+        }
+
+        $solicitud->restore();
+        $this->logSolicitudEvent('solicitud.restored', $solicitud, null);
+
+        return back()->with('ok', 'Solicitud restaurada correctamente.');
+    }
+
+    public function forceDestroy(Request $request, int $id)
+    {
+        $solicitud = Solicitud::withTrashed()->findOrFail($id);
+        $this->authorize('forceDelete', $solicitud);
+
+        $data = $request->validate([
+            'motivo' => ['required', 'string', 'min:5', 'max:500'],
+        ]);
+
+        $flowCheck = $this->solicitudCriticalFlowStatus($solicitud);
+        if ($flowCheck['blocked']) {
+            return back()->withErrors([
+                'force' => $flowCheck['message'],
+            ]);
+        }
+
+        $motivo = trim((string)$data['motivo']);
+        $this->logSolicitudEvent('solicitud.force_deleted', $solicitud, $motivo);
+        $solicitud->forceDelete();
+
+        return redirect()->route('solicitudes.index')->with('ok', 'Solicitud eliminada definitivamente.');
+    }
+
+    public function cancelar(Request $request, int $id)
+    {
+        $solicitud = Solicitud::withTrashed()->findOrFail($id);
+        $this->authorize('cancelar', $solicitud);
+
+        $data = $request->validate([
+            'motivo' => ['required', 'string', 'min:5', 'max:500'],
+        ]);
+
+        $solicitud->estatus = 'cancelada';
+        $solicitud->save();
+
+        $this->logSolicitudEvent('solicitud.cancelled', $solicitud, trim((string)$data['motivo']));
+
+        return back()->with('ok', 'Solicitud cancelada correctamente.');
+    }
+
+    private function solicitudCriticalFlowStatus(Solicitud $solicitud): array
+    {
+        $ordenesIds = $solicitud->ordenes()->withTrashed()->pluck('id');
+
+        if ($ordenesIds->isEmpty()) {
+            return ['blocked' => false, 'message' => null];
+        }
+
+        $hasAvances = \App\Models\Avance::query()->whereIn('id_orden', $ordenesIds)->exists();
+        $hasFacturaDirecta = \App\Models\Factura::query()->whereIn('id_orden', $ordenesIds)->exists();
+        $hasFacturaPivot = Schema::hasTable('factura_orden')
+            ? DB::table('factura_orden')->whereIn('id_orden', $ordenesIds)->exists()
+            : false;
+        $hasCorte = Schema::hasTable('ot_cortes')
+            ? DB::table('ot_cortes')->whereIn('ot_id', $ordenesIds)->exists()
+            : false;
+
+        $blocked = $hasAvances || $hasFacturaDirecta || $hasFacturaPivot || $hasCorte;
+
+        return [
+            'blocked' => $blocked,
+            'message' => $blocked
+                ? 'Esta solicitud ya tiene OTs con avances/corte/cobro/factura. No se permite eliminar definitivamente; usa cancelar con motivo.'
+                : null,
+        ];
+    }
+
+    private function logSolicitudEvent(string $event, Solicitud $solicitud, ?string $motivo): void
+    {
+        $u = Auth::user();
+
+        $this->act('solicitudes')
+            ->causedBy($u)
+            ->performedOn($solicitud)
+            ->event($event)
+            ->withProperties([
+                'user_id' => $u?->id,
+                'entidad' => 'solicitud',
+                'entidad_id' => $solicitud->id,
+                'centro_id' => $solicitud->id_centrotrabajo,
+                'motivo' => $motivo,
+                'timestamp' => now()->toIso8601String(),
+            ])
+            ->log("Solicitud #{$solicitud->id}: {$event}");
     }
 
     private function act(string $log)

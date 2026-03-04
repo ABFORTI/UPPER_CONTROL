@@ -2,11 +2,12 @@
 
 namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Spatie\Activitylog\Traits\LogsActivity;
 use Spatie\Activitylog\LogOptions;
 
 class Orden extends Model {
-    use LogsActivity;
+    use LogsActivity, SoftDeletes;
     protected $table='ordenes_trabajo';
     protected $fillable = [
         'id_solicitud','id_centrotrabajo','id_servicio','id_area','team_leader_id',

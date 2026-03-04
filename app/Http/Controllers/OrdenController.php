@@ -26,6 +26,7 @@ use App\Jobs\GenerateOrdenPdf;
 use App\Exports\OrdenesIndexExport;
 use App\Exports\OrdenesFacturacionExport;
 use Maatwebsite\Excel\Facades\Excel;
+use Spatie\Activitylog\Models\Activity;
 
 class OrdenController extends Controller
 {
@@ -1296,6 +1297,16 @@ class OrdenController extends Controller
             $isAdminOrCoord = $authUser->hasAnyRole(['admin','coordinador']);
         }
         $canAsignar  = $isAdminOrCoord && $orden->estatus !== 'completada';
+        $canDelete = false;
+        $canRestore = false;
+        $canForceDelete = false;
+        $canCancelar = false;
+        if ($authUser instanceof \App\Models\User) {
+            $canDelete = $authUser->can('delete', $orden);
+            $canRestore = $authUser->can('restore', $orden);
+            $canForceDelete = $authUser->can('forceDelete', $orden);
+            $canCancelar = $authUser->can('cancelar', $orden);
+        }
 
         // Inicializar variable para verificar si todos los servicios están completos
         $todosServiciosCompletos = false;
@@ -1497,6 +1508,28 @@ class OrdenController extends Controller
             ]);
         }
 
+        $flowCheck = $this->ordenCriticalFlowStatus($orden);
+
+        $auditoria = Activity::query()
+            ->where('subject_type', Orden::class)
+            ->where('subject_id', $orden->id)
+            ->whereIn('event', ['ot.deleted', 'ot.restored', 'ot.force_deleted', 'ot.cancelled'])
+            ->with('causer')
+            ->latest('id')
+            ->limit(50)
+            ->get()
+            ->map(fn ($a) => [
+                'id' => $a->id,
+                'event' => $a->event,
+                'description' => $a->description,
+                'motivo' => data_get($a->properties, 'motivo'),
+                'user' => [
+                    'id' => $a->causer?->id,
+                    'name' => $a->causer?->name,
+                ],
+                'created_at' => optional($a->created_at)->format('Y-m-d H:i'),
+            ]);
+
         // Preparar datos de servicios con totales calculados (para multi-servicio)
         $todosServiciosCompletos = false;
         if ($orden->otServicios()->exists()) {
@@ -1629,7 +1662,13 @@ class OrdenController extends Controller
                 'cliente_autorizar'  => $canClienteAutorizar,
                 'facturar'           => $canFacturar,
                 'definir_tamanos'    => Gate::allows('definirTamanos', $orden),
-                'agregar_servicio_adicional' => $authUser && $authUser->hasAnyRole(['admin', 'coordinador', 'team_leader']),
+                'agregar_servicio_adicional' => $authUser instanceof \App\Models\User
+                    ? $authUser->hasAnyRole(['admin', 'coordinador', 'team_leader'])
+                    : false,
+                'delete' => $canDelete,
+                'restore' => $canRestore,
+                'force_delete' => $canForceDelete,
+                'cancelar' => $canCancelar,
             ],
             'debug' => [
                 'orden_team_leader_id' => (int)$orden->team_leader_id,
@@ -1665,6 +1704,10 @@ class OrdenController extends Controller
                 'evidencias_destroy'=> route('evidencias.destroy', 0),
                 'definir_tamanos'   => route('ordenes.definirTamanos', $orden),
                 'agregar_servicio_adicional' => route('ordenes.agregarServicioAdicional', $orden),
+                'destroy'           => route('ordenes.destroy', $orden->id),
+                'restore'           => route('ordenes.restore', $orden->id),
+                'force'             => route('ordenes.force', $orden->id),
+                'cancelar'          => route('ordenes.cancelar', $orden->id),
             ],
             'flags' => [ 'pendiente_tamanos' => $pendienteTamanos ],
             'precios_tamano' => $preciosTamaño,
@@ -1672,6 +1715,8 @@ class OrdenController extends Controller
             'precios_por_servicio' => $preciosPorServicio,
             'servicios_disponibles' => $this->getServiciosDisponibles($orden->id_centrotrabajo),
             'cortes' => $this->getCortesData($orden),
+            'delete_status' => $flowCheck,
+            'auditoria' => $auditoria,
         ]);
     }
 
@@ -1944,7 +1989,10 @@ class OrdenController extends Controller
             'id'           => $req->integer('id') ?: null,
             'year'         => $req->integer('year') ?: null,
             'week'         => $req->integer('week') ?: null,
+            'show_deleted' => $req->boolean('show_deleted'),
         ];
+
+        $canSeeDeleted = $u && $u->hasAnyRole(['admin', 'superadmin']);
 
     // Centros permitidos para el usuario
     $centrosPermitidos = $this->allowedCentroIds($u);
@@ -1958,6 +2006,7 @@ class OrdenController extends Controller
         }
     }
     $q = Orden::with(['servicio','centro','teamLeader','solicitud.centroCosto','solicitud.marca','factura','facturas','area'])
+        ->when($canSeeDeleted && $filters['show_deleted'], fn($qq) => $qq->withTrashed())
         ->when(!$isPrivilegedViewer, function($qq) use ($centrosPermitidos){
             if (!empty($centrosPermitidos)) { $qq->whereIn('id_centrotrabajo', $centrosPermitidos); }
             else { $qq->whereRaw('1=0'); }
@@ -2000,7 +2049,19 @@ class OrdenController extends Controller
             })
             ->orderByDesc('id');
 
-    $isPeriod = !empty($filters['week']);
+    $hasAnyFilter =
+        !empty($filters['id'])
+        || !empty($filters['estatus'])
+        || !empty($filters['calidad'])
+        || !empty($filters['servicio'])
+        || !empty($filters['centro'])
+        || !empty($filters['centro_costo'])
+        || !empty($filters['facturacion'])
+        || !empty($filters['desde'])
+        || !empty($filters['hasta'])
+        || !empty($filters['year'])
+        || !empty($filters['week'])
+        || !empty($filters['show_deleted']);
 
         // Reutilizamos el mismo mapeo para paginado o listado completo
         $transform = function ($o) {
@@ -2033,6 +2094,7 @@ class OrdenController extends Controller
                 'calidad_resultado' => $o->calidad_resultado,
                 'facturacion' => $factStatus,
                 'fecha' => $fecha,
+                'deleted_at' => optional($o->deleted_at)?->toIso8601String(),
                 'producto' => $o->descripcion_general ?: ($o->solicitud?->descripcion ?? null),
                 'servicio' => ['nombre' => $o->servicio?->nombre],
                 'centro'   => ['nombre' => $o->centro?->nombre],
@@ -2044,6 +2106,10 @@ class OrdenController extends Controller
                     'show'     => route('ordenes.show', $o),
                     'calidad'  => route('calidad.show',  $o),
                     'facturar' => route('facturas.createFromOrden', $o),
+                    'destroy'  => route('ordenes.destroy', $o->id),
+                    'restore'  => route('ordenes.restore', $o->id),
+                    'force'    => route('ordenes.force', $o->id),
+                    'cancelar' => route('ordenes.cancelar', $o->id),
                 ],
                 'created_at_raw' => $raw,
                 'fecha_iso' => $fechaIso,
@@ -2051,8 +2117,8 @@ class OrdenController extends Controller
                 ];
         };
 
-        if ($isPeriod) {
-            // Mostrar todas las OTs del periodo (sin paginar)
+        if ($hasAnyFilter) {
+            // Mostrar todas las OTs filtradas (sin paginar)
             $all = $q->get()->map($transform)->values();
             // Enviamos en el mismo shape { data: [...] } para que el front lo consuma igual
             $data = [ 'data' => $all ];
@@ -2068,7 +2134,7 @@ class OrdenController extends Controller
 
         return Inertia::render('Ordenes/Index', [
             'data'      => $data,
-            'filters'   => $req->only(['id','estatus','calidad','servicio','centro','centro_costo','facturacion','desde','hasta','year','week']),
+            'filters'   => $req->only(['id','estatus','calidad','servicio','centro','centro_costo','facturacion','desde','hasta','year','week','show_deleted']),
             'servicios' => \App\Models\ServicioEmpresa::select('id','nombre')->orderBy('nombre')->get(),
             'centros'   => $centrosLista,
             'centrosCostos' => $u->hasAnyRole(['admin','facturacion','gerente_upper'])
@@ -2082,6 +2148,9 @@ class OrdenController extends Controller
                     : null,
                 'facturas_batch' => route('facturas.batch'),
                 'facturas_batch_create' => route('facturas.batch.create'),
+            ],
+            'can' => [
+                'manage_deleted' => $canSeeDeleted,
             ],
         ]);
     }
@@ -2130,6 +2199,176 @@ class OrdenController extends Controller
         $file = 'excel_facturacion_' . now()->format('Ymd_His') . '.' . $format;
 
         return Excel::download(new OrdenesFacturacionExport($filters, $req->user()), $file);
+    }
+
+    public function destroy(Request $request, int $id)
+    {
+        $orden = Orden::query()->findOrFail($id);
+        $this->authorize('delete', $orden);
+        $this->authorizeFromCentro($orden->id_centrotrabajo, $orden);
+
+        $flowCheck = $this->ordenCriticalFlowStatus($orden);
+        if ($flowCheck['blocked']) {
+            return back()->withErrors([
+                'delete' => $flowCheck['message'],
+            ]);
+        }
+
+        $orden->delete();
+        $this->logOrdenEvent('ot.deleted', $orden, null);
+
+        return back()->with('ok', 'OT enviada a papelera.');
+    }
+
+    public function restore(Request $request, int $id)
+    {
+        $orden = Orden::withTrashed()->findOrFail($id);
+        $this->authorize('restore', $orden);
+        $this->authorizeFromCentro($orden->id_centrotrabajo, $orden);
+
+        if (!$orden->trashed()) {
+            return back()->with('ok', 'La OT ya estaba activa.');
+        }
+
+        $orden->restore();
+        $this->logOrdenEvent('ot.restored', $orden, null);
+
+        return back()->with('ok', 'OT restaurada correctamente.');
+    }
+
+    public function forceDestroy(Request $request, int $id)
+    {
+        $orden = Orden::withTrashed()->findOrFail($id);
+        $this->authorize('forceDelete', $orden);
+        $this->authorizeFromCentro($orden->id_centrotrabajo, $orden);
+
+        $data = $request->validate([
+            'motivo' => ['required', 'string', 'min:5', 'max:500'],
+        ]);
+
+        $flowCheck = $this->ordenCriticalFlowStatus($orden);
+        if ($flowCheck['blocked']) {
+            return back()->withErrors([
+                'force' => $flowCheck['message'],
+            ]);
+        }
+
+        $deleteFilesResult = $this->cleanupEvidenceFilesForForceDelete($orden);
+        if (!$deleteFilesResult['ok']) {
+            return back()->withErrors([
+                'force' => $deleteFilesResult['message'],
+            ]);
+        }
+
+        $motivo = trim((string)$data['motivo']);
+        $this->logOrdenEvent('ot.force_deleted', $orden, $motivo);
+        $orden->forceDelete();
+
+        return redirect()->route('ordenes.index')->with('ok', 'OT eliminada definitivamente.');
+    }
+
+    public function cancelar(Request $request, int $id)
+    {
+        $orden = Orden::withTrashed()->findOrFail($id);
+        $this->authorize('cancelar', $orden);
+        $this->authorizeFromCentro($orden->id_centrotrabajo, $orden);
+
+        $data = $request->validate([
+            'motivo' => ['required', 'string', 'min:5', 'max:500'],
+        ]);
+
+        $orden->estatus = 'cancelada';
+        $orden->save();
+
+        $this->logOrdenEvent('ot.cancelled', $orden, trim((string)$data['motivo']));
+
+        return back()->with('ok', 'OT cancelada correctamente.');
+    }
+
+    private function ordenCriticalFlowStatus(Orden $orden): array
+    {
+        $hasAvances = $orden->avances()->exists();
+        $hasFacturaDirecta = $orden->factura()->exists();
+        $hasFacturaPivot = Schema::hasTable('factura_orden')
+            ? DB::table('factura_orden')->where('id_orden', $orden->id)->exists()
+            : false;
+        $hasCorte = Schema::hasTable('ot_cortes')
+            ? DB::table('ot_cortes')->where('ot_id', $orden->id)->exists()
+            : false;
+
+        $blocked = $hasAvances || $hasFacturaDirecta || $hasFacturaPivot || $hasCorte;
+
+        return [
+            'blocked' => $blocked,
+            'has_avances' => $hasAvances,
+            'has_factura' => ($hasFacturaDirecta || $hasFacturaPivot),
+            'has_corte' => $hasCorte,
+            'message' => $blocked
+                ? 'La OT tiene avances/corte/cobro/factura. No se permite eliminar definitivamente; usa cancelar con motivo.'
+                : null,
+        ];
+    }
+
+    private function cleanupEvidenceFilesForForceDelete(Orden $orden): array
+    {
+        $hasFactura = $orden->factura()->exists()
+            || (Schema::hasTable('factura_orden') && DB::table('factura_orden')->where('id_orden', $orden->id)->exists());
+
+        if ($hasFactura) {
+            return [
+                'ok' => false,
+                'message' => 'No se pueden borrar archivos físicos de evidencias porque la OT tiene cobros/factura.',
+            ];
+        }
+
+        $errors = [];
+        foreach ($orden->evidencias()->get(['id', 'archivo']) as $evidencia) {
+            $diskPath = ltrim((string)$evidencia->archivo, '/');
+            if ($diskPath === '') {
+                continue;
+            }
+
+            try {
+                if (Storage::disk('public')->exists($diskPath)) {
+                    Storage::disk('public')->delete($diskPath);
+                }
+            } catch (\Throwable $e) {
+                $errors[] = "Evidencia {$evidencia->id}: {$e->getMessage()}";
+            }
+        }
+
+        if (!empty($errors)) {
+            Log::error('Error limpiando evidencias para force delete OT', [
+                'orden_id' => $orden->id,
+                'errors' => $errors,
+            ]);
+
+            return [
+                'ok' => false,
+                'message' => 'No fue posible eliminar todos los archivos de evidencias. Se canceló el force delete por seguridad.',
+            ];
+        }
+
+        return ['ok' => true, 'message' => null];
+    }
+
+    private function logOrdenEvent(string $event, Orden $orden, ?string $motivo): void
+    {
+        $u = Auth::user();
+
+        $this->act('ordenes')
+            ->causedBy($u)
+            ->performedOn($orden)
+            ->event($event)
+            ->withProperties([
+                'user_id' => $u?->id,
+                'entidad' => 'ot',
+                'entidad_id' => $orden->id,
+                'centro_id' => $orden->id_centrotrabajo,
+                'motivo' => $motivo,
+                'timestamp' => now()->toIso8601String(),
+            ])
+            ->log("OT #{$orden->id}: {$event}");
     }
 
     /** Helpers */

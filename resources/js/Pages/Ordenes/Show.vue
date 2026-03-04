@@ -17,6 +17,8 @@ const props = defineProps({
   precios_por_servicio: { type: Object, default: () => ({}) },
   servicios_disponibles: { type: Array, default: () => [] },
   cortes: { type: Array, default: () => [] },
+  delete_status: { type: Object, default: () => ({}) },
+  auditoria: { type: Array, default: () => [] },
 })
 
 // Alias para acceder fácilmente en el template
@@ -206,6 +208,35 @@ function avancesConEventosCalidad(servicio, idx) {
   return base.sort((a, b) => new Date(b?.created_at || 0) - new Date(a?.created_at || 0))
 }
 const autorizarCliente = () => router.post(props.urls.cliente_autorizar)
+
+const showAdminDeleteModal = ref(false)
+const adminDeleteAction = ref('delete')
+const adminMotivo = ref('')
+
+function openAdminDeleteModal(action) {
+  adminDeleteAction.value = action
+  adminMotivo.value = ''
+  showAdminDeleteModal.value = true
+}
+
+function submitAdminDeleteAction() {
+  const action = adminDeleteAction.value
+  if ((action === 'force' || action === 'cancelar') && String(adminMotivo.value || '').trim().length < 5) {
+    return
+  }
+
+  if (action === 'delete') {
+    router.delete(props.urls.destroy)
+  } else if (action === 'restore') {
+    router.post(props.urls.restore)
+  } else if (action === 'force') {
+    router.delete(props.urls.force, { data: { motivo: adminMotivo.value } })
+  } else if (action === 'cancelar') {
+    router.post(props.urls.cancelar, { motivo: adminMotivo.value })
+  }
+
+  showAdminDeleteModal.value = false
+}
 
 // ----- Asignar TL -----
 const tlForm = useForm({ team_leader_id: props.orden?.team_leader_id ?? null })
@@ -2489,6 +2520,32 @@ function aplicarFaltantesServicio(servicioId) {
             </div>
           </div>
 
+          <div v-if="can?.delete || can?.restore || can?.force_delete || can?.cancelar" class="bg-white rounded-2xl shadow-lg border-2 border-red-100 overflow-hidden dark:bg-slate-900/80 dark:border-rose-500/40">
+            <div class="bg-red-700 px-6 py-4">
+              <h4 class="text-lg font-bold text-white">Papelera / Eliminación</h4>
+            </div>
+            <div class="p-4 space-y-3">
+              <p v-if="delete_status?.blocked" class="text-sm text-amber-700 dark:text-amber-300">{{ delete_status?.message }}</p>
+              <button v-if="can?.delete && !orden?.deleted_at && !delete_status?.blocked" @click="openAdminDeleteModal('delete')" class="w-full px-4 py-2 rounded-lg bg-red-600 text-white font-semibold">Eliminar</button>
+              <button v-if="can?.cancelar && !orden?.deleted_at && delete_status?.blocked" @click="openAdminDeleteModal('cancelar')" class="w-full px-4 py-2 rounded-lg bg-amber-600 text-white font-semibold">Cancelar OT</button>
+              <button v-if="can?.restore && orden?.deleted_at" @click="openAdminDeleteModal('restore')" class="w-full px-4 py-2 rounded-lg bg-emerald-600 text-white font-semibold">Restaurar</button>
+              <button v-if="can?.force_delete && orden?.deleted_at && !delete_status?.blocked" @click="openAdminDeleteModal('force')" class="w-full px-4 py-2 rounded-lg bg-black text-white font-semibold">Eliminar definitivo</button>
+            </div>
+          </div>
+
+          <div v-if="auditoria?.length" class="bg-white rounded-2xl shadow-lg border-2 border-slate-200 overflow-hidden dark:bg-slate-900/80 dark:border-slate-700">
+            <div class="bg-slate-800 px-6 py-4">
+              <h4 class="text-lg font-bold text-white">Auditoría</h4>
+            </div>
+            <div class="p-4 space-y-3 max-h-72 overflow-auto">
+              <div v-for="log in auditoria" :key="log.id" class="rounded-lg border border-slate-200 dark:border-slate-700 p-3">
+                <p class="text-sm font-semibold text-slate-800 dark:text-slate-100">{{ log.event }}</p>
+                <p class="text-xs text-slate-500 dark:text-slate-400">{{ log.created_at }} · {{ log.user?.name || 'Sistema' }}</p>
+                <p v-if="log.motivo" class="text-sm mt-1 text-slate-700 dark:text-slate-200">Motivo: {{ log.motivo }}</p>
+              </div>
+            </div>
+          </div>
+
           <!-- Motivo de Rechazo / Acciones Correctivas (si existen) -->
           <div v-if="orden?.motivo_rechazo || orden?.acciones_correctivas" class="bg-white rounded-2xl shadow-lg border-2 border-red-100 overflow-hidden dark:bg-slate-900/80 dark:border-rose-500/40">
             <div class="bg-red-600 px-6 py-4 dark:bg-rose-600">
@@ -2550,6 +2607,24 @@ function aplicarFaltantesServicio(servicioId) {
 
     <div v-if="calidadToast" class="fixed top-4 right-4 z-[10000] px-4 py-2 rounded-lg bg-slate-900 text-white text-sm shadow-lg">
       {{ calidadToast }}
+    </div>
+
+    <div v-if="showAdminDeleteModal" class="fixed inset-0 z-[10001] flex items-center justify-center px-4">
+      <div class="fixed inset-0 bg-black/40 z-40" @click="showAdminDeleteModal = false"></div>
+      <div class="relative w-full max-w-xl bg-white rounded-2xl shadow-xl p-6 z-50 dark:bg-slate-900">
+        <h3 class="text-lg font-semibold dark:text-slate-100">¿Seguro? Esto se puede restaurar</h3>
+        <p class="text-sm text-gray-500 mt-1 dark:text-slate-400">Acción: {{ adminDeleteAction }}</p>
+
+        <div v-if="adminDeleteAction === 'force' || adminDeleteAction === 'cancelar'" class="mt-4">
+          <label class="text-sm font-semibold dark:text-slate-100">Motivo (obligatorio)</label>
+          <textarea v-model="adminMotivo" rows="4" class="w-full mt-2 p-3 border rounded-md dark:bg-slate-900 dark:border-slate-700 dark:text-slate-100" placeholder="Describe el motivo"></textarea>
+        </div>
+
+        <div class="mt-5 flex justify-end gap-3">
+          <button @click="showAdminDeleteModal = false" class="px-4 py-2 rounded bg-gray-200 dark:bg-slate-700 dark:text-slate-100">Cancelar</button>
+          <button @click="submitAdminDeleteAction" class="px-4 py-2 rounded bg-red-600 text-white">Confirmar</button>
+        </div>
+      </div>
     </div>
     
     <!-- Modal Definir Tamaños para Servicio -->

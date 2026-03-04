@@ -3,7 +3,7 @@ import { ref, computed } from 'vue'
 import { router } from '@inertiajs/vue3'
 import FilePreview from '@/Components/FilePreview.vue'
 
-const props = defineProps({ solicitud: Object, can: Object, urls: Object, flags: Object, cotizacion: Object })
+const props = defineProps({ solicitud: Object, can: Object, urls: Object, flags: Object, cotizacion: Object, auditoria: Array })
 
 // Helpers para manejo seguro de números
 const toNum = (v) => {
@@ -69,6 +69,35 @@ function closePreview() {
 
 function canPreview(mime) {
   return mime?.startsWith('image/') || mime === 'application/pdf'
+}
+
+const showDeleteModal = ref(false)
+const deleteAction = ref('delete')
+const motivoAdmin = ref('')
+
+function openDeleteModal(action) {
+  deleteAction.value = action
+  motivoAdmin.value = ''
+  showDeleteModal.value = true
+}
+
+function submitAdminAction() {
+  const action = deleteAction.value
+  if ((action === 'force' || action === 'cancelar') && motivoAdmin.value.trim().length < 5) {
+    return
+  }
+
+  if (action === 'delete') {
+    router.delete(props.urls.destroy)
+  } else if (action === 'restore') {
+    router.post(props.urls.restore)
+  } else if (action === 'force') {
+    router.delete(props.urls.force, { data: { motivo: motivoAdmin.value } })
+  } else if (action === 'cancelar') {
+    router.post(props.urls.cancelar, { motivo: motivoAdmin.value })
+  }
+
+  showDeleteModal.value = false
 }
 </script>
 
@@ -367,6 +396,31 @@ function canPreview(mime) {
 
         <!-- Right Column: Cotización & Acciones -->
         <div class="lg:col-span-1 space-y-6">
+          <div v-if="can?.delete || can?.restore || can?.force_delete || can?.cancelar" class="bg-white dark:bg-slate-900 rounded-2xl shadow-lg border-2 border-red-100 dark:border-red-500/20 overflow-hidden">
+            <div class="px-6 py-4 bg-red-700">
+              <h3 class="text-lg font-bold text-white">Acciones de administración</h3>
+            </div>
+            <div class="p-5 space-y-3">
+              <p v-if="flags?.has_critical_flow" class="text-sm text-amber-700 dark:text-amber-300">{{ flags?.flow_message }}</p>
+              <button v-if="can?.delete && !solicitud?.deleted_at && !flags?.has_critical_flow" @click="openDeleteModal('delete')" class="w-full px-4 py-2 rounded-xl bg-red-600 text-white font-semibold">Eliminar</button>
+              <button v-if="can?.cancelar && !solicitud?.deleted_at && flags?.has_critical_flow" @click="openDeleteModal('cancelar')" class="w-full px-4 py-2 rounded-xl bg-amber-600 text-white font-semibold">Cancelar Solicitud</button>
+              <button v-if="can?.restore && solicitud?.deleted_at" @click="openDeleteModal('restore')" class="w-full px-4 py-2 rounded-xl bg-emerald-600 text-white font-semibold">Restaurar</button>
+              <button v-if="can?.force_delete && solicitud?.deleted_at && !flags?.has_critical_flow" @click="openDeleteModal('force')" class="w-full px-4 py-2 rounded-xl bg-black text-white font-semibold">Eliminar definitivo</button>
+            </div>
+          </div>
+
+          <div v-if="auditoria?.length" class="bg-white dark:bg-slate-900 rounded-2xl shadow-lg border-2 border-slate-200 dark:border-slate-700 overflow-hidden">
+            <div class="px-6 py-4 bg-slate-800">
+              <h3 class="text-lg font-bold text-white">Auditoría</h3>
+            </div>
+            <div class="p-4 space-y-3 max-h-72 overflow-auto">
+              <div v-for="log in auditoria" :key="log.id" class="rounded-lg border border-slate-200 dark:border-slate-700 p-3">
+                <p class="text-sm font-semibold text-slate-800 dark:text-slate-100">{{ log.event }}</p>
+                <p class="text-xs text-slate-500 dark:text-slate-400">{{ log.created_at }} · {{ log.user?.name || 'Sistema' }}</p>
+                <p v-if="log.motivo" class="text-sm mt-1 text-slate-700 dark:text-slate-200">Motivo: {{ log.motivo }}</p>
+              </div>
+            </div>
+          </div>
           
           <!-- Cotización Sticky Card -->
           <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-lg border-2 border-emerald-100 dark:border-emerald-500/30 overflow-hidden sticky top-6 hover:shadow-xl transition-shadow duration-300">
@@ -493,6 +547,19 @@ function canPreview(mime) {
           <div class="mt-4 flex justify-end gap-3">
             <button @click="showRechazoModal = false" class="px-4 py-2 rounded-lg bg-gray-200">Cancelar</button>
             <button @click="submitRechazo" class="px-4 py-2 rounded-lg bg-red-600 text-white">Enviar Rechazo</button>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="showDeleteModal" class="fixed inset-0 z-60 flex items-center justify-center px-4">
+        <div class="fixed inset-0 bg-black/40" @click="showDeleteModal = false"></div>
+        <div class="relative w-full max-w-lg bg-white rounded-2xl shadow-xl p-6 z-50">
+          <h3 class="text-lg font-semibold">¿Seguro? Esto se puede restaurar</h3>
+          <p class="text-sm text-gray-500 mt-1">Acción: {{ deleteAction }}</p>
+          <textarea v-if="deleteAction==='force' || deleteAction==='cancelar'" v-model="motivoAdmin" rows="4" class="w-full mt-4 p-3 border rounded-md" placeholder="Motivo (obligatorio)"></textarea>
+          <div class="mt-4 flex justify-end gap-3">
+            <button @click="showDeleteModal = false" class="px-4 py-2 rounded-lg bg-gray-200">Cerrar</button>
+            <button @click="submitAdminAction" class="px-4 py-2 rounded-lg bg-red-600 text-white">Confirmar</button>
           </div>
         </div>
       </div>

@@ -113,6 +113,10 @@ Route::middleware('auth')->group(function () {
     Route::get('/solicitudes/create', [SolicitudController::class,'create'])->name('solicitudes.create');
     Route::post('/solicitudes', [SolicitudController::class,'store'])->name('solicitudes.store');
     Route::get('/solicitudes/{solicitud}', [SolicitudController::class,'show'])->name('solicitudes.show');
+    Route::delete('/solicitudes/{id}', [SolicitudController::class, 'destroy'])->name('solicitudes.destroy');
+    Route::post('/solicitudes/{id}/restore', [SolicitudController::class, 'restore'])->name('solicitudes.restore');
+    Route::delete('/solicitudes/{id}/force', [SolicitudController::class, 'forceDestroy'])->name('solicitudes.force');
+    Route::post('/solicitudes/{id}/cancelar', [SolicitudController::class, 'cancelar'])->name('solicitudes.cancelar');
 
     // Excel: subir, guardar y parsear (sesión web)
     Route::post('/solicitudes/parse-excel', [SolicitudExcelController::class, 'parseExcel'])
@@ -213,6 +217,10 @@ Route::middleware('auth')->group(function () {
         ->middleware('role:admin|facturacion|gerente_upper')
         ->name('ordenes.exportFacturacion');
     Route::get('/ordenes/{orden}', [OrdenController::class,'show'])->name('ordenes.show');
+    Route::delete('/ordenes/{id}', [OrdenController::class, 'destroy'])->name('ordenes.destroy');
+    Route::post('/ordenes/{id}/restore', [OrdenController::class, 'restore'])->name('ordenes.restore');
+    Route::delete('/ordenes/{id}/force', [OrdenController::class, 'forceDestroy'])->name('ordenes.force');
+    Route::post('/ordenes/{id}/cancelar', [OrdenController::class, 'cancelar'])->name('ordenes.cancelar');
 
     Route::patch('/ordenes/{orden}/asignar-tl', [OrdenController::class,'asignarTL'])->name('ordenes.asignarTL');
     Route::post('/ordenes/{orden}/avances', [OrdenController::class,'registrarAvance'])->name('ordenes.avances.store');

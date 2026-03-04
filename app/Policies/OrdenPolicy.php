@@ -8,6 +8,26 @@ use Illuminate\Support\Facades\Log;
 
 class OrdenPolicy
 {
+    private function canAdminCentro(User $u, int $centroId): bool
+    {
+        if ($u->hasRole('superadmin')) {
+            return true;
+        }
+
+        if (!$u->hasRole('admin')) {
+            return false;
+        }
+
+        $ids = $u->centros()->pluck('centros_trabajo.id')->map(fn($v)=>(int)$v)->all();
+        $primary = (int)($u->centro_trabajo_id ?? 0);
+        if ($primary) {
+            $ids[] = $primary;
+        }
+        $ids = array_values(array_unique($ids));
+
+        return in_array($centroId, $ids, true);
+    }
+
     public function viewAny(User $u): bool {
         return $u->hasAnyRole(['admin','coordinador','team_leader','calidad','facturacion','Cliente_Supervisor','gerente_upper']);
     }
@@ -218,5 +238,25 @@ class OrdenPolicy
         // Cliente con alcance a centro completo puede autorizar del mismo centro
         if ($u->hasRole('Cliente_Gerente') && (int)$u->centro_trabajo_id === (int)$o->id_centrotrabajo) return true;
         return false;
+    }
+
+    public function delete(User $u, Orden $o): bool
+    {
+        return $this->canAdminCentro($u, (int)$o->id_centrotrabajo);
+    }
+
+    public function restore(User $u, Orden $o): bool
+    {
+        return $this->canAdminCentro($u, (int)$o->id_centrotrabajo);
+    }
+
+    public function forceDelete(User $u, Orden $o): bool
+    {
+        return $this->canAdminCentro($u, (int)$o->id_centrotrabajo);
+    }
+
+    public function cancelar(User $u, Orden $o): bool
+    {
+        return $this->canAdminCentro($u, (int)$o->id_centrotrabajo);
     }
 }
