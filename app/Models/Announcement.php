@@ -5,8 +5,10 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\Storage;
+use Spatie\Permission\Models\Role;
 
 class Announcement extends Model
 {
@@ -38,6 +40,18 @@ class Announcement extends Model
         return $this->belongsTo(User::class, 'created_by');
     }
 
+    public function targetCentros(): BelongsToMany
+    {
+        return $this->belongsToMany(CentroTrabajo::class, 'announcement_centro_trabajo', 'announcement_id', 'centro_trabajo_id')
+            ->withTimestamps();
+    }
+
+    public function targetRoles(): BelongsToMany
+    {
+        return $this->belongsToMany(Role::class, 'announcement_role', 'announcement_id', 'role_id')
+            ->withTimestamps();
+    }
+
     public function scopeActiveWithin(Builder $query): Builder
     {
         return $query
@@ -47,6 +61,41 @@ class Announcement extends Model
             })
             ->where(function (Builder $q) {
                 $q->whereNull('ends_at')->orWhere('ends_at', '>=', now());
+            });
+    }
+
+    public function scopeVisibleToUser(Builder $query, User $user): Builder
+    {
+        $roleIds = $user->roles()->pluck('roles.id')->map(fn ($id) => (int) $id)->values()->all();
+
+        $centroIds = $user->centros()->pluck('centros_trabajo.id')->map(fn ($id) => (int) $id)->values()->all();
+        if ($user->centro_trabajo_id) {
+            $centroIds[] = (int) $user->centro_trabajo_id;
+        }
+        $centroIds = array_values(array_unique(array_filter($centroIds, fn ($id) => $id > 0)));
+
+        return $query
+            ->where(function (Builder $q) use ($roleIds) {
+                $q->whereDoesntHave('targetRoles')
+                    ->orWhereHas('targetRoles', function (Builder $roleQ) use ($roleIds) {
+                        if (empty($roleIds)) {
+                            $roleQ->whereRaw('1 = 0');
+                            return;
+                        }
+
+                        $roleQ->whereIn('roles.id', $roleIds);
+                    });
+            })
+            ->where(function (Builder $q) use ($centroIds) {
+                $q->whereDoesntHave('targetCentros')
+                    ->orWhereHas('targetCentros', function (Builder $centroQ) use ($centroIds) {
+                        if (empty($centroIds)) {
+                            $centroQ->whereRaw('1 = 0');
+                            return;
+                        }
+
+                        $centroQ->whereIn('centros_trabajo.id', $centroIds);
+                    });
             });
     }
 

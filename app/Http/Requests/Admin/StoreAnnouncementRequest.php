@@ -30,6 +30,10 @@ class StoreAnnouncementRequest extends FormRequest
             'starts_at' => ['nullable', 'date'],
             'ends_at' => ['nullable', 'date', 'after_or_equal:starts_at'],
             'is_active' => ['nullable', 'boolean'],
+            'target_centros' => ['nullable', 'array'],
+            'target_centros.*' => ['integer', Rule::exists('centros_trabajo', 'id')],
+            'target_roles' => ['nullable', 'array'],
+            'target_roles.*' => ['integer', Rule::exists('roles', 'id')->where('guard_name', 'web')],
         ];
     }
 }

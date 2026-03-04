@@ -68,6 +68,7 @@ function destroyAnnouncement(id) {
                 <th class="px-6 py-3 text-left">Título</th>
                 <th class="px-6 py-3 text-left">Tipo</th>
                 <th class="px-6 py-3 text-left">Vigencia</th>
+                <th class="px-6 py-3 text-left">Destinatarios</th>
                 <th class="px-6 py-3 text-center">Estado</th>
                 <th class="px-6 py-3 text-right">Acciones</th>
               </tr>
@@ -82,6 +83,16 @@ function destroyAnnouncement(id) {
                 <td class="px-6 py-4 text-sm text-gray-600">
                   <div>Inicio: {{ item.starts_at || 'Sin inicio' }}</div>
                   <div>Fin: {{ item.ends_at || 'Sin fin' }}</div>
+                </td>
+                <td class="px-6 py-4 text-sm text-gray-600">
+                  <div>
+                    <span class="font-semibold text-gray-700">Roles:</span>
+                    {{ item.target_roles?.length ? item.target_roles.join(', ') : 'Todos' }}
+                  </div>
+                  <div>
+                    <span class="font-semibold text-gray-700">Centros:</span>
+                    {{ item.target_centros?.length ? item.target_centros.join(', ') : 'Todos' }}
+                  </div>
                 </td>
                 <td class="px-6 py-4 text-center">
                   <span
@@ -99,7 +110,7 @@ function destroyAnnouncement(id) {
                 </td>
               </tr>
               <tr v-if="!data.data || data.data.length === 0">
-                <td colspan="5" class="px-6 py-10 text-center text-gray-500">No hay anuncios registrados.</td>
+                <td colspan="6" class="px-6 py-10 text-center text-gray-500">No hay anuncios registrados.</td>
               </tr>
             </tbody>
           </table>

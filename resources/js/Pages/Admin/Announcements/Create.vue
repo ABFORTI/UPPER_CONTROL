@@ -4,6 +4,8 @@ import Form from './Form.vue'
 
 const props = defineProps({
   maxUploadMb: Number,
+  roles: { type: Array, default: () => [] },
+  centros: { type: Array, default: () => [] },
 })
 
 const form = useForm({
@@ -15,6 +17,8 @@ const form = useForm({
   starts_at: '',
   ends_at: '',
   is_active: true,
+  target_roles: [],
+  target_centros: [],
 })
 
 function submit() {
@@ -31,7 +35,13 @@ function submit() {
         <h1 class="text-2xl font-extrabold text-gray-900 mb-2">Nuevo anuncio</h1>
         <p class="text-gray-500 mb-6">Define un video y texto para mostrar en login/dashboard autenticado.</p>
 
-        <Form :form="form" :max-upload-mb="props.maxUploadMb" @submit="submit" />
+        <Form
+          :form="form"
+          :max-upload-mb="props.maxUploadMb"
+          :roles="props.roles"
+          :centros="props.centros"
+          @submit="submit"
+        />
       </div>
     </div>
   </div>

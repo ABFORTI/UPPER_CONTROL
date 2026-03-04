@@ -6,16 +6,18 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreAnnouncementRequest;
 use App\Http\Requests\Admin\UpdateAnnouncementRequest;
 use App\Models\Announcement;
+use App\Models\CentroTrabajo;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
+use Spatie\Permission\Models\Role;
 
 class AnnouncementController extends Controller
 {
     public function index(Request $request)
     {
         $q = Announcement::query()
-            ->with('creator:id,name')
+            ->with(['creator:id,name', 'targetRoles:id,name', 'targetCentros:id,nombre'])
             ->when($request->filled('search'), function ($query) use ($request) {
                 $term = '%' . trim((string) $request->query('search')) . '%';
                 $query->where(function ($w) use ($term) {
@@ -40,6 +42,8 @@ class AnnouncementController extends Controller
                 'created_at' => optional($item->created_at)?->format('Y-m-d H:i'),
                 'created_by_name' => $item->creator?->name,
                 'video_src' => $this->videoSrcForRequest($item, $request),
+                'target_roles' => $item->targetRoles->pluck('name')->values()->all(),
+                'target_centros' => $item->targetCentros->pluck('nombre')->values()->all(),
             ];
         });
 
@@ -53,6 +57,8 @@ class AnnouncementController extends Controller
     {
         return Inertia::render('Admin/Announcements/Create', [
             'maxUploadMb' => round(((int) config('announcements.max_upload_kb', 204800)) / 1024, 2),
+            'roles' => Role::query()->orderBy('name')->get(['id', 'name']),
+            'centros' => CentroTrabajo::query()->where('activo', 1)->orderBy('nombre')->get(['id', 'nombre']),
         ]);
     }
 
@@ -79,11 +85,16 @@ class AnnouncementController extends Controller
 
         $announcement->save();
 
+        $announcement->targetRoles()->sync($data['target_roles'] ?? []);
+        $announcement->targetCentros()->sync($data['target_centros'] ?? []);
+
         return redirect()->route('admin.announcements.index')->with('ok', 'Anuncio creado correctamente.');
     }
 
     public function edit(Announcement $announcement)
     {
+        $announcement->load(['targetRoles:id,name', 'targetCentros:id,nombre']);
+
         return Inertia::render('Admin/Announcements/Edit', [
             'announcement' => [
                 'id' => $announcement->id,
@@ -96,8 +107,12 @@ class AnnouncementController extends Controller
                 'starts_at' => optional($announcement->starts_at)?->format('Y-m-d\\TH:i'),
                 'ends_at' => optional($announcement->ends_at)?->format('Y-m-d\\TH:i'),
                 'is_active' => (bool) $announcement->is_active,
+                'target_roles' => $announcement->targetRoles->pluck('id')->map(fn ($id) => (int) $id)->values()->all(),
+                'target_centros' => $announcement->targetCentros->pluck('id')->map(fn ($id) => (int) $id)->values()->all(),
             ],
             'maxUploadMb' => round(((int) config('announcements.max_upload_kb', 204800)) / 1024, 2),
+            'roles' => Role::query()->orderBy('name')->get(['id', 'name']),
+            'centros' => CentroTrabajo::query()->where('activo', 1)->orderBy('nombre')->get(['id', 'nombre']),
         ]);
     }
 
@@ -132,6 +147,9 @@ class AnnouncementController extends Controller
         }
 
         $announcement->save();
+
+        $announcement->targetRoles()->sync($data['target_roles'] ?? []);
+        $announcement->targetCentros()->sync($data['target_centros'] ?? []);
 
         return redirect()->route('admin.announcements.index')->with('ok', 'Anuncio actualizado correctamente.');
     }

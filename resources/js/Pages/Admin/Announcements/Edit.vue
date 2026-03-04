@@ -5,6 +5,8 @@ import Form from './Form.vue'
 const props = defineProps({
   announcement: { type: Object, required: true },
   maxUploadMb: Number,
+  roles: { type: Array, default: () => [] },
+  centros: { type: Array, default: () => [] },
 })
 
 const form = useForm({
@@ -16,6 +18,8 @@ const form = useForm({
   starts_at: props.announcement.starts_at || '',
   ends_at: props.announcement.ends_at || '',
   is_active: !!props.announcement.is_active,
+  target_roles: props.announcement.target_roles || [],
+  target_centros: props.announcement.target_centros || [],
 })
 
 function submit() {
@@ -37,6 +41,8 @@ function submit() {
           :is-edit="true"
           :max-upload-mb="props.maxUploadMb"
           :current-video-src="props.announcement.video_src"
+          :roles="props.roles"
+          :centros="props.centros"
           @submit="submit"
         />
       </div>

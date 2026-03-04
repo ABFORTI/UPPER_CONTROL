@@ -7,6 +7,8 @@ const props = defineProps({
   isEdit: { type: Boolean, default: false },
   maxUploadMb: { type: Number, default: 200 },
   currentVideoSrc: { type: String, default: null },
+  roles: { type: Array, default: () => [] },
+  centros: { type: Array, default: () => [] },
 })
 
 const emit = defineEmits(['submit'])
@@ -129,6 +131,36 @@ function onFileChange(event) {
           class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-indigo-100 focus:border-indigo-400"
         >
         <InputError class="mt-2" :message="form.errors.ends_at" />
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <label class="block text-sm font-semibold text-gray-700 mb-2">Roles objetivo</label>
+        <select
+          v-model="form.target_roles"
+          multiple
+          size="6"
+          class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-indigo-100 focus:border-indigo-400"
+        >
+          <option v-for="role in roles" :key="role.id" :value="role.id">{{ role.name }}</option>
+        </select>
+        <p class="mt-2 text-xs text-gray-500">Si no seleccionas roles, se mostrará para cualquier rol.</p>
+        <InputError class="mt-2" :message="form.errors.target_roles" />
+      </div>
+
+      <div>
+        <label class="block text-sm font-semibold text-gray-700 mb-2">Centros objetivo</label>
+        <select
+          v-model="form.target_centros"
+          multiple
+          size="6"
+          class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-indigo-100 focus:border-indigo-400"
+        >
+          <option v-for="centro in centros" :key="centro.id" :value="centro.id">{{ centro.nombre }}</option>
+        </select>
+        <p class="mt-2 text-xs text-gray-500">Si no seleccionas centros, se mostrará para todos los centros.</p>
+        <InputError class="mt-2" :message="form.errors.target_centros" />
       </div>
     </div>
 

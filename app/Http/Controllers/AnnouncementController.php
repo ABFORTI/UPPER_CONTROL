@@ -12,10 +12,12 @@ class AnnouncementController extends Controller
 {
     public function pending(Request $request): JsonResponse
     {
-        $userId = (int) $request->user()->id;
+        $user = $request->user();
+        $userId = (int) $user->id;
 
         $announcement = Announcement::query()
             ->activeWithin()
+            ->visibleToUser($user)
             ->whereDoesntHave('views', function ($q) use ($userId) {
                 $q->where('user_id', $userId)
                     ->where(function ($w) {
