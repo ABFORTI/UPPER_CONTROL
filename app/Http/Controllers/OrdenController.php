@@ -1481,10 +1481,13 @@ class OrdenController extends Controller
                 ]);
                 
                 if ($usaTamanos) {
+                    $totalesServicio = $otServicio->calcularTotales();
+                    $cantidadVigente = (int)($totalesServicio['total_cobrable'] ?? $otServicio->cantidad);
+
                     $serviciosConTamanos[$otServicio->id] = [
                         'usa_tamanos' => true,
                         'pendiente_definir' => !$tieneTamanosDefinidos,
-                        'cantidad_total' => $otServicio->cantidad,
+                        'cantidad_total' => $cantidadVigente,
                     ];
                     
                     // Obtener precios por tamaño para este servicio
@@ -1867,10 +1870,12 @@ class OrdenController extends Controller
         ];
         $suma = array_sum($cantidades);
         
-        // La suma debe ser igual a la cantidad del servicio
-        $totalServicio = (int)$servicio->cantidad;
+        // La suma debe ser igual al total vigente/cobrable del servicio
+        $servicio->loadMissing('items.ajustes');
+        $totalesServicio = $servicio->calcularTotales();
+        $totalServicio = (int)($totalesServicio['total_cobrable'] ?? $servicio->cantidad);
         if ($suma !== $totalServicio) {
-            return back()->withErrors(['tamanos' => "La suma ($suma) debe ser igual a la cantidad del servicio ($totalServicio)."]);
+            return back()->withErrors(['tamanos' => "La suma ($suma) debe ser igual al total vigente del servicio ($totalServicio)."]);
         }
 
         DB::transaction(function () use ($orden, $servicio, $cantidades) {
