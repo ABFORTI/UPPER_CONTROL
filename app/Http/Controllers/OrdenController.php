@@ -1623,6 +1623,7 @@ class OrdenController extends Controller
             'orden'       => $orden,
             'can'         => [
                 'reportarAvance'     => $canReportar,
+                'gestionar_evidencias' => Gate::allows('gestionarEvidencias', $orden),
                 'asignar_tl'         => $canAsignar,
                 'calidad_validar'    => $canCalidad,
                 'cliente_autorizar'  => $canClienteAutorizar,
@@ -1660,6 +1661,7 @@ class OrdenController extends Controller
                     ? route('ordenes.excel.origen', $orden)
                     : null,
                 'evidencias_store'  => route('evidencias.store', $orden),
+                'evidencias_download_all' => route('evidencias.downloadAll', $orden),
                 'evidencias_destroy'=> route('evidencias.destroy', 0),
                 'definir_tamanos'   => route('ordenes.definirTamanos', $orden),
                 'agregar_servicio_adicional' => route('ordenes.agregarServicioAdicional', $orden),
@@ -1679,7 +1681,7 @@ class OrdenController extends Controller
         $this->authorize('definirTamanos', $orden);
         $this->authorizeFromCentro($orden->id_centrotrabajo, $orden);
 
-        $orden->load(['servicio','solicitud.tamanos','items']);
+        $orden->load(['servicio','solicitud.tamanos','items.ajustes']);
         if (!$orden->servicio || !(bool)$orden->servicio->usa_tamanos) {
             abort(422, 'La OT no corresponde a un servicio por tamaños.');
         }
@@ -1702,8 +1704,11 @@ class OrdenController extends Controller
             'jumbo'   => (int)($data['jumbo'] ?? 0),
         ];
         $suma = array_sum($cantidades);
-        // Objetivo dinámico: total vigente después de faltantes (suma de cantidad_planeada actual de los ítems)
-        $totalVigente = (int)$orden->items->sum('cantidad_planeada');
+        // Objetivo dinámico: total cobrable vigente por ítem (incluye extras/faltantes auditables)
+        $totalVigente = (int) $orden->items->sum(function ($item) {
+            $met = $item->calcularMetricas();
+            return (int) ($met['total_cobrable'] ?? 0);
+        });
         if ($suma !== $totalVigente) {
             return back()->withErrors(['tamanos' => "La suma ($suma) debe ser igual al total vigente ($totalVigente)."]);
         }

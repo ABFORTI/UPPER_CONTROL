@@ -243,6 +243,7 @@ Route::middleware('auth')->group(function () {
 
     // Evidencias
     Route::post('/ordenes/{orden}/evidencias', [EvidenciaController::class,'store'])->name('evidencias.store');
+    Route::get('/ordenes/{orden}/evidencias/download-all', [EvidenciaController::class,'downloadAll'])->name('evidencias.downloadAll');
     Route::delete('/evidencias/{evidencia}',  [EvidenciaController::class,'destroy'])->name('evidencias.destroy');
 });
 

@@ -8,13 +8,13 @@ use App\Models\Avance;
 use App\Models\Orden;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use ZipArchive;
 
 class EvidenciaController extends Controller
 {
   public function store(Request $req, Orden $orden)
   {
-    // Misma regla que “reportarAvance”: admin o TL asignado
-    $this->authorize('reportarAvance', $orden);
+    $this->authorize('gestionarEvidencias', $orden);
 
     $data = $req->validate([
       'avance_id'    => ['required','integer','exists:avances,id'],
@@ -54,13 +54,77 @@ class EvidenciaController extends Controller
 
   public function destroy(Evidencia $evidencia)
   {
-    // Permite borrar a admin o TL de la orden
     $orden = $evidencia->orden;
-    $this->authorize('reportarAvance', $orden);
+    $this->authorize('gestionarEvidencias', $orden);
 
     Storage::disk('public')->delete($evidencia->path);
     $evidencia->delete();
 
     return back()->with('ok','Evidencia eliminada');
+  }
+
+  public function downloadAll(Orden $orden)
+  {
+    $this->authorize('gestionarEvidencias', $orden);
+
+    $evidencias = $orden->evidencias()->orderBy('id')->get();
+    if ($evidencias->isEmpty()) {
+      return back()->withErrors(['evidencias' => 'No hay evidencias para descargar en esta OT.']);
+    }
+
+    $tmpFile = tempnam(sys_get_temp_dir(), 'ot_evid_');
+    if ($tmpFile === false) {
+      return back()->withErrors(['evidencias' => 'No fue posible preparar la descarga.']);
+    }
+
+    $zipPath = $tmpFile . '.zip';
+    @rename($tmpFile, $zipPath);
+
+    $zip = new ZipArchive();
+    if ($zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+      @unlink($zipPath);
+      return back()->withErrors(['evidencias' => 'No fue posible generar el archivo ZIP.']);
+    }
+
+    $usedNames = [];
+    foreach ($evidencias as $ev) {
+      $diskPath = (string)($ev->path ?? '');
+      if ($diskPath === '' || !Storage::disk('public')->exists($diskPath)) {
+        continue;
+      }
+
+      $source = Storage::disk('public')->path($diskPath);
+      $baseName = trim((string)($ev->original_name ?: basename($diskPath)));
+      if ($baseName === '') {
+        $baseName = 'evidencia_'.$ev->id;
+      }
+
+      $entryName = $baseName;
+      $n = 2;
+      while (isset($usedNames[strtolower($entryName)])) {
+        $dotPos = strrpos($baseName, '.');
+        if ($dotPos !== false) {
+          $name = substr($baseName, 0, $dotPos);
+          $ext  = substr($baseName, $dotPos);
+          $entryName = $name.'_'.$n.$ext;
+        } else {
+          $entryName = $baseName.'_'.$n;
+        }
+        $n++;
+      }
+      $usedNames[strtolower($entryName)] = true;
+
+      $zip->addFile($source, $entryName);
+    }
+
+    $zip->close();
+
+    if (!file_exists($zipPath) || filesize($zipPath) === 0) {
+      @unlink($zipPath);
+      return back()->withErrors(['evidencias' => 'No se encontraron archivos físicos de evidencia para descargar.']);
+    }
+
+    $filename = 'OT_'.$orden->id.'_evidencias_'.now()->format('Ymd_His').'.zip';
+    return response()->download($zipPath, $filename)->deleteFileAfterSend(true);
   }
 }

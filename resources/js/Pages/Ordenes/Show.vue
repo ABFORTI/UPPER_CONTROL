@@ -411,6 +411,9 @@ function registrarAvance () {
 const canEditSegmentPrices = computed(() =>
   !!props.can?.reportarAvance && !['autorizada_cliente','facturada'].includes(String(props.orden?.estatus || ''))
 )
+const canManageEvidencias = computed(() =>
+  !!(props.can?.gestionar_evidencias || props.can?.reportarAvance || props.can?.calidad_validar)
+)
 const segPriceDraft = ref({}) // { [id]: number|string }
 const segNotaDraft = ref({})
 function segsOf(it) { return it?.segmentos_produccion || [] }
@@ -1982,7 +1985,7 @@ function aplicarFaltantesServicio(servicioId) {
           </div>
 
           <!-- Subir Evidencias -->
-          <div v-if="can?.reportarAvance" class="bg-white rounded-2xl shadow-lg border-2 border-orange-100 overflow-hidden dark:bg-slate-900/80 dark:border-orange-500/40">
+          <div v-if="canManageEvidencias" class="bg-white rounded-2xl shadow-lg border-2 border-orange-100 overflow-hidden dark:bg-slate-900/80 dark:border-orange-500/40">
             <div class="bg-gradient-to-r from-orange-600 to-amber-600 px-4 py-2 dark:from-orange-500 dark:to-amber-500">
               <h3 class="text-base font-bold text-white flex items-center gap-1.5 leading-tight">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2123,12 +2126,22 @@ function aplicarFaltantesServicio(servicioId) {
           <!-- Galería de Evidencias -->
           <div class="bg-white rounded-2xl shadow-lg border-2 border-indigo-100 overflow-hidden dark:bg-slate-900/80 dark:border-indigo-500/40">
             <div class="bg-gradient-to-r from-indigo-600 to-[#1E1C8F] px-4 py-2 dark:from-indigo-500 dark:to-[#1E1C8F]">
-              <h3 class="text-base font-bold text-white flex items-center gap-1.5 leading-tight">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-                </svg>
-                Galería de Evidencias
-              </h3>
+              <div class="flex items-center justify-between gap-3">
+                <h3 class="text-base font-bold text-white flex items-center gap-1.5 leading-tight">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                  </svg>
+                  Galería de Evidencias
+                </h3>
+                <a v-if="canManageEvidencias && vistaEvidencias.length && urls?.evidencias_download_all"
+                   :href="urls.evidencias_download_all"
+                   class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/20 border border-white/30 text-white text-xs font-bold hover:bg-white/30 transition-colors">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-5l-4 4m0 0l-4-4m4 4V4"/>
+                  </svg>
+                  Descargar todas las evidencias
+                </a>
+              </div>
             </div>
             
             <div v-if="vistaEvidencias.length" class="p-5">
@@ -2195,7 +2208,7 @@ function aplicarFaltantesServicio(servicioId) {
                     </div>
                     <div v-else class="mb-3"></div>
                     
-                    <button v-if="can?.reportarAvance" @click="borrarEvidencia(ev.id)"
+                        <button v-if="canManageEvidencias" @click="borrarEvidencia(ev.id)"
                           class="w-full px-3 py-2 bg-red-50 text-red-700 font-semibold rounded-lg hover:bg-red-600 hover:text-white transition-all duration-200 flex items-center justify-center gap-1 dark:bg-rose-500/10 dark:text-rose-300 dark:hover:bg-rose-500">
                       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
