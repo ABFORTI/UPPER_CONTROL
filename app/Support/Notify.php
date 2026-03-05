@@ -23,6 +23,12 @@ class Notify
             ->get();
     }
 
+    /** Destinatarios cliente por centro: solo gerentes de cliente */
+    public static function clientGerentesByCenter(int $centroId)
+    {
+        return static::usersByRoleAndCenter('Cliente_Gerente', $centroId);
+    }
+
     /** Notificar a una colección de usuarios */
     public static function send($users, $notification): void
     {

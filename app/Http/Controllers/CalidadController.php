@@ -8,7 +8,6 @@ use App\Models\Aprobacion;
 use App\Models\Avance;
 use App\Notifications\CalidadResultadoNotification;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\DB;
@@ -99,9 +98,10 @@ class CalidadController extends Controller
       ]);
     });
 
-  // Notificar al cliente (dueño de la solicitud) — no bloquear si el mail falla
+  // Notificar solo a clientes gerentes del centro — no bloquear si el mail falla
   try {
-    optional($orden->solicitud?->cliente)->notify(new \App\Notifications\OtValidadaParaCliente($orden));
+    $clientesGerentes = Notify::clientGerentesByCenter((int)$orden->id_centrotrabajo);
+    Notify::send($clientesGerentes, new \App\Notifications\OtValidadaParaCliente($orden));
   } catch (\Throwable $e) {
     Log::warning('Calidad.validar: fallo al enviar notificación a cliente (ignorado)', [
       'orden_id' => $orden->id,
@@ -199,10 +199,10 @@ class CalidadController extends Controller
       'es_corregido' => 0,
     ]);
     });
-  // Notificar a cliente (y/o TL/Coordinador) si quieres:
-  $cliente = $orden->solicitud->cliente;
+  // Notificar solo a clientes gerentes del centro
   try {
-    Notification::send($cliente, new CalidadResultadoNotification($orden, 'RECHAZADO', $comentario));
+    $clientesGerentes = Notify::clientGerentesByCenter((int)$orden->id_centrotrabajo);
+    Notify::send($clientesGerentes, new CalidadResultadoNotification($orden, 'RECHAZADO', $comentario));
   } catch (\Throwable $e) {
     Log::warning('Calidad.rechazar: fallo al enviar notificación (ignorado)', [
       'orden_id' => $orden->id,

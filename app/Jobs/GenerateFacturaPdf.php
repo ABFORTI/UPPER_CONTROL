@@ -5,6 +5,7 @@ namespace App\Jobs;
 
 use App\Models\Factura;
 use App\Notifications\FacturaGeneradaNotification;
+use App\Support\Notify;
 use Barryvdh\DomPDF\Facade\Pdf as PDF;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -51,12 +52,15 @@ class GenerateFacturaPdf implements ShouldQueue
             'pdf_generated_at' => now(),
         ]);
 
-        // Enviar notificación al cliente con el PDF adjunto si se solicita
-        if ($this->notifyClient && $factura->orden && $factura->orden->solicitud) {
-            $cliente = $factura->orden->solicitud->cliente;
-            if ($cliente) {
-                $cliente->notify(new FacturaGeneradaNotification($factura));
-                Log::info("Notificación de factura enviada al cliente {$cliente->email} con PDF adjunto");
+        // Enviar notificación de factura solo a clientes gerentes del centro
+        if ($this->notifyClient && $factura->orden) {
+            $clientesGerentes = Notify::clientGerentesByCenter((int)$factura->orden->id_centrotrabajo);
+            if ($clientesGerentes->isNotEmpty()) {
+                Notify::send($clientesGerentes, new FacturaGeneradaNotification($factura));
+                Log::info('Notificación de factura enviada a clientes gerentes', [
+                    'factura_id' => $factura->id,
+                    'destinatarios' => $clientesGerentes->pluck('email')->values()->all(),
+                ]);
             }
         }
     }

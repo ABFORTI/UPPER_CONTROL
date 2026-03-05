@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\Factura;
 use App\Notifications\FacturaGeneradaNotification;
+use App\Support\Notify;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Storage;
 
@@ -26,12 +27,14 @@ class ProbarCorreoFactura extends Command
             return 1;
         }
 
-        $cliente = $factura->orden->solicitud->cliente ?? null;
-        
-        if (!$cliente) {
-            $this->error("❌ La factura no tiene un cliente asociado");
+        $clientesGerentes = Notify::clientGerentesByCenter((int)($factura->orden->id_centrotrabajo ?? 0));
+
+        if ($clientesGerentes->isEmpty()) {
+            $this->error("❌ No hay clientes gerentes configurados para el centro de esta factura");
             return 1;
         }
+
+        $cliente = $clientesGerentes->first();
 
         $this->info("📄 Factura #{$factura->id}");
         $this->line("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
@@ -51,9 +54,10 @@ class ProbarCorreoFactura extends Command
         $this->info("📧 Enviando correo con PDF adjunto...");
 
         try {
-            $cliente->notify(new FacturaGeneradaNotification($factura));
+            Notify::send($clientesGerentes, new FacturaGeneradaNotification($factura));
             $this->line("");
             $this->info("✅ Correo enviado exitosamente!");
+            $this->comment('   Destinatarios: ' . $clientesGerentes->pluck('email')->implode(', '));
             $this->line("");
             $this->comment("💡 Revisa tu bandeja de entrada (o Mailtrap si está en modo prueba)");
             $this->comment("   El correo incluye:");

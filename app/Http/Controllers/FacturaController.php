@@ -9,6 +9,7 @@ use Inertia\Inertia;
 use function auth; // para que el analizador reconozca el helper
 use Barryvdh\DomPDF\Facade\Pdf as PDF;
 use App\Services\Notifier;
+use App\Support\Notify;
 use App\Jobs\GenerateFacturaPdf;
 use Illuminate\Support\Facades\Storage;
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
@@ -1142,15 +1143,12 @@ private function xmlElementToArray(\SimpleXMLElement $element): array
       return $f;
     });
 
-    // Notificaciones: enviar a TODOS los clientes del centro de trabajo
+    // Notificaciones: enviar solo a clientes gerentes del centro de trabajo
     // de las OTs facturadas (facturación por periodos por centro).
     try {
       $centroId = (int)($ordenes->first()?->id_centrotrabajo ?? 0);
       if ($centroId > 0) {
-        // Obtener todos los clientes cuyo centro_trabajo_id coincide
-        $clientes = \App\Models\User::role('Cliente_Supervisor')
-          ->where('centro_trabajo_id', $centroId)
-          ->get();
+        $clientes = Notify::clientGerentesByCenter($centroId);
 
         foreach ($clientes as $cliente) {
           Notifier::toUser(
@@ -1178,13 +1176,11 @@ private function xmlElementToArray(\SimpleXMLElement $element): array
       'folio_externo'=>$req->folio_externo,
       'fecha_facturado'=>now()->toDateString(),
     ]);
-    // Notificar a todos los clientes del centro de trabajo de la factura
+    // Notificar solo a clientes gerentes del centro de trabajo de la factura
     try {
       $centroId = (int)($factura->orden?->id_centrotrabajo ?? 0);
       if ($centroId > 0) {
-        $clientes = \App\Models\User::role('Cliente_Supervisor')
-          ->where('centro_trabajo_id', $centroId)
-          ->get();
+        $clientes = Notify::clientGerentesByCenter($centroId);
         foreach ($clientes as $cliente) {
           Notifier::toUser(
             $cliente->id,
@@ -1208,13 +1204,11 @@ private function xmlElementToArray(\SimpleXMLElement $element): array
   $this->authorize('operar', $factura);
   $this->authFacturacion($factura->orden);
   $factura->update(['estatus'=>'por_pagar', 'fecha_cobro'=>now()->toDateString()]);
-  // Notificar a todos los clientes del centro de trabajo de la factura
+  // Notificar solo a clientes gerentes del centro de trabajo de la factura
   try {
     $centroId = (int)($factura->orden?->id_centrotrabajo ?? 0);
     if ($centroId > 0) {
-      $clientes = \App\Models\User::role('Cliente_Supervisor')
-        ->where('centro_trabajo_id', $centroId)
-        ->get();
+      $clientes = Notify::clientGerentesByCenter($centroId);
       foreach ($clientes as $cliente) {
         Notifier::toUser(
           $cliente->id,
@@ -1238,13 +1232,11 @@ private function xmlElementToArray(\SimpleXMLElement $element): array
   $this->authorize('operar', $factura);
   $this->authFacturacion($factura->orden);
   $factura->update(['estatus'=>'pagado', 'fecha_pagado'=>now()->toDateString()]);
-  // Notificar a todos los clientes del centro de trabajo de la factura
+  // Notificar solo a clientes gerentes del centro de trabajo de la factura
   try {
     $centroId = (int)($factura->orden?->id_centrotrabajo ?? 0);
     if ($centroId > 0) {
-      $clientes = \App\Models\User::role('Cliente_Supervisor')
-        ->where('centro_trabajo_id', $centroId)
-        ->get();
+      $clientes = Notify::clientGerentesByCenter($centroId);
       foreach ($clientes as $cliente) {
         Notifier::toUser(
           $cliente->id,
