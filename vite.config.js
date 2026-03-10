@@ -9,14 +9,16 @@ export default defineConfig(({ mode }) => {
 
     const raw = env.ASSET_URL || env.APP_URL || '';
     const base = (() => {
-        if (!raw) return '/';
+        if (!raw) return '/build/';
         try {
             const u = new URL(raw);
             const p = (u.pathname || '/').replace(/\/+$/, '');
-            return p ? `${p}/` : '/';
+            if (!p) return '/build/';
+            return p.endsWith('/build') ? `${p}/` : `${p}/build/`;
         } catch {
             const p = raw.replace(/\/+$/, '');
-            return p ? `${p}/` : '/';
+            if (!p) return '/build/';
+            return p.endsWith('/build') ? `${p}/` : `${p}/build/`;
         }
     })();
 

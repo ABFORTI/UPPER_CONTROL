@@ -1246,7 +1246,7 @@ class OrdenController extends Controller
         $this->authorizeFromCentro($orden->id_centrotrabajo, $orden);
 
         $orden->load([
-            'solicitud.archivos','solicitud.centroCosto','solicitud.marca','solicitud.tamanos',
+            'solicitud.archivos','solicitud.centroCosto','solicitud.marca','solicitud.tamanos','solicitud.servicios',
             'servicio','centro','area','items','teamLeader',
             'items.ajustes.user',
             'items.segmentosProduccion' => fn($q) => $q->with('usuario')->orderBy('created_at'),
@@ -1583,6 +1583,22 @@ class OrdenController extends Controller
             $serviciosData = $orden->otServicios->values()->map(function ($otServicio, $idx) use ($eventosCalidad, $orden) {
                 $totales = $otServicio->calcularTotales();
 
+                $solServicios = optional($orden->solicitud)->servicios;
+                $solServicioPorIndice = $solServicios?->values()->get($idx);
+                $solServicio = null;
+
+                if ($otServicio->servicio_id) {
+                    $solServicio = $solServicios?->firstWhere('servicio_id', $otServicio->servicio_id);
+                }
+
+                if (!$solServicio) {
+                    $solServicio = $solServicioPorIndice;
+                }
+
+                $sku = $otServicio->sku ?: ($solServicio->sku ?? optional($orden->solicitud)->sku);
+                $origenCustoms = $otServicio->origen_customs ?: ($solServicio->origen ?? optional($orden->solicitud)->origen);
+                $pedimento = $otServicio->pedimento ?: ($solServicio->pedimento ?? optional($orden->solicitud)->pedimento);
+
                 $avancesServicio = collect($otServicio->avances->map(function ($avance) {
                     return [
                         'id' => $avance->id,
@@ -1621,9 +1637,9 @@ class OrdenController extends Controller
                     'cantidad' => $otServicio->cantidad,
                     'precio_unitario' => $otServicio->precio_unitario,
                     'subtotal' => $otServicio->subtotal,
-                    'sku' => $otServicio->sku,
-                    'origen_customs' => $otServicio->origen_customs,
-                    'pedimento' => $otServicio->pedimento,
+                    'sku' => $sku,
+                    'origen_customs' => $origenCustoms,
+                    'pedimento' => $pedimento,
                     'service_assignment_status' => $otServicio->service_assignment_status,
                     'service_locked' => $otServicio->isServiceLocked(),
                     'service_assigned_at' => $otServicio->service_assigned_at?->toIso8601String(),

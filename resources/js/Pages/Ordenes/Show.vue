@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { router, useForm } from '@inertiajs/vue3'
 import { route } from 'ziggy-js'
 import FilePreview from '@/Components/FilePreview.vue'
@@ -49,6 +49,19 @@ const money = (v) => new Intl.NumberFormat('es-MX', {
 
 // Detectar si es multi-servicio
 const esMultiServicio = computed(() => (props.orden?.ot_servicios?.length ?? 0) > 0)
+
+const customFieldValue = (...values) => {
+  for (const value of values) {
+    if (value === null || value === undefined) continue
+    const normalized = String(value).trim()
+    if (normalized.length > 0) return normalized
+  }
+  return ''
+}
+
+const servicioSku = (servicio) => customFieldValue(servicio?.sku, servicio?.solicitud?.servicios?.[0]?.sku, props.orden?.solicitud?.sku)
+const servicioOrigen = (servicio) => customFieldValue(servicio?.origen_customs, servicio?.origen, servicio?.solicitud?.servicios?.[0]?.origen, props.orden?.solicitud?.origen)
+const servicioPedimento = (servicio) => customFieldValue(servicio?.pedimento, servicio?.solicitud?.servicios?.[0]?.pedimento, props.orden?.solicitud?.pedimento)
 
 // --- Pending Service Assignment ---
 const pendingAssignForms = ref({})
@@ -770,16 +783,23 @@ function definirTamanosServicio(servicioId) {
   })
 }
 
+function abrirDefinirTamanosServicio(servicioId) {
+  if (!tamanosFormServicio.value[servicioId]) {
+    tamanosFormServicio.value[servicioId] = { chico: 0, mediano: 0, grande: 0, jumbo: 0 }
+  }
+  servicioSeleccionadoTamanos.value = servicioId
+}
+
 // Inicializar forms de tamaños para servicios pendientes
 const inicializarTamanosServicios = () => {
-  Object.keys(serviciosConTamanos.value).forEach(servicioId => {
+  Object.keys(serviciosConTamanos.value || {}).forEach(servicioId => {
     const info = serviciosConTamanos.value[servicioId]
     if (info?.pendiente_definir && !tamanosFormServicio.value[servicioId]) {
       tamanosFormServicio.value[servicioId] = { chico: 0, mediano: 0, grande: 0, jumbo: 0 }
     }
   })
 }
-inicializarTamanosServicios()
+watch(serviciosConTamanos, inicializarTamanosServicios, { immediate: true, deep: true })
 
 // ----- Avances para multi-servicio -----
 const avancesMultiServicio = ref({})
@@ -825,7 +845,7 @@ const inicializarAvancesServicios = () => {
     }
   })
 }
-inicializarAvancesServicios()
+watch(servicios, inicializarAvancesServicios, { immediate: true, deep: true })
 
 function registrarAjusteServicio(servicioId) {
   const form = ajustesMultiServicio.value[servicioId]
@@ -1183,6 +1203,11 @@ function aplicarFaltantesServicio(servicioId) {
                       <span class="text-emerald-50/70 text-[11px] font-medium leading-none whitespace-nowrap">
                         {{ kpiSolicitadoTrad }} uds.
                       </span>
+                    </div>
+                    <div v-if="servicioSku(orden) || servicioOrigen(orden) || servicioPedimento(orden)" class="flex items-center gap-2 mt-1 flex-wrap">
+                      <span v-if="servicioSku(orden)" class="text-[10px] text-white/70 bg-white/10 px-1.5 py-0.5 rounded">SKU: {{ servicioSku(orden) }}</span>
+                      <span v-if="servicioOrigen(orden)" class="text-[10px] text-white/70 bg-white/10 px-1.5 py-0.5 rounded">Origen: {{ servicioOrigen(orden) }}</span>
+                      <span v-if="servicioPedimento(orden)" class="text-[10px] text-white/70 bg-white/10 px-1.5 py-0.5 rounded">Pedimento: {{ servicioPedimento(orden) }}</span>
                     </div>
                   </div>
                 </div>
@@ -1644,10 +1669,10 @@ function aplicarFaltantesServicio(servicioId) {
                         </span>
                       </div>
                       <!-- SKU / Origen / Pedimento por servicio -->
-                      <div v-if="!servicio.is_pending && (servicio.sku || servicio.origen_customs || servicio.pedimento)" class="flex items-center gap-2 mt-1 flex-wrap">
-                        <span v-if="servicio.sku" class="text-[10px] text-white/70 bg-white/10 px-1.5 py-0.5 rounded">SKU: {{ servicio.sku }}</span>
-                        <span v-if="servicio.origen_customs" class="text-[10px] text-white/70 bg-white/10 px-1.5 py-0.5 rounded">Origen: {{ servicio.origen_customs }}</span>
-                        <span v-if="servicio.pedimento" class="text-[10px] text-white/70 bg-white/10 px-1.5 py-0.5 rounded">Pedimento: {{ servicio.pedimento }}</span>
+                      <div v-if="servicioSku(servicio) || servicioOrigen(servicio) || servicioPedimento(servicio)" class="flex items-center gap-2 mt-1 flex-wrap">
+                        <span v-if="servicioSku(servicio)" class="text-[10px] text-white/70 bg-white/10 px-1.5 py-0.5 rounded">SKU: {{ servicioSku(servicio) }}</span>
+                        <span v-if="servicioOrigen(servicio)" class="text-[10px] text-white/70 bg-white/10 px-1.5 py-0.5 rounded">Origen: {{ servicioOrigen(servicio) }}</span>
+                        <span v-if="servicioPedimento(servicio)" class="text-[10px] text-white/70 bg-white/10 px-1.5 py-0.5 rounded">Pedimento: {{ servicioPedimento(servicio) }}</span>
                       </div>
                     </div>
                   </div>
@@ -1670,10 +1695,10 @@ function aplicarFaltantesServicio(servicioId) {
                   <div class="flex-1">
                     <h4 class="text-sm font-bold text-amber-900 dark:text-amber-200 mb-1">Servicio pendiente de asignación</h4>
                     <p class="text-xs text-amber-700 dark:text-amber-300 mb-3">No se pueden registrar avances ni validar calidad hasta que se asigne un tipo de servicio. Esta acción es irreversible.</p>
-                    <div v-if="servicio.sku || servicio.origen_customs || servicio.pedimento" class="flex flex-wrap gap-2 mb-3 text-xs text-amber-800 dark:text-amber-200">
-                      <span v-if="servicio.sku" class="bg-white/60 dark:bg-slate-800/40 px-2 py-0.5 rounded">SKU: {{ servicio.sku }}</span>
-                      <span v-if="servicio.origen_customs" class="bg-white/60 dark:bg-slate-800/40 px-2 py-0.5 rounded">Origen: {{ servicio.origen_customs }}</span>
-                      <span v-if="servicio.pedimento" class="bg-white/60 dark:bg-slate-800/40 px-2 py-0.5 rounded">Pedimento: {{ servicio.pedimento }}</span>
+                    <div v-if="servicioSku(servicio) || servicioOrigen(servicio) || servicioPedimento(servicio)" class="flex flex-wrap gap-2 mb-3 text-xs text-amber-800 dark:text-amber-200">
+                      <span v-if="servicioSku(servicio)" class="bg-white/60 dark:bg-slate-800/40 px-2 py-0.5 rounded">SKU: {{ servicioSku(servicio) }}</span>
+                      <span v-if="servicioOrigen(servicio)" class="bg-white/60 dark:bg-slate-800/40 px-2 py-0.5 rounded">Origen: {{ servicioOrigen(servicio) }}</span>
+                      <span v-if="servicioPedimento(servicio)" class="bg-white/60 dark:bg-slate-800/40 px-2 py-0.5 rounded">Pedimento: {{ servicioPedimento(servicio) }}</span>
                     </div>
                     <form @submit.prevent="assignPendingService(servicio)" class="flex items-end gap-3">
                       <div class="flex-1">
@@ -2034,7 +2059,7 @@ function aplicarFaltantesServicio(servicioId) {
                         <p class="text-sm text-amber-800 mb-3">
                           Total de piezas: <span class="font-bold">{{ serviciosConTamanos[servicio.id].cantidad_total }}</span>
                         </p>
-                        <button type="button" @click="servicioSeleccionadoTamanos = servicio.id"
+                        <button type="button" @click="abrirDefinirTamanosServicio(servicio.id)"
                                 class="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-semibold text-sm transition-colors shadow-md">
                           Definir Tamaños
                         </button>
