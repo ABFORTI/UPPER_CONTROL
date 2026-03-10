@@ -2533,8 +2533,11 @@ class OrdenController extends Controller
         // Validar datos
         $validated = $request->validate([
             'servicio_id' => 'required|exists:servicios_empresa,id',
+            'cantidad' => 'required|integer|gt:0',
             'nota' => 'required|string|max:1000',
         ]);
+
+        $cantidadManual = (int) $validated['cantidad'];
 
         // Validar que el servicio no esté ya asignado a esta OT
         $servicioYaAsignado = \App\Models\OTServicio::where('ot_id', $orden->id)
@@ -2546,9 +2549,6 @@ class OrdenController extends Controller
                 'servicio_id' => 'Este servicio ya está asignado a esta OT. Por favor selecciona un servicio diferente.'
             ])->withInput();
         }
-
-        // Usar la cantidad planeada de la OT original
-        $cantidadPlaneada = $orden->total_planeado ?: 1;
 
         DB::beginTransaction();
         try {
@@ -2612,9 +2612,9 @@ class OrdenController extends Controller
                 'ot_id' => $orden->id,
                 'servicio_id' => $validated['servicio_id'],
                 'tipo_cobro' => 'pieza',
-                'cantidad' => $cantidadPlaneada,
+                'cantidad' => $cantidadManual,
                 'precio_unitario' => $precioUnitario,
-                'subtotal' => $precioUnitario * $cantidadPlaneada,
+                'subtotal' => $precioUnitario * $cantidadManual,
                 'origen' => 'ADICIONAL',
                 'added_by_user_id' => $user->id,
                 'nota' => $validated['nota'],
@@ -2624,7 +2624,7 @@ class OrdenController extends Controller
             \App\Models\OTServicioItem::create([
                 'ot_servicio_id' => $servicioAdicional->id,
                 'descripcion_item' => 'Servicio adicional',
-                'planeado' => $cantidadPlaneada,
+                'planeado' => $cantidadManual,
                 'completado' => 0,
                 'faltante' => 0,
             ]);
@@ -2638,7 +2638,7 @@ class OrdenController extends Controller
                 ->event('servicio_adicional')
                 ->withProperties([
                     'servicio_id' => $validated['servicio_id'],
-                    'unidades' => $cantidadPlaneada,
+                    'unidades' => $cantidadManual,
                     'nota' => $validated['nota'],
                 ])
                 ->log("OT #{$orden->id}: servicio adicional agregado por {$user->name}");

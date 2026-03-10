@@ -292,8 +292,9 @@ function asignarTL () { tlForm.patch(props.urls.asignar_tl, { preserveScroll: tr
 // Usar ref directo en lugar de useForm para evitar problemas de reactividad
 const servicioSeleccionado = ref('')
 const notaJustificacion = ref('')
+const cantidadServicioAdicional = ref('')
 const procesandoServicio = ref(false)
-const erroresServicio = ref({ servicio_id: null, nota: null })
+const erroresServicio = ref({ servicio_id: null, cantidad: null, nota: null })
 
 // IDs de servicios ya asignados en esta OT
 const serviciosYaAsignados = computed(() => {
@@ -311,11 +312,12 @@ function agregarServicioAdicional() {
   console.log('🚀 Iniciando submit de servicio adicional')
   console.log('📋 Estado DIRECTO:', {
     servicio: servicioSeleccionado.value,
+    cantidad: cantidadServicioAdicional.value,
     nota_length: notaJustificacion.value?.length || 0
   })
   
   // Limpiar errores
-  erroresServicio.value = { servicio_id: null, nota: null }
+  erroresServicio.value = { servicio_id: null, cantidad: null, nota: null }
   
   // Validación
   if (!servicioSeleccionado.value || servicioSeleccionado.value === '') {
@@ -325,6 +327,12 @@ function agregarServicioAdicional() {
   
   if (!notaJustificacion.value || notaJustificacion.value.length < 10) {
     erroresServicio.value.nota = 'La justificación debe tener al menos 10 caracteres'
+    return
+  }
+
+  const cantidad = Number(cantidadServicioAdicional.value)
+  if (!Number.isInteger(cantidad) || cantidad <= 0) {
+    erroresServicio.value.cantidad = 'Debes capturar una cantidad entera mayor a 0'
     return
   }
   
@@ -337,6 +345,7 @@ function agregarServicioAdicional() {
   
   const payload = {
     servicio_id: servicioId,
+    cantidad,
     nota: notaJustificacion.value.trim()
   }
   
@@ -349,8 +358,9 @@ function agregarServicioAdicional() {
     onSuccess: () => {
       console.log('✅ Servicio adicional guardado exitosamente')
       servicioSeleccionado.value = ''
+      cantidadServicioAdicional.value = ''
       notaJustificacion.value = ''
-      erroresServicio.value = { servicio_id: null, nota: null }
+      erroresServicio.value = { servicio_id: null, cantidad: null, nota: null }
       // Recargar página para mostrar el nuevo servicio
       router.visit(window.location.href, { replace: true, preserveScroll: true })
     },
@@ -2421,7 +2431,25 @@ function aplicarFaltantesServicio(servicioId) {
               
               <div class="bg-blue-50 border-2 border-blue-200 rounded-xl p-3 dark:bg-blue-500/10 dark:border-blue-500/40">
                 <p class="text-sm text-blue-800 dark:text-blue-200">
-                  <strong>Cantidad:</strong> Se usará automáticamente la cantidad planeada de esta OT ({{ orden.total_planeado || 1 }} unidades)
+                  <strong>Cantidad manual:</strong> Captura la cantidad real que corresponde a este servicio adicional. Esta cantidad es independiente de la OT principal.
+                </p>
+              </div>
+
+              <div>
+                <label for="cantidad_servicio_adicional" class="block text-sm font-semibold text-gray-700 mb-2 dark:text-slate-200">Cantidad *</label>
+                <input
+                  id="cantidad_servicio_adicional"
+                  v-model.number="cantidadServicioAdicional"
+                  type="number"
+                  min="1"
+                  step="1"
+                  required
+                  placeholder="Ingresa la cantidad para este servicio"
+                  class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-amber-100 focus:border-amber-400 transition-all duration-200 bg-white text-gray-800 dark:bg-slate-900/60 dark:border-slate-700 dark:text-slate-100 dark:focus:ring-amber-400/40 dark:focus:border-amber-400/60"
+                  :class="{ 'border-red-500 dark:border-red-500': erroresServicio.cantidad }"
+                />
+                <p v-if="erroresServicio.cantidad" class="mt-2 text-sm text-red-600">
+                  {{ erroresServicio.cantidad }}
                 </p>
               </div>
               
@@ -2444,7 +2472,7 @@ function aplicarFaltantesServicio(servicioId) {
               
               <button 
                 type="submit"
-                :disabled="procesandoServicio || !servicioSeleccionado || servicioSeleccionado === '' || notaJustificacion.length < 10 || servicioYaAsignado"
+                :disabled="procesandoServicio || !servicioSeleccionado || servicioSeleccionado === '' || !cantidadServicioAdicional || Number(cantidadServicioAdicional) <= 0 || notaJustificacion.length < 10 || servicioYaAsignado"
                 class="w-full px-6 py-3 bg-gradient-to-r from-amber-600 to-orange-600 text-white font-bold rounded-xl shadow-lg hover:shadow-xl hover:scale-105 transform transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:scale-100 dark:from-amber-500 dark:to-orange-500">
                 <span v-if="servicioYaAsignado">⚠️ Servicio ya asignado a esta OT</span>
                 <span v-else-if="procesandoServicio">Agregando...</span>

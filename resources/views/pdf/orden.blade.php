@@ -550,16 +550,18 @@
   <table>
     <thead>
       <tr>
-        <th style="width: 30%;">Servicio</th>
+        <th style="width: 24%;">Servicio</th>
+        <th style="width: 10%;" class="text-center">Cantidad</th>
         <th style="width: 15%;" class="text-center">Fecha/Hora</th>
-        <th style="width: 20%;">Agregado por</th>
-        <th style="width: 35%;">Justificación</th>
+        <th style="width: 18%;">Agregado por</th>
+        <th style="width: 33%;">Justificación</th>
       </tr>
     </thead>
     <tbody>
       @foreach($serviciosAdicionales as $adicional)
         <tr>
           <td><strong>{{ $adicional->servicio ? $adicional->servicio->nombre : 'Pendiente de asignación' }}</strong></td>
+          <td class="text-center">{{ number_format((float)($adicional->cantidad ?? 0)) }}</td>
           <td class="text-center">{{ $adicional->created_at ? $adicional->created_at->format('d/m/Y h:i a') : '—' }}</td>
           <td>{{ optional($adicional->addedBy)->name ?? '—' }}</td>
           <td style="font-size: 8px;">{{ $adicional->nota ?? 'Sin justificación' }}</td>
