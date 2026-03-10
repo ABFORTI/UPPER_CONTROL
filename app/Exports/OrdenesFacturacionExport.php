@@ -145,16 +145,46 @@ class OrdenesFacturacionExport implements FromCollection, WithHeadings, ShouldAu
 
                     foreach ($serviciosFiltrados as $otServicio) {
                         $isPending = empty($otServicio->servicio_id) || $otServicio->service_assignment_status === 'pending';
-                        // Regla export: cantidad cobrable = solicitado + extras - faltantes (nunca negativa)
+                        $nombreServicio = $isPending ? 'Pendiente de asignación' : ($otServicio?->servicio?->nombre ?? null);
+                        $itemsServicio = $otServicio->relationLoaded('items') ? $otServicio->items : collect();
+
+                        // Si hay desglose por items/tamanos, exportar una fila por item con su propio precio.
+                        if (!$isPending && $itemsServicio->count() > 0) {
+                            foreach ($itemsServicio as $item) {
+                                $cantidadCobrableItem = $this->cantidadCobrableItem($item);
+                                $cantidad = $cantidadCobrableItem > 0 ? $cantidadCobrableItem : null;
+                                $precio = $item->precio_unitario !== null
+                                    ? (float) $item->precio_unitario
+                                    : ($otServicio->precio_unitario !== null ? (float) $otServicio->precio_unitario : 0.0);
+
+                                $tamano = $this->normalizarTamano($item->tamano ?? null);
+                                $datosOtBase = $nombreServicio ?: 'OT';
+                                $datosOt = $tamano
+                                    ? ($datosOtBase . ' - ' . $tamano . ' OT: ' . $orden->id)
+                                    : ($datosOtBase . ' OT: ' . $orden->id);
+
+                                $rows->push([
+                                    $cliente,
+                                    $fechaElaboracion?->format('d/m/Y'),
+                                    $periodo,
+                                    $centro,
+                                    $centroCostos,
+                                    $cantidad,
+                                    $precio,
+                                    $datosOt,
+                                    $fechaEntrega?->format('d/m/Y'),
+                                ]);
+                            }
+
+                            continue;
+                        }
+
+                        // Fallback legacy: fila por servicio cuando no hay items.
                         $cantidadCobrable = $isPending ? 0 : $this->cantidadCobrableServicio($otServicio);
                         $cantidad = $cantidadCobrable > 0 ? $cantidadCobrable : null;
-
-                        // Regla export: precio unitario real guardado en detalle de OT, sin recalcular por totales
                         $precio = $isPending ? 0 : ($otServicio->precio_unitario !== null
                             ? (float) $otServicio->precio_unitario
                             : $this->precioUnitarioDesdeServicioItems($otServicio));
-
-                        $nombreServicio = $isPending ? 'Pendiente de asignación' : ($otServicio?->servicio?->nombre ?? null);
                         $datosOt = $nombreServicio ? ($nombreServicio . ' OT: ' . $orden->id) : ('OT: ' . $orden->id);
 
                         $rows->push([
@@ -173,14 +203,44 @@ class OrdenesFacturacionExport implements FromCollection, WithHeadings, ShouldAu
                     continue;
                 }
 
-                // Tradicional: 1 fila (compat)
+                // Tradicional: si hay items, exportar una fila por item/tamano.
+                $nombreServicio = $orden?->servicio?->nombre ?? null;
+                $ordenItems = $orden->relationLoaded('items') ? $orden->items : collect();
+
+                if ($ordenItems->count() > 0) {
+                    foreach ($ordenItems as $item) {
+                        $cantidadCobrableItem = $this->cantidadCobrableItem($item);
+                        $cantidad = $cantidadCobrableItem > 0 ? $cantidadCobrableItem : null;
+                        $precio = $item->precio_unitario !== null
+                            ? (float) $item->precio_unitario
+                            : $this->precioUnitarioDesdeOrdenItems($orden);
+
+                        $tamano = $this->normalizarTamano($item->tamano ?? null);
+                        $datosOtBase = $nombreServicio ?: 'OT';
+                        $datosOt = $tamano
+                            ? ($datosOtBase . ' - ' . $tamano . ' OT: ' . $orden->id)
+                            : ($datosOtBase . ' OT: ' . $orden->id);
+
+                        $rows->push([
+                            $cliente,
+                            $fechaElaboracion?->format('d/m/Y'),
+                            $periodo,
+                            $centro,
+                            $centroCostos,
+                            $cantidad,
+                            (float) $precio,
+                            $datosOt,
+                            $fechaEntrega?->format('d/m/Y'),
+                        ]);
+                    }
+
+                    continue;
+                }
+
+                // Fallback legacy tradicional sin items.
                 $cantidadCobrable = $this->cantidadCobrableTradicional($orden);
                 $cantidad = $cantidadCobrable > 0 ? $cantidadCobrable : null;
-
-                // Regla export: no recalcular precio por subtotal/cantidad
                 $precio = $this->precioUnitarioDesdeOrdenItems($orden);
-
-                $nombreServicio = $orden?->servicio?->nombre ?? null;
                 $datosOt = $nombreServicio ? ($nombreServicio . ' OT: ' . $orden->id) : ('OT: ' . $orden->id);
 
                 $rows->push([
@@ -241,6 +301,30 @@ class OrdenesFacturacionExport implements FromCollection, WithHeadings, ShouldAu
         }
 
         return max(0, (int) ($orden?->solicitud?->cantidad ?? 0));
+    }
+
+    private function cantidadCobrableItem(object $item): int
+    {
+        if (method_exists($item, 'calcularMetricas')) {
+            return max(0, (int) ($item->calcularMetricas()['total_cobrable'] ?? 0));
+        }
+
+        return 0;
+    }
+
+    private function normalizarTamano(?string $tamano): ?string
+    {
+        $valor = trim((string) $tamano);
+        if ($valor === '') {
+            return null;
+        }
+
+        $genericos = ['item', 'servicio adicional', 'sku'];
+        if (in_array(mb_strtolower($valor), $genericos, true)) {
+            return null;
+        }
+
+        return $valor;
     }
 
     private function precioUnitarioDesdeServicioItems(OTServicio $servicio): float

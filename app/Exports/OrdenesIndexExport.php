@@ -124,7 +124,8 @@ class OrdenesIndexExport implements FromCollection, WithHeadings, ShouldAutoSize
     }
 
     /**
-     * Build a collection of rows where each row is either a (OT x Servicio) or a traditional OT row.
+     * Build export rows.
+     * Regla: si existen items/tamanos, se exporta una fila por item (sin promedios de precio).
      */
     public function collection(): Collection
     {
@@ -155,18 +156,49 @@ class OrdenesIndexExport implements FromCollection, WithHeadings, ShouldAutoSize
                     foreach ($o->otServicios as $s) {
                         $isPending = empty($s->servicio_id) || $s->service_assignment_status === 'pending';
                         $serviceName = $isPending ? 'Pendiente de asignación' : ($s->servicio?->nombre ?? null);
-                        // Regla export: cantidad cobrable = solicitado + extras - faltantes (nunca negativa)
-                        $cantidadCobrable = $isPending ? 0 : $this->cantidadCobrableServicio($s);
-                        // Regla export: costo unitario debe ser el precio real guardado, sin recalcular por total
-                        $costoUnitario = $isPending ? 0 : ($s->precio_unitario !== null
-                            ? (float) $s->precio_unitario
-                            : $this->precioUnitarioDesdeServicioItems($s));
-                        // Regla export: total = cantidad cobrable * unitario
-                        $costoTotal = $cantidadCobrable * $costoUnitario;
-
                         $marca = $o->solicitud?->marca?->nombre ?? null;
                         $departamento = trim((string) ($o->solicitud?->centroCosto?->nombre ?? '')) ?: null;
                         $areaSolicita = $o->area?->nombre ?? null;
+
+                        $serviceItems = $s->relationLoaded('items') ? $s->items : collect();
+
+                        // Si el servicio tiene desglose por items/tamanos, exportar una fila por item.
+                        if (!$isPending && $serviceItems->count() > 0) {
+                            foreach ($serviceItems as $item) {
+                                $cantidadCobrableItem = $this->cantidadCobrableItem($item);
+                                $costoUnitarioItem = $item->precio_unitario !== null
+                                    ? (float) $item->precio_unitario
+                                    : ($s->precio_unitario !== null ? (float) $s->precio_unitario : 0.0);
+                                $costoTotalItem = $cantidadCobrableItem * $costoUnitarioItem;
+                                $tamano = $this->normalizarTamano($item->tamano ?? null);
+
+                                $rows->push([
+                                    $factura?->folio ?? $factura?->folio_externo ?? null,
+                                    $semana,
+                                    $fechaFactura,
+                                    $o->id,
+                                    $fechaOt,
+                                    ($cantidadCobrableItem > 0 ? $cantidadCobrableItem : null),
+                                    $serviceName,
+                                    $tamano,
+                                    $marca,
+                                    $costoUnitarioItem,
+                                    $costoTotalItem,
+                                    null,
+                                    $departamento,
+                                    $areaSolicita,
+                                ]);
+                            }
+
+                            continue;
+                        }
+
+                        // Fallback legacy: sin items, mantener fila por servicio.
+                        $cantidadCobrable = $isPending ? 0 : $this->cantidadCobrableServicio($s);
+                        $costoUnitario = $isPending ? 0 : ($s->precio_unitario !== null
+                            ? (float) $s->precio_unitario
+                            : $this->precioUnitarioDesdeServicioItems($s));
+                        $costoTotal = $cantidadCobrable * $costoUnitario;
 
                         $rows->push([
                             $factura?->folio ?? $factura?->folio_externo ?? null,
@@ -176,6 +208,7 @@ class OrdenesIndexExport implements FromCollection, WithHeadings, ShouldAutoSize
                             $fechaOt,
                             ($cantidadCobrable > 0 ? $cantidadCobrable : null),
                             $serviceName,
+                            null,
                             $marca,
                             $costoUnitario,
                             $costoTotal,
@@ -185,18 +218,47 @@ class OrdenesIndexExport implements FromCollection, WithHeadings, ShouldAutoSize
                         ]);
                     }
                 } else {
-                    // Tradicional: usar el servicio único en orden->servicio y calcular piezas desde items/solicitud
-                    $piezas = $this->cantidadCobrableTradicional($o);
-
+                    // Tradicional: si hay items, exportar una fila por item/tamano.
                     $proceso = $o->servicio?->nombre ?? null;
                     $marca = $o->solicitud?->marca?->nombre ?? null;
-
-                    // Regla export: costo unitario real desde detalle de OT, sin recalcular por subtotal/cantidad
-                    $costoUnitario = $this->precioUnitarioDesdeOrdenItems($o);
-                    $costoTotalSinIva = $piezas * $costoUnitario;
-
                     $departamento = trim((string) ($o->solicitud?->centroCosto?->nombre ?? '')) ?: null;
                     $areaSolicita = $o->area?->nombre ?? null;
+
+                    $ordenItems = $o->relationLoaded('items') ? $o->items : collect();
+                    if ($ordenItems->count() > 0) {
+                        foreach ($ordenItems as $item) {
+                            $cantidadCobrableItem = $this->cantidadCobrableItem($item);
+                            $costoUnitarioItem = $item->precio_unitario !== null
+                                ? (float) $item->precio_unitario
+                                : $this->precioUnitarioDesdeOrdenItems($o);
+                            $costoTotalItem = $cantidadCobrableItem * $costoUnitarioItem;
+                            $tamano = $this->normalizarTamano($item->tamano ?? null);
+
+                            $rows->push([
+                                $factura?->folio ?? $factura?->folio_externo ?? null,
+                                $semana,
+                                $fechaFactura,
+                                $o->id,
+                                $fechaOt,
+                                ($cantidadCobrableItem > 0 ? $cantidadCobrableItem : null),
+                                $proceso,
+                                $tamano,
+                                $marca,
+                                $costoUnitarioItem,
+                                $costoTotalItem,
+                                null,
+                                $departamento,
+                                $areaSolicita,
+                            ]);
+                        }
+
+                        continue;
+                    }
+
+                    // Fallback legacy tradicional sin items.
+                    $piezas = $this->cantidadCobrableTradicional($o);
+                    $costoUnitario = $this->precioUnitarioDesdeOrdenItems($o);
+                    $costoTotalSinIva = $piezas * $costoUnitario;
 
                     $rows->push([
                         $factura?->folio ?? $factura?->folio_externo ?? null,
@@ -206,6 +268,7 @@ class OrdenesIndexExport implements FromCollection, WithHeadings, ShouldAutoSize
                         $fechaOt,
                         ($piezas > 0 ? $piezas : null),
                         $proceso,
+                        null,
                         $marca,
                         $costoUnitario,
                         $costoTotalSinIva,
@@ -230,6 +293,7 @@ class OrdenesIndexExport implements FromCollection, WithHeadings, ShouldAutoSize
             'Fecha',
             'Ctd piezas',
             'Proceso',
+            'Tamaño',
             'Marca',
             'Costo unitario (MxN)',
             'Costo total s/iva',
@@ -243,15 +307,15 @@ class OrdenesIndexExport implements FromCollection, WithHeadings, ShouldAutoSize
     {
         return [
             // Costo unitario (MxN)
-            'I' => '"$" #,##0.00',
-            // Costo total s/iva
             'J' => '"$" #,##0.00',
+            // Costo total s/iva
+            'K' => '"$" #,##0.00',
         ];
     }
 
     public function styles(Worksheet $sheet)
     {
-        $sheet->getStyle('A1:M1')->applyFromArray([
+        $sheet->getStyle('A1:N1')->applyFromArray([
             'font' => [
                 'bold' => true,
                 'color' => ['rgb' => 'FFFFFF'],
@@ -269,8 +333,9 @@ class OrdenesIndexExport implements FromCollection, WithHeadings, ShouldAutoSize
         ]);
 
         $sheet->getStyle('G:G')->getAlignment()->setWrapText(true);
-        $sheet->getStyle('L:L')->getAlignment()->setWrapText(true);
+        $sheet->getStyle('H:H')->getAlignment()->setWrapText(true);
         $sheet->getStyle('M:M')->getAlignment()->setWrapText(true);
+        $sheet->getStyle('N:N')->getAlignment()->setWrapText(true);
 
         return [];
     }
@@ -283,7 +348,7 @@ class OrdenesIndexExport implements FromCollection, WithHeadings, ShouldAutoSize
                 $sheet->freezePane('A2');
 
                 $highestRow = $sheet->getHighestRow();
-                $range = 'A1:M' . $highestRow;
+                $range = 'A1:N' . $highestRow;
 
                 $sheet->getStyle($range)->applyFromArray([
                     'borders' => [
@@ -320,6 +385,30 @@ class OrdenesIndexExport implements FromCollection, WithHeadings, ShouldAutoSize
         }
 
         return max(0, (int) ($orden->solicitud?->cantidad ?? 0));
+    }
+
+    private function cantidadCobrableItem(object $item): int
+    {
+        if (method_exists($item, 'calcularMetricas')) {
+            return max(0, (int) ($item->calcularMetricas()['total_cobrable'] ?? 0));
+        }
+
+        return 0;
+    }
+
+    private function normalizarTamano(?string $tamano): ?string
+    {
+        $valor = trim((string) $tamano);
+        if ($valor === '') {
+            return null;
+        }
+
+        $genericos = ['item', 'servicio adicional', 'sku'];
+        if (in_array(mb_strtolower($valor), $genericos, true)) {
+            return null;
+        }
+
+        return $valor;
     }
 
     private function precioUnitarioDesdeServicioItems(OTServicio $servicio): float
