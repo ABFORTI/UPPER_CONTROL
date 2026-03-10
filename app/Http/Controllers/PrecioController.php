@@ -11,6 +11,8 @@ use App\Models\ServicioTamano;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Validation\Rule;
 use App\Models\User;
 use Inertia\Inertia;
 
@@ -24,21 +26,35 @@ class PrecioController extends Controller
 
     $idCentro = (int)($req->integer('centro') ?: ($req->user()->centro_trabajo_id ?? ($centros->first()->id ?? 1)));
 
+    $hasNombreCol = Schema::hasColumn('servicios_centro', 'nombre');
+    $hasUsaTamanosCol = Schema::hasColumn('servicios_centro', 'usa_tamanos');
+
     // Solo servicios que YA están vinculados al centro seleccionado
-    $scRows = ServicioCentro::with(['tamanos','servicio:id,nombre,usa_tamanos'])
-      ->where('id_centrotrabajo',$idCentro)
-      ->orderBy(
+    $scRowsQuery = ServicioCentro::with(['tamanos','servicio:id,nombre,usa_tamanos'])
+      ->where('id_centrotrabajo',$idCentro);
+
+    if ($hasNombreCol) {
+      $scRowsQuery->orderBy('nombre');
+    } else {
+      $scRowsQuery->orderBy(
         ServicioEmpresa::select('nombre')->whereColumn('servicios_empresa.id','servicios_centro.id_servicio')
-      )
-      ->get();
+      );
+    }
+
+    $scRows = $scRowsQuery->get();
 
     // Compacta para el front (solo los del centro)
-    $rows = $scRows->map(function($sc){
+    $rows = $scRows->map(function($sc) use ($hasNombreCol, $hasUsaTamanosCol) {
       $s = $sc->servicio;
+
+      $usaTamanosCentro = $hasUsaTamanosCol
+        ? (bool)$sc->usa_tamanos
+        : (bool)$s->usa_tamanos;
+
       return [
         'id_servicio' => $s->id,
-        'servicio'    => $s->nombre,
-        'usa_tamanos' => (bool)$s->usa_tamanos,
+        'servicio'    => $hasNombreCol ? ($sc->nombre ?: $s->nombre) : $s->nombre,
+        'usa_tamanos' => $usaTamanosCentro,
         'precio_base' => $sc->precio_base,
         'tamanos'     => [
           'chico'   => optional($sc->tamanos->firstWhere('tamano','chico'))->precio,
@@ -91,22 +107,35 @@ class PrecioController extends Controller
   public function guardar(PreciosSaveRequest $req) {
     $this->authorizeAdminOrCoord();
 
-    DB::transaction(function () use ($req) {
-  $centroId = (int)request()->input('id_centro');
+    $hasNombreCol = Schema::hasColumn('servicios_centro', 'nombre');
+    $hasUsaTamanosCol = Schema::hasColumn('servicios_centro', 'usa_tamanos');
 
-  foreach ((array)request()->input('items', []) as $item) {
+    DB::transaction(function () use ($req, $hasNombreCol, $hasUsaTamanosCol) {
+      $centroId = (int)$req->input('id_centro');
+
+      foreach ((array)$req->input('items', []) as $item) {
         $servicioId = (int)$item['id_servicio'];
         $usaTamanos = (bool)$item['usa_tamanos'];
-
-    // Alinear el modo del servicio a nivel global con lo elegido en la pantalla de precios
-    // para que el resto del sistema (por ejemplo, el selector en Solicitudes) muestre
-    // correctamente "Unitario" vs "Por tamaños".
-    ServicioEmpresa::where('id', $servicioId)->update(['usa_tamanos' => $usaTamanos]);
+        $servicio = ServicioEmpresa::find($servicioId);
+        if (!$servicio) {
+          continue;
+        }
 
         // upsert del ServicioCentro
+        $updateData = [
+          'precio_base' => $usaTamanos ? 0 : (float)($item['precio_base'] ?? 0),
+        ];
+
+        if ($hasNombreCol) {
+          $updateData['nombre'] = trim((string)$servicio->nombre);
+        }
+        if ($hasUsaTamanosCol) {
+          $updateData['usa_tamanos'] = $usaTamanos;
+        }
+
         $sc = ServicioCentro::updateOrCreate(
           ['id_centrotrabajo'=>$centroId, 'id_servicio'=>$servicioId],
-          ['precio_base'=> $usaTamanos ? 0 : (float)($item['precio_base'] ?? 0)]
+          $updateData
         );
 
         if ($usaTamanos) {
@@ -131,29 +160,63 @@ class PrecioController extends Controller
   public function crear(Request $req)
   {
     $this->authorizeAdminOrCoord();
+    $hasNombreCol = Schema::hasColumn('servicios_centro', 'nombre');
+    $hasUsaTamanosCol = Schema::hasColumn('servicios_centro', 'usa_tamanos');
+
     $data = $req->validate([
       'nombre'      => ['required','string','max:150'],
       'usa_tamanos' => ['required','boolean'],
       'id_centro'   => ['required','integer','exists:centros_trabajo,id'],
-      'precio_base' => ['nullable','numeric','min:0'],
+      'precio_base' => ['nullable','numeric','min:0', Rule::requiredIf(fn () => !$req->boolean('usa_tamanos'))],
       'tamanos'     => ['nullable','array'],
-      'tamanos.chico'   => ['nullable','numeric','min:0'],
-      'tamanos.mediano' => ['nullable','numeric','min:0'],
-      'tamanos.grande'  => ['nullable','numeric','min:0'],
-      'tamanos.jumbo'   => ['nullable','numeric','min:0'],
+      'tamanos.chico'   => ['nullable','numeric','min:0', Rule::requiredIf(fn () => $req->boolean('usa_tamanos'))],
+      'tamanos.mediano' => ['nullable','numeric','min:0', Rule::requiredIf(fn () => $req->boolean('usa_tamanos'))],
+      'tamanos.grande'  => ['nullable','numeric','min:0', Rule::requiredIf(fn () => $req->boolean('usa_tamanos'))],
+      'tamanos.jumbo'   => ['nullable','numeric','min:0', Rule::requiredIf(fn () => $req->boolean('usa_tamanos'))],
     ]);
 
-    // Crear servicio (si no existe)
-    $servicio = ServicioEmpresa::firstOrCreate(
-      ['nombre' => $data['nombre']],
-      ['usa_tamanos' => (bool)$data['usa_tamanos']]
-    );
+    $nombreNormalizado = trim((string)$data['nombre']);
+
+    $duplicadoEnCentro = $hasNombreCol
+      ? ServicioCentro::query()
+          ->where('id_centrotrabajo', (int)$data['id_centro'])
+          ->whereRaw('LOWER(TRIM(nombre)) = ?', [mb_strtolower($nombreNormalizado)])
+          ->exists()
+      : ServicioCentro::query()
+          ->where('id_centrotrabajo', (int)$data['id_centro'])
+          ->whereHas('servicio', function ($q) use ($nombreNormalizado) {
+            $q->whereRaw('LOWER(TRIM(nombre)) = ?', [mb_strtolower($nombreNormalizado)]);
+          })
+          ->exists();
+
+    if ($duplicadoEnCentro) {
+      return back()->withErrors([
+        'nombre' => 'Ya existe un servicio con ese nombre en el centro seleccionado.',
+      ])->withInput();
+    }
+
+    // Crear siempre un registro de servicio independiente.
+    $servicio = ServicioEmpresa::create([
+      'nombre' => $nombreNormalizado,
+      'usa_tamanos' => (bool)$data['usa_tamanos'],
+    ]);
 
     // Crear/actualizar precios solo para el centro seleccionado
-    $sc = ServicioCentro::updateOrCreate(
-      ['id_centrotrabajo' => (int)$data['id_centro'], 'id_servicio' => $servicio->id],
-      ['precio_base' => $data['usa_tamanos'] ? 0 : (float)($data['precio_base'] ?? 0)]
-    );
+    $scPayload = [
+      'id_centrotrabajo' => (int)$data['id_centro'],
+      'id_servicio' => $servicio->id,
+      'precio_base' => $data['usa_tamanos'] ? 0 : (float)($data['precio_base'] ?? 0),
+    ];
+
+    if ($hasNombreCol) {
+      $scPayload['nombre'] = $nombreNormalizado;
+    }
+
+    if ($hasUsaTamanosCol) {
+      $scPayload['usa_tamanos'] = (bool)$data['usa_tamanos'];
+    }
+
+    $sc = ServicioCentro::create($scPayload);
 
     if ($data['usa_tamanos']) {
       $t = $data['tamanos'] ?? [];
@@ -179,6 +242,9 @@ class PrecioController extends Controller
   public function clonar(Request $req)
   {
     $this->authorizeAdminOrCoord();
+    $hasNombreCol = Schema::hasColumn('servicios_centro', 'nombre');
+    $hasUsaTamanosCol = Schema::hasColumn('servicios_centro', 'usa_tamanos');
+
     $data = $req->validate([
       'centro_origen'  => ['required','integer','different:centro_destino','exists:centros_trabajo,id'],
       'centro_destino' => ['required','integer','exists:centros_trabajo,id'],
@@ -187,18 +253,52 @@ class PrecioController extends Controller
     $origen  = (int)$data['centro_origen'];
     $destino = (int)$data['centro_destino'];
 
-    DB::transaction(function () use ($origen, $destino) {
-      $existentes = ServicioCentro::where('id_centrotrabajo', $destino)->pluck('id_servicio')->all();
-      $copiar = ServicioCentro::with('tamanos')
+    DB::transaction(function () use ($origen, $destino, $hasNombreCol, $hasUsaTamanosCol) {
+      $existentes = $hasNombreCol
+        ? ServicioCentro::where('id_centrotrabajo', $destino)
+            ->pluck('nombre')
+            ->map(fn ($n) => mb_strtolower(trim((string)$n)))
+            ->filter()
+            ->values()
+            ->all()
+        : ServicioCentro::with('servicio:id,nombre')
+            ->where('id_centrotrabajo', $destino)
+            ->get()
+            ->map(fn ($row) => mb_strtolower(trim((string)($row->servicio?->nombre ?? ''))))
+            ->filter()
+            ->values()
+            ->all();
+
+      $copiar = ServicioCentro::with(['tamanos','servicio:id,nombre,usa_tamanos'])
         ->where('id_centrotrabajo', $origen)
         ->get();
+
       foreach ($copiar as $sc) {
-        if (in_array($sc->id_servicio, $existentes, true)) continue; // no duplicar
-        $nuevo = ServicioCentro::create([
-          'id_centrotrabajo' => $destino,
-          'id_servicio'      => $sc->id_servicio,
-          'precio_base'      => $sc->precio_base,
+        $nombre = trim((string)($sc->nombre ?: $sc->servicio?->nombre));
+        $nombreKey = mb_strtolower($nombre);
+        if (!$nombre || in_array($nombreKey, $existentes, true)) continue; // no duplicar por nombre en el mismo centro
+
+        $usaTamanosOrigen = $hasUsaTamanosCol ? (bool)$sc->usa_tamanos : (bool)($sc->servicio?->usa_tamanos);
+
+        $servicioNuevo = ServicioEmpresa::create([
+          'nombre' => $nombre,
+          'usa_tamanos' => $usaTamanosOrigen,
         ]);
+
+        $nuevoPayload = [
+          'id_centrotrabajo' => $destino,
+          'id_servicio'      => $servicioNuevo->id,
+          'precio_base'      => $sc->precio_base,
+        ];
+
+        if ($hasNombreCol) {
+          $nuevoPayload['nombre'] = $nombre;
+        }
+        if ($hasUsaTamanosCol) {
+          $nuevoPayload['usa_tamanos'] = $usaTamanosOrigen;
+        }
+
+        $nuevo = ServicioCentro::create($nuevoPayload);
         foreach ($sc->tamanos as $t) {
           ServicioTamano::create([
             'id_servicio_centro' => $nuevo->id,
@@ -206,6 +306,8 @@ class PrecioController extends Controller
             'precio'             => $t->precio,
           ]);
         }
+
+        $existentes[] = $nombreKey;
       }
     });
 
@@ -227,7 +329,13 @@ class PrecioController extends Controller
         ->first();
       if ($sc) {
         ServicioTamano::where('id_servicio_centro', $sc->id)->delete();
+        $servicioId = $sc->id_servicio;
         $sc->delete();
+
+        // Limpia catalogo huerfano (si ese id_servicio ya no esta ligado a ningun centro)
+        if (!ServicioCentro::where('id_servicio', $servicioId)->exists()) {
+          ServicioEmpresa::where('id', $servicioId)->delete();
+        }
       }
     });
 

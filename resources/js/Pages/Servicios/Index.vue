@@ -38,6 +38,12 @@ function closeCreateModal(){
   createForm.reset()
 }
 function submitCreate(){
+  if (createForm.usa_tamanos) {
+    createForm.precio_base = null
+  } else {
+    createForm.tamanos = { chico: null, mediano: null, grande: null, jumbo: null }
+  }
+
   createForm.post(props.urls.crear, {
     preserveScroll: false,
     onSuccess: () => { closeCreateModal() }
@@ -423,10 +429,12 @@ function removeRow(r){
               <select v-model.number="createForm.id_centro" class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl">
                 <option v-for="c in centros" :key="c.id" :value="c.id">{{ c.nombre }}</option>
               </select>
+              <p v-if="createForm.errors.id_centro" class="text-red-600 text-sm mt-1">{{ createForm.errors.id_centro }}</p>
             </div>
             <div v-if="!createForm.usa_tamanos">
               <label class="block text-sm font-semibold text-gray-700 mb-2">Precio unitario</label>
               <input v-model.number="createForm.precio_base" type="number" step="0.01" min="0" class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl" />
+              <p v-if="createForm.errors.precio_base" class="text-red-600 text-sm mt-1">{{ createForm.errors.precio_base }}</p>
             </div>
           </div>
 
@@ -434,18 +442,22 @@ function removeRow(r){
             <div>
               <label class="block text-sm font-semibold text-gray-700 mb-2">Chico</label>
               <input v-model.number="createForm.tamanos.chico" type="number" step="0.01" min="0" class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl" />
+              <p v-if="createForm.errors['tamanos.chico']" class="text-red-600 text-sm mt-1">{{ createForm.errors['tamanos.chico'] }}</p>
             </div>
             <div>
               <label class="block text-sm font-semibold text-gray-700 mb-2">Mediano</label>
               <input v-model.number="createForm.tamanos.mediano" type="number" step="0.01" min="0" class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl" />
+              <p v-if="createForm.errors['tamanos.mediano']" class="text-red-600 text-sm mt-1">{{ createForm.errors['tamanos.mediano'] }}</p>
             </div>
             <div>
               <label class="block text-sm font-semibold text-gray-700 mb-2">Grande</label>
               <input v-model.number="createForm.tamanos.grande" type="number" step="0.01" min="0" class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl" />
+              <p v-if="createForm.errors['tamanos.grande']" class="text-red-600 text-sm mt-1">{{ createForm.errors['tamanos.grande'] }}</p>
             </div>
             <div>
               <label class="block text-sm font-semibold text-gray-700 mb-2">Jumbo</label>
               <input v-model.number="createForm.tamanos.jumbo" type="number" step="0.01" min="0" class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl" />
+              <p v-if="createForm.errors['tamanos.jumbo']" class="text-red-600 text-sm mt-1">{{ createForm.errors['tamanos.jumbo'] }}</p>
             </div>
           </div>
 

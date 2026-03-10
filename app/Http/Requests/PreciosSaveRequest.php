@@ -21,4 +21,29 @@ class PreciosSaveRequest extends FormRequest {
       'items.*.tamanos.jumbo' => ['nullable','numeric','min:0'],
     ];
   }
+
+  public function withValidator($validator): void {
+    $validator->after(function ($v) {
+      $items = (array) $this->input('items', []);
+
+      foreach ($items as $i => $item) {
+        $usaTamanos = filter_var($item['usa_tamanos'] ?? false, FILTER_VALIDATE_BOOLEAN);
+
+        if ($usaTamanos) {
+          foreach (['chico','mediano','grande','jumbo'] as $tamano) {
+            $value = data_get($item, "tamanos.{$tamano}");
+            if ($value === null || $value === '') {
+              $v->errors()->add("items.{$i}.tamanos.{$tamano}", "El precio {$tamano} es obligatorio cuando el servicio usa tamanos.");
+            }
+          }
+          continue;
+        }
+
+        $precioBase = data_get($item, 'precio_base');
+        if ($precioBase === null || $precioBase === '') {
+          $v->errors()->add("items.{$i}.precio_base", 'El precio unitario es obligatorio cuando el servicio no usa tamanos.');
+        }
+      }
+    });
+  }
 }

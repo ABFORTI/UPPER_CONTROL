@@ -58,7 +58,9 @@ class CalidadController extends Controller
     // Regla: si el servicio usa tamaños y aún no hay desglose en la solicitud, no permitir validar
     try {
       $orden->loadMissing(['servicio','solicitud.tamanos']);
-      $usaTamanos = (bool)($orden->servicio?->usa_tamanos ?? false);
+      $usaTamanos = (bool) \App\Models\ServicioCentro::where('id_centrotrabajo', $orden->id_centrotrabajo)
+        ->where('id_servicio', $orden->id_servicio)
+        ->value('usa_tamanos');
       $faltaDesglose = $usaTamanos && ($orden->solicitud && $orden->solicitud->tamanos()->count() === 0);
       if ($faltaDesglose) {
         abort(422, 'Debe definir el desglose por tamaños antes de validar calidad.');

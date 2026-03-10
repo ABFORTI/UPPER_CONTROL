@@ -1788,7 +1788,11 @@ class OrdenController extends Controller
         $this->authorizeFromCentro($orden->id_centrotrabajo, $orden);
 
         $orden->load(['servicio','solicitud.tamanos','items.ajustes']);
-        if (!$orden->servicio || !(bool)$orden->servicio->usa_tamanos) {
+        $usaTamanosCentro = \App\Models\ServicioCentro::where('id_centrotrabajo', $orden->id_centrotrabajo)
+            ->where('id_servicio', $orden->id_servicio)
+            ->value('usa_tamanos');
+
+        if (!$orden->servicio || !(bool)$usaTamanosCentro) {
             abort(422, 'La OT no corresponde a un servicio por tamaños.');
         }
         if ($orden->solicitud && $orden->solicitud->tamanos->count() > 0) {
