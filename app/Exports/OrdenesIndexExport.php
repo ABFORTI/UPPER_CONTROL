@@ -153,13 +153,14 @@ class OrdenesIndexExport implements FromCollection, WithHeadings, ShouldAutoSize
                 // Si tiene servicios múltiples definidos explícitamente
                 if ($o->relationLoaded('otServicios') && $o->otServicios && $o->otServicios->count() > 0) {
                     foreach ($o->otServicios as $s) {
-                        $serviceName = $s->servicio?->nombre ?? null;
+                        $isPending = empty($s->servicio_id) || $s->service_assignment_status === 'pending';
+                        $serviceName = $isPending ? 'Pendiente de asignación' : ($s->servicio?->nombre ?? null);
                         // Regla export: cantidad cobrable = solicitado + extras - faltantes (nunca negativa)
-                        $cantidadCobrable = $this->cantidadCobrableServicio($s);
+                        $cantidadCobrable = $isPending ? 0 : $this->cantidadCobrableServicio($s);
                         // Regla export: costo unitario debe ser el precio real guardado, sin recalcular por total
-                        $costoUnitario = $s->precio_unitario !== null
+                        $costoUnitario = $isPending ? 0 : ($s->precio_unitario !== null
                             ? (float) $s->precio_unitario
-                            : $this->precioUnitarioDesdeServicioItems($s);
+                            : $this->precioUnitarioDesdeServicioItems($s));
                         // Regla export: total = cantidad cobrable * unitario
                         $costoTotal = $cantidadCobrable * $costoUnitario;
 

@@ -23,6 +23,7 @@ class SolicitudServicio extends Model
         'cantidad',
         'precio_unitario',
         'subtotal',
+        'service_assignment_status',
     ];
 
     protected $casts = [

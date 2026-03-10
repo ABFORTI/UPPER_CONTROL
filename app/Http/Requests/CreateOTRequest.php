@@ -31,10 +31,13 @@ class CreateOTRequest extends FormRequest
 
             // Array de servicios (mínimo 1)
             'servicios' => ['required', 'array', 'min:1'],
-            'servicios.*.servicio_id' => ['required', 'integer', 'exists:servicios_empresa,id'],
-            'servicios.*.tipo_cobro' => ['required', 'string', 'max:50'],
+            'servicios.*.servicio_id' => ['nullable', 'integer', 'exists:servicios_empresa,id'],
+            'servicios.*.tipo_cobro' => ['nullable', 'string', 'max:50'],
             'servicios.*.cantidad' => ['required', 'integer', 'min:1'],
-            'servicios.*.precio_unitario' => ['required', 'numeric', 'min:0'],
+            'servicios.*.precio_unitario' => ['nullable', 'numeric', 'min:0'],
+            'servicios.*.sku' => ['nullable', 'string', 'max:255'],
+            'servicios.*.origen' => ['nullable', 'string', 'max:255'],
+            'servicios.*.pedimento' => ['nullable', 'string', 'max:255'],
         ];
     }
 

@@ -213,7 +213,7 @@ const preciosMultiples = computed(() => {
   
   return form.serviciosMultiples.map(s => {
     const sid = Number(s.id_servicio)
-    if (!sid) return { subtotal: 0, iva: 0, total: 0, nombre: 'Sin seleccionar', usaTamanos: false }
+    if (!sid) return { subtotal: 0, iva: 0, total: 0, nombre: 'Pendiente de asignación', usaTamanos: false, isPending: true }
     
     const servicio = filteredServicios.value.find(fs => fs.id === sid)
     const nombre = servicio?.nombre || 'Sin seleccionar'
@@ -270,20 +270,17 @@ excel_nombre_original: form.excel_nombre_original,
 
 // Si es modo múltiple, enviar array de servicios con cantidad independiente por servicio
 if (multipleServicios.value) {
-  payload.servicios = form.serviciosMultiples.map(s => ({
-    id_servicio: s.id_servicio,
-    cantidad: Math.max(1, Number(s.cantidad) || 1),
-  }))
-  if (canServiceCustomsFields.value) {
-    payload.sku = form.sku ?? ''
-    payload.origen = form.origen ?? ''
-    payload.pedimento = form.pedimento ?? ''
-  }
-  
-  // DEBUG: Log para verificar
-  console.log('🔥 Enviando múltiples servicios:', {
-    total: payload.servicios.length,
-    servicios: payload.servicios
+  payload.servicios = form.serviciosMultiples.map(s => {
+    const item = {
+      id_servicio: s.id_servicio || null,
+      cantidad: Math.max(1, Number(s.cantidad) || 1),
+    }
+    if (canServiceCustomsFields.value) {
+      item.sku = s.sku ?? ''
+      item.origen = s.origen ?? ''
+      item.pedimento = s.pedimento ?? ''
+    }
+    return item
   })
 } else {
   // Modo simple (un solo servicio)
@@ -314,8 +311,13 @@ for (const [key, value] of Object.entries(payload)) {
   if (key === 'servicios' && Array.isArray(value)) {
     // Agregar cada servicio individualmente con índice
     value.forEach((servicio, index) => {
-      formData.append(`servicios[${index}][id_servicio]`, servicio.id_servicio)
+      if (servicio.id_servicio) {
+        formData.append(`servicios[${index}][id_servicio]`, servicio.id_servicio)
+      }
       formData.append(`servicios[${index}][cantidad]`, servicio.cantidad)
+      if (servicio.sku !== undefined) formData.append(`servicios[${index}][sku]`, servicio.sku || '')
+      if (servicio.origen !== undefined) formData.append(`servicios[${index}][origen]`, servicio.origen || '')
+      if (servicio.pedimento !== undefined) formData.append(`servicios[${index}][pedimento]`, servicio.pedimento || '')
     })
   } else if (value !== null && value !== undefined) {
     formData.append(key, value)
@@ -455,6 +457,9 @@ function handlePrefillLoaded({ prefill, archivo, servicios, is_multi, warnings }
         cantidad: Number(s.cantidad) > 0 ? Number(s.cantidad) : 1,
         tipo_tarifa: s.tipo_tarifa || 'NORMAL',
         precio_unitario: s.precio_unitario ?? null,
+        sku: s.sku ? String(s.sku) : '',
+        origen: s.origen ? String(s.origen) : '',
+        pedimento: s.pedimento ? String(s.pedimento) : '',
       }))
 
       alert(`Se detectaron ${list.length} servicios en el Excel. Se activó Múltiples Servicios.`)
@@ -753,17 +758,21 @@ function handlePrefillLoaded({ prefill, archivo, servicios, is_multi, warnings }
                       <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <div>
                           <label class="block text-xs font-semibold text-gray-600 mb-1">
-                            Tipo de Servicio <span class="text-red-500">*</span>
+                            Tipo de Servicio
                           </label>
                           <select 
                             v-model="servicio.id_servicio"
                             class="w-full px-3 py-2 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none bg-white text-sm"
                           >
-                            <option value="">— Seleccionar —</option>
+                            <option value="">— Pendiente de asignación —</option>
                             <option v-for="s in filteredServicios" :key="s.id" :value="s.id">
                               {{ s.nombre }}
                             </option>
                           </select>
+                          <div v-if="!servicio.id_servicio" class="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-200">
+                            <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+                            Pendiente de asignación
+                          </div>
                           <p v-if="form.errors[`servicios.${index}.id_servicio`]" class="text-red-600 text-xs mt-1">
                             {{ form.errors[`servicios.${index}.id_servicio`] }}
                           </p>
@@ -783,6 +792,25 @@ function handlePrefillLoaded({ prefill, archivo, servicios, is_multi, warnings }
                             {{ form.errors[`servicios.${index}.cantidad`] }}
                           </p>
                         </div>
+
+                        <!-- SKU / Origen / Pedimento por servicio -->
+                        <div v-if="canServiceCustomsFields" class="md:col-span-2 grid grid-cols-1 md:grid-cols-3 gap-2 mt-1">
+                          <div>
+                            <label class="block text-[10px] font-semibold text-gray-500 mb-0.5">SKU</label>
+                            <input v-model="servicio.sku" class="w-full px-2 py-1.5 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-100 outline-none bg-white text-xs" placeholder="SKU" />
+                            <p v-if="form.errors[`servicios.${index}.sku`]" class="text-red-600 text-[10px] mt-0.5">{{ form.errors[`servicios.${index}.sku`] }}</p>
+                          </div>
+                          <div>
+                            <label class="block text-[10px] font-semibold text-gray-500 mb-0.5">Origen</label>
+                            <input v-model="servicio.origen" class="w-full px-2 py-1.5 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-100 outline-none bg-white text-xs" placeholder="Origen" />
+                            <p v-if="form.errors[`servicios.${index}.origen`]" class="text-red-600 text-[10px] mt-0.5">{{ form.errors[`servicios.${index}.origen`] }}</p>
+                          </div>
+                          <div>
+                            <label class="block text-[10px] font-semibold text-gray-500 mb-0.5">Pedimento</label>
+                            <input v-model="servicio.pedimento" class="w-full px-2 py-1.5 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-100 outline-none bg-white text-xs" placeholder="Pedimento" />
+                            <p v-if="form.errors[`servicios.${index}.pedimento`]" class="text-red-600 text-[10px] mt-0.5">{{ form.errors[`servicios.${index}.pedimento`] }}</p>
+                          </div>
+                        </div>
                         
                         <div class="md:col-span-2 mt-1 text-[11px] text-gray-600 flex flex-wrap gap-x-4 gap-y-1">
                           <span>
@@ -800,36 +828,11 @@ function handlePrefillLoaded({ prefill, archivo, servicios, is_multi, warnings }
                       </div>
                     </div>
 
-                    <div v-if="canServiceCustomsFields" class="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
-                      <div>
-                        <label class="block text-xs font-semibold text-gray-600 mb-1">SKU</label>
-                        <input
-                          v-model="form.sku"
-                          class="w-full px-3 py-2 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none bg-white text-sm"
-                          placeholder="SKU (aplica a todos)"
-                        />
-                        <p v-if="form.errors.sku" class="text-red-600 text-xs mt-1">{{ form.errors.sku }}</p>
-                      </div>
-
-                      <div>
-                        <label class="block text-xs font-semibold text-gray-600 mb-1">Origen</label>
-                        <input
-                          v-model="form.origen"
-                          class="w-full px-3 py-2 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none bg-white text-sm"
-                          placeholder="Origen (aplica a todos)"
-                        />
-                        <p v-if="form.errors.origen" class="text-red-600 text-xs mt-1">{{ form.errors.origen }}</p>
-                      </div>
-
-                      <div>
-                        <label class="block text-xs font-semibold text-gray-600 mb-1">Pedimento</label>
-                        <input
-                          v-model="form.pedimento"
-                          class="w-full px-3 py-2 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none bg-white text-sm"
-                          placeholder="Pedimento (aplica a todos)"
-                        />
-                        <p v-if="form.errors.pedimento" class="text-red-600 text-xs mt-1">{{ form.errors.pedimento }}</p>
-                      </div>
+                    <div v-if="canServiceCustomsFields" class="mt-3 px-4 py-2 bg-blue-50 border border-blue-200 rounded-lg">
+                      <p class="text-xs text-blue-700 flex items-center gap-1">
+                        <svg class="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/></svg>
+                        SKU, Origen y Pedimento se capturan individualmente por cada servicio.
+                      </p>
                     </div>
 
                     <!-- Botón agregar servicio -->
@@ -1079,6 +1082,10 @@ function handlePrefillLoaded({ prefill, archivo, servicios, is_multi, warnings }
                       <div class="flex-1">
                         <span class="font-semibold text-gray-700">{{ i + 1 }}.</span> 
                         <span class="text-gray-900">{{ preciosMultiples[i]?.nombre || 'Sin seleccionar' }}</span>
+                        <span v-if="preciosMultiples[i]?.isPending" class="ml-1 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-amber-100 text-amber-800 border border-amber-200">
+                          <svg class="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/></svg>
+                          Pendiente
+                        </span>
                         <div v-if="preciosMultiples[i]?.usaTamanos" class="text-xs text-blue-600 mt-1">
                           Por tamaños
                         </div>

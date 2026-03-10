@@ -79,7 +79,7 @@ class OTMultiServicioController extends Controller
                 $orden = Orden::create([
                     'id_solicitud' => null, // OT directa sin solicitud previa
                     'id_centrotrabajo' => $header['centro_trabajo_id'],
-                    'id_servicio' => $servicios[0]['servicio_id'], // Primer servicio como referencia legacy
+                    'id_servicio' => collect($servicios)->pluck('servicio_id')->filter()->first(), // Primer servicio no-null como referencia legacy
                     'id_area' => $header['area_id'] ?? null,
                     'team_leader_id' => $header['team_leader_id'] ?? null,
                     'descripcion_general' => $header['descripcion_producto'],
@@ -96,17 +96,27 @@ class OTMultiServicioController extends Controller
 
                 // 2. Crear cada servicio con sus items
                 foreach ($servicios as $servicioData) {
+                    $servicioIdVal = !empty($servicioData['servicio_id']) ? (int) $servicioData['servicio_id'] : null;
+                    $isPending = $servicioIdVal === null;
+
                     // Crear el servicio
                     $otServicio = OTServicio::create([
                         'ot_id' => $orden->id,
-                        'servicio_id' => $servicioData['servicio_id'],
-                        'tipo_cobro' => $servicioData['tipo_cobro'],
+                        'servicio_id' => $servicioIdVal,
+                        'tipo_cobro' => $servicioData['tipo_cobro'] ?? 'pieza',
                         'cantidad' => $servicioData['cantidad'],
-                        'precio_unitario' => $servicioData['precio_unitario'],
-                        'subtotal' => $servicioData['cantidad'] * $servicioData['precio_unitario'],
+                        'precio_unitario' => $isPending ? 0 : $servicioData['precio_unitario'],
+                        'subtotal' => $isPending ? 0 : ($servicioData['cantidad'] * $servicioData['precio_unitario']),
+                        'sku' => $servicioData['sku'] ?? null,
+                        'origen_customs' => $servicioData['origen'] ?? null,
+                        'pedimento' => $servicioData['pedimento'] ?? null,
+                        'service_assignment_status' => $isPending ? 'pending' : 'assigned',
+                        'service_locked' => !$isPending,
                     ]);
 
-                    $subtotalOT += $otServicio->subtotal;
+                    if (!$isPending) {
+                        $subtotalOT += (float) $otServicio->subtotal;
+                    }
 
                     // Crear item inicial automáticamente
                     OTServicioItem::create([
@@ -184,6 +194,7 @@ class OTMultiServicioController extends Controller
             'otServicios.servicio',
             'otServicios.items.ajustes.user',
             'otServicios.avances.createdBy',
+            'otServicios.assignedBy',
             'centro',
             'area',
             'teamLeader',
@@ -195,11 +206,26 @@ class OTMultiServicioController extends Controller
             
             return [
                 'id' => $otServicio->id,
-                'servicio' => $otServicio->servicio->only(['id', 'nombre']),
+                'servicio' => $otServicio->servicio ? $otServicio->servicio->only(['id', 'nombre']) : null,
+                'assign_service_url' => route('ordenes.servicios.assignService', [
+                    'orden' => $orden->id,
+                    'otServicio' => $otServicio->id,
+                ]),
                 'tipo_cobro' => $otServicio->tipo_cobro,
                 'cantidad' => $otServicio->cantidad,
                 'precio_unitario' => $otServicio->precio_unitario,
                 'subtotal' => $otServicio->subtotal,
+                'sku' => $otServicio->sku,
+                'origen_customs' => $otServicio->origen_customs,
+                'pedimento' => $otServicio->pedimento,
+                'service_assignment_status' => $otServicio->service_assignment_status,
+                'service_locked' => $otServicio->isServiceLocked(),
+                'service_assigned_at' => $otServicio->service_assigned_at?->toIso8601String(),
+                'service_assigned_by' => $otServicio->assignedBy ? [
+                    'id' => $otServicio->assignedBy->id,
+                    'name' => $otServicio->assignedBy->name,
+                ] : null,
+                'is_pending' => $otServicio->isServicePending(),
                 'solicitado' => $totales['solicitado'],
                 'planeado' => $totales['planeado'],
                 'extra' => $totales['extra'],
@@ -273,6 +299,8 @@ class OTMultiServicioController extends Controller
             ],
             'servicios' => $serviciosData,
             'cortes' => $this->getCortesData($orden),
+            'canAssignService' => Auth::user()?->hasAnyRole(['admin', 'coordinador', 'team_leader']) ?? false,
+            'servicios_disponibles' => ServicioEmpresa::select('id', 'nombre')->orderBy('nombre')->get(),
         ]);
     }
 

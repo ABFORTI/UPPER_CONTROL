@@ -264,8 +264,12 @@ class SolicitudController extends Controller
         if ($esMultipleServicios) {
             $req->validate([
                 'servicios' => ['required', 'array', 'min:1'],
-                'servicios.*.id_servicio' => ['required', 'integer', 'exists:servicios_empresa,id'],
+                'servicios.*.id_servicio' => ['nullable', 'integer', 'exists:servicios_empresa,id'],
                 'servicios.*.cantidad' => ['required', 'integer', 'min:1'],
+                'servicios.*.sku' => ['nullable', 'string', 'max:255'],
+                'servicios.*.origen' => ['nullable', 'string', 'max:255'],
+                'servicios.*.pedimento' => ['nullable', 'string', 'max:255'],
+                // Mantener globales como fallback
                 'sku' => ['nullable', 'string', 'max:255'],
                 'origen' => ['nullable', 'string', 'max:255'],
                 'pedimento' => ['nullable', 'string', 'max:255'],
@@ -406,28 +410,43 @@ class SolicitudController extends Controller
                 foreach ($req->servicios as $index => $servicioData) {
                     \Log::info("➡️ Creando servicio #{$index}", $servicioData);
                     
-                    $serv = ServicioEmpresa::findOrFail($servicioData['id_servicio']);
+                    $servicioIdItem = !empty($servicioData['id_servicio']) ? (int) $servicioData['id_servicio'] : null;
                     $cantidadServicio = (int)$servicioData['cantidad'];
                     
-                    // Determinar si usa tamaños
-                    $usaTamanosCentro = \App\Models\ServicioCentro::where('id_centrotrabajo', $centroId)
-                        ->where('id_servicio', $serv->id)
-                        ->whereHas('tamanos')
-                        ->exists();
+                    // SKU/Origen/Pedimento por ítem (fallback a global)
+                    $skuItem = $customsFieldsEnabled ? $normalizeCustomField($servicioData['sku'] ?? null) ?? $skuGlobal : null;
+                    $origenItem = $customsFieldsEnabled ? $normalizeCustomField($servicioData['origen'] ?? null) ?? $origenGlobal : null;
+                    $pedimentoItem = $customsFieldsEnabled ? $normalizeCustomField($servicioData['pedimento'] ?? null) ?? $pedimentoGlobal : null;
                     
                     $precioUnitario = 0;
-                    if (!$usaTamanosCentro) {
-                        $precioUnitario = (float)$pricing->precioUnitario($centroId, $serv->id, null);
+                    $tipoCobro = 'cantidad';
+                    $assignmentStatus = 'pending';
+                    
+                    if ($servicioIdItem) {
+                        $serv = ServicioEmpresa::findOrFail($servicioIdItem);
+                        $assignmentStatus = 'assigned';
+                        
+                        // Determinar si usa tamaños
+                        $usaTamanosCentro = \App\Models\ServicioCentro::where('id_centrotrabajo', $centroId)
+                            ->where('id_servicio', $serv->id)
+                            ->whereHas('tamanos')
+                            ->exists();
+                        
+                        $tipoCobro = $usaTamanosCentro ? 'tamanos' : 'cantidad';
+                        if (!$usaTamanosCentro) {
+                            $precioUnitario = (float)$pricing->precioUnitario($centroId, $serv->id, null);
+                        }
                     }
 
                     // Crear SolicitudServicio
                     \App\Models\SolicitudServicio::create([
                         'solicitud_id'     => $sol->id,
-                        'servicio_id'      => $serv->id,
-                        'sku'              => $skuGlobal,
-                        'origen'           => $origenGlobal,
-                        'pedimento'        => $pedimentoGlobal,
-                        'tipo_cobro'       => $usaTamanosCentro ? 'tamanos' : 'cantidad',
+                        'servicio_id'      => $servicioIdItem,
+                        'sku'              => $skuItem,
+                        'origen'           => $origenItem,
+                        'pedimento'        => $pedimentoItem,
+                        'service_assignment_status' => $assignmentStatus,
+                        'tipo_cobro'       => $tipoCobro,
                         'cantidad'         => $cantidadServicio,
                         'precio_unitario'  => $precioUnitario,
                         'subtotal'         => $precioUnitario * $cantidadServicio,

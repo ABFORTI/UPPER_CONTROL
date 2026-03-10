@@ -113,6 +113,31 @@ class Orden extends Model {
         ]);
     }
 
+    /**
+     * Verifica si la OT tiene ítems con servicio pendiente de asignación
+     */
+    public function hasPendingServiceItems(): bool
+    {
+        return $this->otServicios()
+            ->where(function ($q) {
+                $q->whereNull('servicio_id')
+                  ->orWhere('service_assignment_status', 'pending');
+            })
+            ->exists();
+    }
+
+    /**
+     * Obtiene los servicios OT con servicio pendiente de asignación
+     */
+    public function pendingServiceItems()
+    {
+        return $this->otServicios()
+            ->where(function ($q) {
+                $q->whereNull('servicio_id')
+                  ->orWhere('service_assignment_status', 'pending');
+            });
+    }
+
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()

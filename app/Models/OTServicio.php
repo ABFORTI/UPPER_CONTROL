@@ -20,12 +20,21 @@ class OTServicio extends Model
         'origen',
         'added_by_user_id',
         'nota',
+        'sku',
+        'origen_customs',
+        'pedimento',
+        'service_assignment_status',
+        'service_locked',
+        'service_assigned_at',
+        'service_assigned_by',
     ];
 
     protected $casts = [
         'cantidad' => 'integer',
         'precio_unitario' => 'decimal:2',
         'subtotal' => 'decimal:2',
+        'service_locked' => 'boolean',
+        'service_assigned_at' => 'datetime',
     ];
 
     /**
@@ -66,6 +75,40 @@ class OTServicio extends Model
     public function addedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'added_by_user_id');
+    }
+
+    /**
+     * Relación con el Usuario que asignó el servicio pendiente
+     */
+    public function assignedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'service_assigned_by');
+    }
+
+    public function isServicePending(): bool
+    {
+        return $this->servicio_id === null || $this->service_assignment_status === 'pending';
+    }
+
+    public function isServiceAssigned(): bool
+    {
+        return $this->servicio_id !== null && $this->service_assignment_status === 'assigned';
+    }
+
+    public function isServiceLocked(): bool
+    {
+        return (bool) $this->service_locked;
+    }
+
+    public function canAssignService(): bool
+    {
+        // Compatibilidad: registros legacy pueden venir con servicio_id NULL
+        // pero status/lock incorrectos por defaults antiguos.
+        if ($this->servicio_id === null) {
+            return true;
+        }
+
+        return $this->isServicePending() && !$this->isServiceLocked();
     }
 
     /**

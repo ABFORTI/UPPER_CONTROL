@@ -467,13 +467,31 @@ class OrdenController extends Controller
             if ($esMultiServicio) {
                 \Log::info('🔄 Copiando servicios de solicitud a OT', ['orden_id' => $orden->id, 'count' => $solicitud->servicios->count()]);
                 foreach ($solicitud->servicios as $solServicio) {
-                    \App\Models\OTServicio::create([
+                    $isPending = empty($solServicio->servicio_id) || $solServicio->service_assignment_status === 'pending';
+                    $otServ = \App\Models\OTServicio::create([
                         'ot_id'            => $orden->id,
                         'servicio_id'      => $solServicio->servicio_id,
                         'tipo_cobro'       => $solServicio->tipo_cobro,
                         'cantidad'         => $solServicio->cantidad,
-                        'precio_unitario'  => $solServicio->precio_unitario,
-                        'subtotal'         => $solServicio->subtotal,
+                        'precio_unitario'  => $isPending ? 0 : $solServicio->precio_unitario,
+                        'subtotal'         => $isPending ? 0 : $solServicio->subtotal,
+                        'sku'              => $solServicio->sku,
+                        'origen_customs'   => $solServicio->origen,
+                        'pedimento'        => $solServicio->pedimento,
+                        'service_assignment_status' => $isPending ? 'pending' : 'assigned',
+                        'service_locked'   => !$isPending,
+                    ]);
+
+                    // Auto-crear item por defecto
+                    \App\Models\OTServicioItem::create([
+                        'ot_servicio_id' => $otServ->id,
+                        'descripcion_item' => $isPending
+                            ? ($solicitud->descripcion ?? 'Pendiente de asignación de servicio')
+                            : ($solServicio->servicio->nombre ?? $solicitud->descripcion ?? 'Sin descripción'),
+                        'planeado'    => $solServicio->cantidad,
+                        'completado'  => 0,
+                        'precio_unitario' => $isPending ? 0 : $solServicio->precio_unitario,
+                        'subtotal'    => $isPending ? 0 : $solServicio->subtotal,
                     ]);
                 }
                 // Recalcular totales de la orden desde servicios
@@ -606,6 +624,10 @@ class OrdenController extends Controller
             $otServicio = $orden->otServicios()->where('id', $data['id_servicio'])->first();
             if (!$otServicio) {
                 return back()->withErrors(['id_servicio' => 'El servicio seleccionado no pertenece a esta OT.']);
+            }
+            // Bloquear avances sobre ítems con servicio pendiente de asignación
+            if ($otServicio->isServicePending()) {
+                return back()->withErrors(['id_servicio' => 'No se puede registrar avance mientras el servicio esté pendiente de asignación.']);
             }
         }
 
@@ -1234,6 +1256,7 @@ class OrdenController extends Controller
             'otServicios.items.ajustes.user',
             'otServicios.avances' => fn($q) => $q->with('createdBy')->orderBy('created_at'),
             'otServicios.addedBy', // Cargar usuario que agregó servicio adicional
+            'otServicios.assignedBy', // Cargar usuario que asignó servicio pendiente
         ]);
 
         $servicioPorOtServicioAvanceId = [];
@@ -1557,7 +1580,7 @@ class OrdenController extends Controller
                 })
                 ->values();
 
-            $serviciosData = $orden->otServicios->values()->map(function ($otServicio, $idx) use ($eventosCalidad) {
+            $serviciosData = $orden->otServicios->values()->map(function ($otServicio, $idx) use ($eventosCalidad, $orden) {
                 $totales = $otServicio->calcularTotales();
 
                 $avancesServicio = collect($otServicio->avances->map(function ($avance) {
@@ -1589,11 +1612,26 @@ class OrdenController extends Controller
                 
                 return [
                     'id' => $otServicio->id,
-                    'servicio' => $otServicio->servicio->only(['id', 'nombre']),
+                    'servicio' => $otServicio->servicio ? $otServicio->servicio->only(['id', 'nombre']) : null,
+                    'assign_service_url' => route('ordenes.servicios.assignService', [
+                        'orden' => $orden->id,
+                        'otServicio' => $otServicio->id,
+                    ]),
                     'tipo_cobro' => $otServicio->tipo_cobro,
                     'cantidad' => $otServicio->cantidad,
                     'precio_unitario' => $otServicio->precio_unitario,
                     'subtotal' => $otServicio->subtotal,
+                    'sku' => $otServicio->sku,
+                    'origen_customs' => $otServicio->origen_customs,
+                    'pedimento' => $otServicio->pedimento,
+                    'service_assignment_status' => $otServicio->service_assignment_status,
+                    'service_locked' => $otServicio->isServiceLocked(),
+                    'service_assigned_at' => $otServicio->service_assigned_at?->toIso8601String(),
+                    'service_assigned_by' => $otServicio->assignedBy ? [
+                        'id' => $otServicio->assignedBy->id,
+                        'name' => $otServicio->assignedBy->name,
+                    ] : null,
+                    'is_pending' => $otServicio->isServicePending(),
                     'solicitado' => $totales['solicitado'],
                     'planeado' => $totales['planeado'],
                     'extra' => $totales['extra'],
@@ -1668,6 +1706,9 @@ class OrdenController extends Controller
                 'definir_tamanos'    => Gate::allows('definirTamanos', $orden),
                 'agregar_servicio_adicional' => $authUser instanceof \App\Models\User
                     ? $authUser->hasAnyRole(['admin', 'coordinador', 'team_leader'])
+                    : false,
+                'assign_pending_service' => $authUser instanceof \App\Models\User
+                    ? Gate::allows('assignPendingService', $orden)
                     : false,
                 'delete' => $canDelete,
                 'restore' => $canRestore,
@@ -2410,7 +2451,6 @@ class OrdenController extends Controller
                 return;
             }
             Log::warning('authorizeFromCentro DENY (centro no permitido para calidad/coordinador)', [
-                'user_id' => $u->id,
                 'roles' => $u->roles->pluck('name')->all(),
                 'centro_solicitado' => (int)$centroId,
                 'centros_usuario' => $ids,

@@ -259,4 +259,35 @@ class OrdenPolicy
     {
         return $this->canAdminCentro($u, (int)$o->id_centrotrabajo);
     }
+
+    /**
+     * Solo admin, coordinador o team_leader del centro pueden asignar
+     * un servicio pendiente a un ítem de OT.
+     */
+    public function assignPendingService(User $u, Orden $o): bool
+    {
+        if (!$u->hasAnyRole(['admin', 'coordinador', 'team_leader'])) {
+            return false;
+        }
+
+        if ($u->hasRole('admin')) {
+            return true;
+        }
+
+        // Coordinador: debe tener acceso al centro de la OT
+        if ($u->hasRole('coordinador')) {
+            $ids = $u->centros()->pluck('centros_trabajo.id')->map(fn($v) => (int)$v)->all();
+            $primary = (int)($u->centro_trabajo_id ?? 0);
+            if ($primary) $ids[] = $primary;
+            $ids = array_values(array_unique($ids));
+            return in_array((int)$o->id_centrotrabajo, $ids, true);
+        }
+
+        // Team leader: debe estar asignado a esta OT
+        if ($u->hasRole('team_leader')) {
+            return (int)$o->team_leader_id === (int)$u->id;
+        }
+
+        return false;
+    }
 }

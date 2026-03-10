@@ -49,6 +49,12 @@ class CalidadController extends Controller
     $this->authorize('calidad', $orden);
     $this->authCalidad($orden);
     if ($orden->estatus !== 'completada') abort(422);
+
+    // Bloquear validación de calidad si hay ítems con servicio pendiente de asignación
+    if ($orden->hasPendingServiceItems()) {
+      abort(422, 'No se puede validar calidad: hay ítems pendientes de asignación de servicio.');
+    }
+
     // Regla: si el servicio usa tamaños y aún no hay desglose en la solicitud, no permitir validar
     try {
       $orden->loadMissing(['servicio','solicitud.tamanos']);

@@ -144,16 +144,17 @@ class OrdenesFacturacionExport implements FromCollection, WithHeadings, ShouldAu
                         : $otServicios;
 
                     foreach ($serviciosFiltrados as $otServicio) {
+                        $isPending = empty($otServicio->servicio_id) || $otServicio->service_assignment_status === 'pending';
                         // Regla export: cantidad cobrable = solicitado + extras - faltantes (nunca negativa)
-                        $cantidadCobrable = $this->cantidadCobrableServicio($otServicio);
+                        $cantidadCobrable = $isPending ? 0 : $this->cantidadCobrableServicio($otServicio);
                         $cantidad = $cantidadCobrable > 0 ? $cantidadCobrable : null;
 
                         // Regla export: precio unitario real guardado en detalle de OT, sin recalcular por totales
-                        $precio = $otServicio->precio_unitario !== null
+                        $precio = $isPending ? 0 : ($otServicio->precio_unitario !== null
                             ? (float) $otServicio->precio_unitario
-                            : $this->precioUnitarioDesdeServicioItems($otServicio);
+                            : $this->precioUnitarioDesdeServicioItems($otServicio));
 
-                        $nombreServicio = $otServicio?->servicio?->nombre ?? null;
+                        $nombreServicio = $isPending ? 'Pendiente de asignación' : ($otServicio?->servicio?->nombre ?? null);
                         $datosOt = $nombreServicio ? ($nombreServicio . ' OT: ' . $orden->id) : ('OT: ' . $orden->id);
 
                         $rows->push([

@@ -399,6 +399,7 @@
   @foreach($o->otServicios->where('origen', 'SOLICITADO') as $otServicio)
     @php
       $servicio = $otServicio->servicio;
+      $isPendingService = empty($otServicio->servicio_id) || $otServicio->service_assignment_status === 'pending';
       $totalesServicio = $otServicio->calcularTotales();
       $solicitado = $totalesServicio['solicitado'] ?? $totalesServicio['planeado'];
       $extra = $totalesServicio['extra'] ?? 0;
@@ -415,12 +416,21 @@
     <div class="service-block">
       <div class="service-header">
         <div class="service-name">
-          {{ $servicio->nombre ?? 'Servicio' }}
-          <span style="font-size: 9px; font-weight: normal; color: #4b5563;">
-            ({{ $servicio->codigo ?? '—' }})
-          </span>
+          @if($isPendingService)
+            <span style="color: #b45309; font-style: italic;">&#9888; Pendiente de asignación</span>
+          @else
+            {{ $servicio->nombre ?? 'Servicio' }}
+            <span style="font-size: 9px; font-weight: normal; color: #4b5563;">
+              ({{ $servicio->codigo ?? '—' }})
+            </span>
+          @endif
         </div>
         <div style="font-size: 8px; color: #4b5563; margin-top: 2px;">
+          @if($otServicio->sku || $otServicio->origen_customs || $otServicio->pedimento)
+            @if($otServicio->sku)<strong>SKU:</strong> {{ $otServicio->sku }} | @endif
+            @if($otServicio->origen_customs)<strong>Origen:</strong> {{ $otServicio->origen_customs }} | @endif
+            @if($otServicio->pedimento)<strong>Pedimento:</strong> {{ $otServicio->pedimento }} | @endif
+          @endif
           <strong>Cantidad Planeada:</strong> {{ number_format($otServicio->cantidad) }} 
           | <strong>Precio Base Normal:</strong> ${{ number_format($otServicio->precio_unitario, 2) }} MXN
           | <strong>Subtotal:</strong> ${{ number_format($otServicio->subtotal, 2) }} MXN
@@ -549,7 +559,7 @@
     <tbody>
       @foreach($serviciosAdicionales as $adicional)
         <tr>
-          <td><strong>{{ optional($adicional->servicio)->nombre ?? 'Servicio Adicional' }}</strong></td>
+          <td><strong>{{ $adicional->servicio ? $adicional->servicio->nombre : 'Pendiente de asignación' }}</strong></td>
           <td class="text-center">{{ $adicional->created_at ? $adicional->created_at->format('d/m/Y h:i a') : '—' }}</td>
           <td>{{ optional($adicional->addedBy)->name ?? '—' }}</td>
           <td style="font-size: 8px;">{{ $adicional->nota ?? 'Sin justificación' }}</td>

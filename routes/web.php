@@ -273,6 +273,11 @@ Route::middleware('auth')->group(function () {
         ->name('ot-multi-servicio.show');
     Route::post('/ot-multi-servicio/{orden}/servicios/{servicio}/faltantes', [\App\Http\Controllers\OTMultiServicioController::class, 'registrarFaltantesServicio'])
         ->name('ot-multi-servicio.servicios.faltantes');
+
+    // Asignación de servicio pendiente en OT
+    Route::post('/ordenes/{orden}/servicios/{otServicio}/assign-service', [\App\Http\Controllers\OrdenTrabajoPendingServiceController::class, 'assign'])
+        ->middleware('role:admin|coordinador|team_leader')
+        ->name('ordenes.servicios.assignService');
 });
 
 /* ===========================

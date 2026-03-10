@@ -1,11 +1,16 @@
 <script setup>
-import { computed } from 'vue'
+import { ref, computed } from 'vue'
+import { router } from '@inertiajs/vue3'
+import { route } from 'ziggy-js'
 import OtCortes from '@/Components/OtCortes.vue'
 
 const props = defineProps({
   orden: Object,
   servicios: Array,
   cortes: { type: Array, default: () => [] },
+  can: { type: Object, default: () => ({}) },
+  canAssignService: { type: Boolean, default: false },
+  servicios_disponibles: { type: Array, default: () => [] },
 })
 
 // Estado visual basado en el estatus de la OT
@@ -20,6 +25,38 @@ const estatusConfig = computed(() => {
   }
   return configs[props.orden.estatus] || configs.generada
 })
+
+// --- Pending Service Assignment ---
+const pendingAssignForms = ref({})
+const pendingAssignProcessing = ref({})
+
+function assignPendingService(servicio) {
+  const serviceId = pendingAssignForms.value[servicio.id]
+  if (!serviceId) return
+  pendingAssignProcessing.value[servicio.id] = true
+
+  const url = servicio.assign_service_url
+    || route('ordenes.servicios.assignService', {
+      orden: props.orden.id,
+      otServicio: servicio.id,
+    })
+
+  try {
+    router.post(
+      url,
+      { service_id: serviceId },
+      {
+        preserveScroll: true,
+        onError: () => { pendingAssignProcessing.value[servicio.id] = false },
+        onSuccess: () => { pendingAssignForms.value[servicio.id] = '' },
+        onFinish: () => { pendingAssignProcessing.value[servicio.id] = false },
+      }
+    )
+  } catch (e) {
+    pendingAssignProcessing.value[servicio.id] = false
+    console.error('Error assigning pending service:', e)
+  }
+}
 </script>
 
 <template>
@@ -110,16 +147,51 @@ const estatusConfig = computed(() => {
                 </div>
                 <div class="flex-1 min-w-0">
                   <h2 class="text-lg font-bold text-white tracking-tight truncate">
-                    {{ servicio.servicio.nombre }}
+                    <template v-if="servicio.servicio">{{ servicio.servicio.nombre }}</template>
+                    <span v-else class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-amber-400 text-amber-900 shadow-sm">
+                      <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/></svg>
+                      Pendiente de asignación
+                    </span>
                   </h2>
                   <p class="text-emerald-50/90 text-xs">
                     #{{ index + 1 }} • {{ servicio.tipo_cobro }} • {{ servicio.cantidad }} u
                   </p>
+                  <div v-if="servicio.sku || servicio.origen_customs || servicio.pedimento" class="flex items-center gap-2 mt-0.5 flex-wrap">
+                    <span v-if="servicio.sku" class="text-[10px] text-white/70 bg-white/10 px-1.5 py-0.5 rounded">SKU: {{ servicio.sku }}</span>
+                    <span v-if="servicio.origen_customs" class="text-[10px] text-white/70 bg-white/10 px-1.5 py-0.5 rounded">Origen: {{ servicio.origen_customs }}</span>
+                    <span v-if="servicio.pedimento" class="text-[10px] text-white/70 bg-white/10 px-1.5 py-0.5 rounded">Pedimento: {{ servicio.pedimento }}</span>
+                  </div>
                 </div>
               </div>
               <div class="bg-white/95 backdrop-blur-sm rounded-lg px-3 py-1.5 shadow-sm flex-shrink-0">
                 <p class="text-[9px] uppercase tracking-wider font-bold text-slate-500 mb-0.5">Subtotal</p>
                 <p class="text-base font-bold text-slate-900">${{ parseFloat(servicio.subtotal || 0).toFixed(2) }}</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Panel: Asignar Servicio Pendiente -->
+          <div v-if="servicio.is_pending && canAssignService" class="mx-5 mt-3 bg-amber-50 border-2 border-amber-200 rounded-xl p-4 dark:bg-amber-900/20 dark:border-amber-500/40">
+            <div class="flex items-start gap-3">
+              <div class="p-2 bg-amber-100 rounded-lg flex-shrink-0 dark:bg-amber-800/40">
+                <svg class="w-5 h-5 text-amber-700 dark:text-amber-300" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+              </div>
+              <div class="flex-1">
+                <h4 class="text-sm font-bold text-amber-900 dark:text-amber-200 mb-1">Servicio pendiente de asignación</h4>
+                <p class="text-xs text-amber-700 dark:text-amber-300 mb-3">Seleccione un tipo de servicio. Esta acción es irreversible.</p>
+                <form @submit.prevent="assignPendingService(servicio)" class="flex items-end gap-3">
+                  <div class="flex-1">
+                    <select v-model="pendingAssignForms[servicio.id]"
+                            class="w-full px-3 py-2 rounded-lg border border-amber-300 bg-white dark:bg-slate-800 dark:border-amber-500/40 dark:text-slate-100 text-sm">
+                      <option :value="null">— Seleccionar servicio —</option>
+                      <option v-for="sd in servicios_disponibles" :key="sd.id" :value="sd.id">{{ sd.nombre }}</option>
+                    </select>
+                  </div>
+                  <button type="submit" :disabled="!pendingAssignForms[servicio.id] || pendingAssignProcessing[servicio.id]"
+                          class="px-4 py-2 bg-amber-600 text-white font-bold rounded-lg hover:bg-amber-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm">
+                    Asignar
+                  </button>
+                </form>
               </div>
             </div>
           </div>
