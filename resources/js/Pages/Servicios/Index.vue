@@ -19,6 +19,8 @@ const flashOk = computed(()=> usePage().props?.flash?.ok ?? null)
 
 // Modal crear servicio
 const showCreateModal = ref(false)
+const showEditModal = ref(false)
+const editTarget = ref(null)
 const createForm = useForm({
   nombre: '',
   usa_tamanos: false,
@@ -36,6 +38,60 @@ function openCreateModal(){
 function closeCreateModal(){
   showCreateModal.value = false
   createForm.reset()
+}
+
+const editForm = useForm({
+  id_centro: selCentro.value,
+  id_servicio: null,
+  nombre: '',
+  usa_tamanos: false,
+  precio_base: null,
+  tamanos: { chico: null, mediano: null, grande: null, jumbo: null },
+})
+
+function openEditModal(r){
+  editForm.reset()
+  editForm.clearErrors()
+  editTarget.value = r
+  editForm.id_centro = Number(selCentro.value)
+  editForm.id_servicio = Number(r.id_servicio)
+  editForm.nombre = String(r.servicio ?? '').trim()
+  editForm.usa_tamanos = Boolean(r.usa_tamanos)
+  editForm.precio_base = Number(r._unitario ?? r.precio_base ?? 0)
+  editForm.tamanos = {
+    chico: Number(r._chico ?? r.tamanos?.chico ?? 0),
+    mediano: Number(r._mediano ?? r.tamanos?.mediano ?? 0),
+    grande: Number(r._grande ?? r.tamanos?.grande ?? 0),
+    jumbo: Number(r._jumbo ?? r.tamanos?.jumbo ?? 0),
+  }
+  showEditModal.value = true
+}
+
+function closeEditModal(){
+  showEditModal.value = false
+  editTarget.value = null
+  editForm.reset()
+}
+
+function submitEdit(){
+  const nombre = String(editForm.nombre ?? '').trim()
+  if (!nombre) {
+    editForm.setError('nombre', 'El nombre es obligatorio')
+    return
+  }
+
+  editForm.nombre = nombre
+
+  if (editForm.usa_tamanos) {
+    editForm.precio_base = null
+  } else {
+    editForm.tamanos = { chico: null, mediano: null, grande: null, jumbo: null }
+  }
+
+  editForm.post(props.urls.editar, {
+    preserveScroll: true,
+    onSuccess: () => { closeEditModal() },
+  })
 }
 function submitCreate(){
   if (createForm.usa_tamanos) {
@@ -96,6 +152,10 @@ function removeRow(r){
   const form = useForm({})
   form.transform(() => ({ id_centro: Number(selCentro.value), id_servicio: Number(r.id_servicio) }))
       .post(props.urls.eliminar, { preserveScroll: true })
+}
+
+function editRow(r){
+  openEditModal(r)
 }
 </script>
 
@@ -285,6 +345,13 @@ function removeRow(r){
                       </svg>
                       {{ saving[r.id_servicio] ? 'Guardando…' : 'Guardar' }}
                     </button>
+                    <button @click="editRow(r)"
+                          class="px-3 sm:px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-600 font-semibold text-white text-xs sm:text-sm transition-all duration-200 flex items-center gap-1">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                      </svg>
+                      Editar
+                    </button>
                         <button @click="removeRow(r)" 
                           class="px-3 sm:px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 font-semibold text-white text-xs sm:text-sm transition-all duration-200 flex items-center gap-1">
                       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -354,6 +421,13 @@ function removeRow(r){
                   <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
                 {{ saving[r.id_servicio] ? 'Guardando…' : 'Guardar' }}
+              </button>
+              <button @click="editRow(r)"
+                      class="flex-1 px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-600 font-semibold text-white transition-all duration-200 flex items-center justify-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+                Editar
               </button>
               <button @click="removeRow(r)"
                       class="flex-1 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 font-semibold text-white transition-all duration-200 flex items-center justify-center gap-2">
@@ -464,6 +538,87 @@ function removeRow(r){
           <div class="mt-6 flex gap-3 justify-end">
             <button type="button" @click="closeCreateModal" class="px-6 py-3 rounded-xl border-2 border-gray-300 font-semibold text-gray-700">Cancelar</button>
             <button type="submit" :disabled="createForm.processing" class="px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold">{{ createForm.processing ? 'Guardando…' : 'Crear servicio' }}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Modal Editar Servicio -->
+    <div v-if="showEditModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
+      <div class="bg-white rounded-2xl shadow-2xl w-full max-w-xl transform transition-all">
+        <div class="bg-gradient-to-r from-amber-500 to-orange-500 px-6 py-4 rounded-t-2xl">
+          <h2 class="text-2xl font-bold text-white">Editar Servicio</h2>
+        </div>
+        <form @submit.prevent="submitEdit" class="p-6">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-2">Nombre</label>
+            <input
+              v-model="editForm.nombre"
+              type="text"
+              required
+              class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl"
+            />
+            <p v-if="editForm.errors.nombre" class="text-red-600 text-sm mt-1">{{ editForm.errors.nombre }}</p>
+            </div>
+
+            <div>
+              <label class="block text-sm font-semibold text-gray-700 mb-2">Usa tamaños</label>
+              <select v-model="editForm.usa_tamanos" class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl">
+                <option :value="false">No (Unitario)</option>
+                <option :value="true">Sí (Por tamaños)</option>
+              </select>
+            </div>
+
+            <div v-if="!editForm.usa_tamanos" class="md:col-span-2">
+              <label class="block text-sm font-semibold text-gray-700 mb-2">Precio unitario</label>
+              <input v-model.number="editForm.precio_base" type="number" step="0.01" min="0" class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl" />
+              <p v-if="editForm.errors.precio_base" class="text-red-600 text-sm mt-1">{{ editForm.errors.precio_base }}</p>
+            </div>
+          </div>
+
+          <div v-if="editForm.usa_tamanos" class="mt-4 grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-semibold text-gray-700 mb-2">Chico</label>
+              <input v-model.number="editForm.tamanos.chico" type="number" step="0.01" min="0" class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl" />
+              <p v-if="editForm.errors['tamanos.chico']" class="text-red-600 text-sm mt-1">{{ editForm.errors['tamanos.chico'] }}</p>
+            </div>
+            <div>
+              <label class="block text-sm font-semibold text-gray-700 mb-2">Mediano</label>
+              <input v-model.number="editForm.tamanos.mediano" type="number" step="0.01" min="0" class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl" />
+              <p v-if="editForm.errors['tamanos.mediano']" class="text-red-600 text-sm mt-1">{{ editForm.errors['tamanos.mediano'] }}</p>
+            </div>
+            <div>
+              <label class="block text-sm font-semibold text-gray-700 mb-2">Grande</label>
+              <input v-model.number="editForm.tamanos.grande" type="number" step="0.01" min="0" class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl" />
+              <p v-if="editForm.errors['tamanos.grande']" class="text-red-600 text-sm mt-1">{{ editForm.errors['tamanos.grande'] }}</p>
+            </div>
+            <div>
+              <label class="block text-sm font-semibold text-gray-700 mb-2">Jumbo</label>
+              <input v-model.number="editForm.tamanos.jumbo" type="number" step="0.01" min="0" class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl" />
+              <p v-if="editForm.errors['tamanos.jumbo']" class="text-red-600 text-sm mt-1">{{ editForm.errors['tamanos.jumbo'] }}</p>
+            </div>
+          </div>
+
+          <p class="text-xs text-gray-500 mt-3" v-if="editTarget">
+            Centro actual: {{ centros.find(c => Number(c.id) === Number(selCentro))?.nombre || 'N/A' }}
+          </p>
+
+          <div class="mt-6 flex flex-col-reverse sm:flex-row sm:justify-end gap-3">
+            <button
+              type="button"
+              @click="closeEditModal"
+              class="px-5 py-2.5 rounded-xl border-2 border-gray-300 text-gray-700 font-semibold hover:bg-gray-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              :disabled="editForm.processing"
+              class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-white font-bold disabled:opacity-50"
+            >
+              {{ editForm.processing ? 'Guardando…' : 'Guardar cambios' }}
+            </button>
           </div>
         </form>
       </div>

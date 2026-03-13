@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use App\Models\User;
 use Inertia\Inertia;
 
@@ -78,12 +79,107 @@ class PrecioController extends Controller
       'urls'     => [
         'index'   => route('servicios.index'),
         'guardar' => route('servicios.guardar'),
+        'editar'  => route('servicios.editar'),
         'crear'   => route('servicios.crear'), // POST
         'create'  => route('servicios.create'), // GET form
         'clonar'  => route('servicios.clonar'),
         'eliminar'=> route('servicios.eliminar'),
       ],
     ]);
+  }
+
+  // Editar nombre del servicio en el centro seleccionado
+  public function editar(Request $req)
+  {
+    $this->authorizeAdminOrCoord();
+
+    $data = $req->validate([
+      'id_centro'   => ['required','integer','exists:centros_trabajo,id'],
+      'id_servicio' => ['required','integer','exists:servicios_empresa,id'],
+      'nombre'      => ['required','string','max:150'],
+      'usa_tamanos' => ['required','boolean'],
+      'precio_base' => ['nullable','numeric','min:0', Rule::requiredIf(fn () => !$req->boolean('usa_tamanos'))],
+      'tamanos'     => ['nullable','array'],
+      'tamanos.chico'   => ['nullable','numeric','min:0', Rule::requiredIf(fn () => $req->boolean('usa_tamanos'))],
+      'tamanos.mediano' => ['nullable','numeric','min:0', Rule::requiredIf(fn () => $req->boolean('usa_tamanos'))],
+      'tamanos.grande'  => ['nullable','numeric','min:0', Rule::requiredIf(fn () => $req->boolean('usa_tamanos'))],
+      'tamanos.jumbo'   => ['nullable','numeric','min:0', Rule::requiredIf(fn () => $req->boolean('usa_tamanos'))],
+    ]);
+
+    $nombreNormalizado = trim((string)$data['nombre']);
+
+    if ($nombreNormalizado === '') {
+      throw ValidationException::withMessages([
+        'nombre' => 'El nombre del servicio es obligatorio.',
+      ]);
+    }
+
+    $hasNombreCol = Schema::hasColumn('servicios_centro', 'nombre');
+    $hasUsaTamanosCol = Schema::hasColumn('servicios_centro', 'usa_tamanos');
+
+    DB::transaction(function () use ($data, $nombreNormalizado, $hasNombreCol, $hasUsaTamanosCol) {
+      $sc = ServicioCentro::query()
+        ->where('id_centrotrabajo', (int)$data['id_centro'])
+        ->where('id_servicio', (int)$data['id_servicio'])
+        ->first();
+
+      if (!$sc) {
+        throw ValidationException::withMessages([
+          'id_servicio' => 'No se encontró el servicio en el centro seleccionado.',
+        ]);
+      }
+
+      $duplicado = $hasNombreCol
+        ? ServicioCentro::query()
+            ->where('id_centrotrabajo', (int)$data['id_centro'])
+            ->where('id', '!=', $sc->id)
+            ->whereRaw('LOWER(TRIM(nombre)) = ?', [mb_strtolower($nombreNormalizado)])
+            ->exists()
+        : ServicioCentro::query()
+            ->where('id_centrotrabajo', (int)$data['id_centro'])
+            ->where('id_servicio', '!=', (int)$data['id_servicio'])
+            ->whereHas('servicio', function ($q) use ($nombreNormalizado) {
+              $q->whereRaw('LOWER(TRIM(nombre)) = ?', [mb_strtolower($nombreNormalizado)]);
+            })
+            ->exists();
+
+      if ($duplicado) {
+        throw ValidationException::withMessages([
+          'nombre' => 'Ya existe un servicio con ese nombre en el centro seleccionado.',
+        ]);
+      }
+
+      if ($hasNombreCol) {
+        $sc->nombre = $nombreNormalizado;
+      }
+
+      $usaTamanos = (bool)$data['usa_tamanos'];
+      $sc->precio_base = $usaTamanos ? 0 : (float)($data['precio_base'] ?? 0);
+      if ($hasUsaTamanosCol) {
+        $sc->usa_tamanos = $usaTamanos;
+      }
+      $sc->save();
+
+      if ($usaTamanos) {
+        $t = $data['tamanos'] ?? [];
+        foreach (['chico','mediano','grande','jumbo'] as $tam) {
+          $precio = (float)($t[$tam] ?? 0);
+          ServicioTamano::updateOrCreate(
+            ['id_servicio_centro' => $sc->id, 'tamano' => $tam],
+            ['precio' => $precio]
+          );
+        }
+      } else {
+        ServicioTamano::where('id_servicio_centro', $sc->id)->delete();
+      }
+
+      ServicioEmpresa::where('id', $sc->id_servicio)->update([
+        'nombre' => $nombreNormalizado,
+        'usa_tamanos' => $usaTamanos,
+      ]);
+    });
+
+    return back()->with('ok', 'Servicio actualizado');
   }
 
   // Formulario: crear servicio (GET)
