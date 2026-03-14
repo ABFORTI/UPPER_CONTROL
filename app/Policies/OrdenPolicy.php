@@ -8,6 +8,16 @@ use Illuminate\Support\Facades\Log;
 
 class OrdenPolicy
 {
+    private function userCentroIds(User $u): array
+    {
+        $ids = $u->centros()->pluck('centros_trabajo.id')->map(fn($v)=>(int)$v)->all();
+        $primary = (int)($u->centro_trabajo_id ?? 0);
+        if ($primary) {
+            $ids[] = $primary;
+        }
+        return array_values(array_unique($ids));
+    }
+
     private function canAdminCentro(User $u, int $centroId): bool
     {
         if ($u->hasRole('superadmin')) {
@@ -18,12 +28,7 @@ class OrdenPolicy
             return false;
         }
 
-        $ids = $u->centros()->pluck('centros_trabajo.id')->map(fn($v)=>(int)$v)->all();
-        $primary = (int)($u->centro_trabajo_id ?? 0);
-        if ($primary) {
-            $ids[] = $primary;
-        }
-        $ids = array_values(array_unique($ids));
+        $ids = $this->userCentroIds($u);
 
         return in_array($centroId, $ids, true);
     }
@@ -72,7 +77,7 @@ class OrdenPolicy
         // Cliente con alcance a centro completo
         if ($u->hasRole('Cliente_Gerente')) {
             $checkedAnyScope = true;
-            $allowed = $allowed || ((int)$o->id_centrotrabajo === (int)$u->centro_trabajo_id);
+            $allowed = $allowed || in_array((int)$o->id_centrotrabajo, $this->userCentroIds($u), true);
         }
 
         // Supervisor: sólo sus propias OTs
@@ -236,7 +241,7 @@ class OrdenPolicy
         // Dueño de la solicitud
         if ((int)($o->solicitud?->id_cliente ?? 0) === (int)$u->id) return true;
         // Cliente con alcance a centro completo puede autorizar del mismo centro
-        if ($u->hasRole('Cliente_Gerente') && (int)$u->centro_trabajo_id === (int)$o->id_centrotrabajo) return true;
+        if ($u->hasRole('Cliente_Gerente') && in_array((int)$o->id_centrotrabajo, $this->userCentroIds($u), true)) return true;
         return false;
     }
 
@@ -258,6 +263,27 @@ class OrdenPolicy
     public function cancelar(User $u, Orden $o): bool
     {
         return $this->canAdminCentro($u, (int)$o->id_centrotrabajo);
+    }
+
+    public function resetOt(User $u, Orden $o): bool
+    {
+        if (!$u->hasAnyRole(['admin', 'coordinador', 'team_leader'])) {
+            return false;
+        }
+
+        if ($u->hasRole('admin')) {
+            return true;
+        }
+
+        if ($u->hasRole('coordinador')) {
+            return in_array((int)$o->id_centrotrabajo, $this->userCentroIds($u), true);
+        }
+
+        if ($u->hasRole('team_leader')) {
+            return (int)$o->team_leader_id === (int)$u->id;
+        }
+
+        return false;
     }
 
     /**

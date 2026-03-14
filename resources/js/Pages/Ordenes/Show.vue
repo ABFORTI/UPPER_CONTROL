@@ -259,6 +259,10 @@ const showAdminDeleteModal = ref(false)
 const adminDeleteAction = ref('delete')
 const adminMotivo = ref('')
 
+const showResetOtModal = ref(false)
+const resetOtMotivo = ref('')
+const resetOtError = ref('')
+
 function openAdminDeleteModal(action) {
   adminDeleteAction.value = action
   adminMotivo.value = ''
@@ -282,6 +286,32 @@ function submitAdminDeleteAction() {
   }
 
   showAdminDeleteModal.value = false
+}
+
+function openResetOtModal() {
+  resetOtMotivo.value = ''
+  resetOtError.value = ''
+  showResetOtModal.value = true
+}
+
+function submitResetOt() {
+  const motivo = String(resetOtMotivo.value || '').trim()
+  if (motivo.length < 5) {
+    resetOtError.value = 'Captura un motivo de al menos 5 caracteres.'
+    return
+  }
+
+  router.post(props.urls.reset, { motivo }, {
+    preserveScroll: true,
+    onError: () => {
+      resetOtError.value = 'No fue posible resetear la OT. Revisa permisos o restricciones de flujo.'
+    },
+    onSuccess: () => {
+      showResetOtModal.value = false
+      resetOtMotivo.value = ''
+      resetOtError.value = ''
+    },
+  })
 }
 
 // ----- Asignar TL -----
@@ -372,6 +402,17 @@ function agregarServicioAdicional() {
       console.log('🏁 Request finalizada')
       procesandoServicio.value = false
     }
+  })
+}
+
+function eliminarServicioDeOt(servicio) {
+  if (!servicio?.delete_url) return
+  const nombre = servicio?.servicio?.nombre || 'servicio pendiente'
+  const ok = confirm(`¿Eliminar "${nombre}" de esta OT? Esta acción no se puede deshacer.`)
+  if (!ok) return
+
+  router.delete(servicio.delete_url, {
+    preserveScroll: true,
   })
 }
 
@@ -1686,9 +1727,23 @@ function aplicarFaltantesServicio(servicioId) {
                       </div>
                     </div>
                   </div>
-                  <div class="bg-white/95 backdrop-blur-sm rounded-md px-2.5 py-1 shadow-sm ring-1 ring-emerald-900/5 flex-shrink-0">
-                    <p class="text-[9px] uppercase tracking-wider font-extrabold text-slate-500 leading-none">Subtotal</p>
-                    <p class="text-sm font-bold text-slate-900 leading-none mt-0.5">{{ money(servicio.subtotal) }}</p>
+                  <div class="flex items-start gap-2 flex-shrink-0">
+                    <button
+                      v-if="can?.eliminar_servicio_ot && servicio.can_delete"
+                      type="button"
+                      @click="eliminarServicioDeOt(servicio)"
+                      class="inline-flex items-center justify-center w-7 h-7 rounded-md bg-rose-600/90 hover:bg-rose-700 text-white shadow-sm ring-1 ring-rose-500/40 transition-colors"
+                      title="Eliminar servicio de la OT"
+                      aria-label="Eliminar servicio"
+                    >
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 7h12M9 7V5h6v2m-7 4v6m4-6v6M5 7l1 12h12l1-12"/>
+                      </svg>
+                    </button>
+                    <div class="bg-white/95 backdrop-blur-sm rounded-md px-2.5 py-1 shadow-sm ring-1 ring-emerald-900/5">
+                      <p class="text-[9px] uppercase tracking-wider font-extrabold text-slate-500 leading-none">Subtotal</p>
+                      <p class="text-sm font-bold text-slate-900 leading-none mt-0.5">{{ money(servicio.subtotal) }}</p>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -2660,12 +2715,13 @@ function aplicarFaltantesServicio(servicioId) {
             </div>
           </div>
 
-          <div v-if="can?.delete || can?.restore || can?.force_delete || can?.cancelar" class="bg-white rounded-2xl shadow-lg border-2 border-red-100 overflow-hidden dark:bg-slate-900/80 dark:border-rose-500/40">
+          <div v-if="can?.reset_ot || can?.delete || can?.restore || can?.force_delete || can?.cancelar" class="bg-white rounded-2xl shadow-lg border-2 border-red-100 overflow-hidden dark:bg-slate-900/80 dark:border-rose-500/40">
             <div class="bg-red-700 px-6 py-4">
               <h4 class="text-lg font-bold text-white">Papelera / Eliminación</h4>
             </div>
             <div class="p-4 space-y-3">
               <p v-if="delete_status?.blocked" class="text-sm text-amber-700 dark:text-amber-300">{{ delete_status?.message }}</p>
+              <button v-if="can?.reset_ot && !orden?.deleted_at" @click="openResetOtModal" class="w-full px-4 py-2 rounded-lg bg-indigo-700 text-white font-semibold">Resetear OT</button>
               <button v-if="can?.delete && !orden?.deleted_at && !delete_status?.blocked" @click="openAdminDeleteModal('delete')" class="w-full px-4 py-2 rounded-lg bg-red-600 text-white font-semibold">Eliminar</button>
               <button v-if="can?.cancelar && !orden?.deleted_at && delete_status?.blocked" @click="openAdminDeleteModal('cancelar')" class="w-full px-4 py-2 rounded-lg bg-amber-600 text-white font-semibold">Cancelar OT</button>
               <button v-if="can?.restore && orden?.deleted_at" @click="openAdminDeleteModal('restore')" class="w-full px-4 py-2 rounded-lg bg-emerald-600 text-white font-semibold">Restaurar</button>
@@ -2763,6 +2819,30 @@ function aplicarFaltantesServicio(servicioId) {
         <div class="mt-5 flex justify-end gap-3">
           <button @click="showAdminDeleteModal = false" class="px-4 py-2 rounded bg-gray-200 dark:bg-slate-700 dark:text-slate-100">Cancelar</button>
           <button @click="submitAdminDeleteAction" class="px-4 py-2 rounded bg-red-600 text-white">Confirmar</button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="showResetOtModal" class="fixed inset-0 z-[10002] flex items-center justify-center px-4">
+      <div class="fixed inset-0 bg-black/50 z-40" @click="showResetOtModal = false"></div>
+      <div class="relative w-full max-w-xl bg-white rounded-2xl shadow-xl p-6 z-50 dark:bg-slate-900">
+        <h3 class="text-lg font-semibold dark:text-slate-100">Resetear OT a estado inicial</h3>
+        <p class="text-sm text-gray-600 mt-2 dark:text-slate-400">
+          Esta acción limpiará avances, evidencias y ajustes operativos de la OT. Solo se permite en OTs sin facturación ni cortes.
+        </p>
+        <div class="mt-4">
+          <label class="text-sm font-semibold dark:text-slate-100">Motivo del reseteo (obligatorio)</label>
+          <textarea
+            v-model="resetOtMotivo"
+            rows="4"
+            class="w-full mt-2 p-3 border rounded-md dark:bg-slate-900 dark:border-slate-700 dark:text-slate-100"
+            placeholder="Describe brevemente por qué se va a resetear la OT"
+          ></textarea>
+          <p v-if="resetOtError" class="text-xs text-red-600 mt-1">{{ resetOtError }}</p>
+        </div>
+        <div class="mt-5 flex justify-end gap-3">
+          <button @click="showResetOtModal = false" class="px-4 py-2 rounded bg-gray-200 dark:bg-slate-700 dark:text-slate-100">Cancelar</button>
+          <button @click="submitResetOt" class="px-4 py-2 rounded bg-indigo-700 text-white">Confirmar reset</button>
         </div>
       </div>
     </div>

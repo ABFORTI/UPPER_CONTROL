@@ -7,6 +7,16 @@ use App\Models\Solicitud;
 
 class SolicitudPolicy
 {
+    private function userCentroIds(User $u): array
+    {
+        $ids = $u->centros()->pluck('centros_trabajo.id')->map(fn($v)=>(int)$v)->all();
+        $primary = (int)($u->centro_trabajo_id ?? 0);
+        if ($primary) {
+            $ids[] = $primary;
+        }
+        return array_values(array_unique($ids));
+    }
+
     private function canAdminCentro(User $u, int $centroId): bool
     {
         if ($u->hasRole('superadmin')) {
@@ -17,12 +27,7 @@ class SolicitudPolicy
             return false;
         }
 
-        $ids = $u->centros()->pluck('centros_trabajo.id')->map(fn($v)=>(int)$v)->all();
-        $primary = (int)($u->centro_trabajo_id ?? 0);
-        if ($primary) {
-            $ids[] = $primary;
-        }
-        $ids = array_values(array_unique($ids));
+        $ids = $this->userCentroIds($u);
 
         return in_array($centroId, $ids, true);
     }
@@ -37,7 +42,7 @@ class SolicitudPolicy
         if ($u->hasAnyRole(['admin','facturacion'])) return true;
         // Cliente con alcance a todo el centro (opcional)
         if ($u->hasRole('Cliente_Gerente')) {
-            return (int)$u->centro_trabajo_id === (int)$s->id_centrotrabajo;
+            return in_array((int)$s->id_centrotrabajo, $this->userCentroIds($u), true);
         }
         // Supervisor (antes 'cliente'): sólo sus propias solicitudes
         if ($u->hasRole('Cliente_Supervisor')) return $s->id_cliente === $u->id;

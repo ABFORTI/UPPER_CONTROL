@@ -3,6 +3,23 @@ AddCharset utf-8 .html .css .js .json .txt
 AddType "text/css; charset=UTF-8" .css
 AddType "application/javascript; charset=UTF-8" .js
 
+# Límites de subida para entorno Apache (XAMPP/local)
+# Evita PostTooLargeException cuando el payload excede post_max_size.
+<IfModule mod_php8.c>
+    php_value upload_max_filesize 600M
+    php_value post_max_size 600M
+    php_value max_execution_time 600
+    php_value max_input_time 600
+    php_value memory_limit 1024M
+</IfModule>
+<IfModule mod_php.c>
+    php_value upload_max_filesize 600M
+    php_value post_max_size 600M
+    php_value max_execution_time 600
+    php_value max_input_time 600
+    php_value memory_limit 1024M
+</IfModule>
+
 <IfModule mod_rewrite.c>
     <IfModule mod_negotiation.c>
         Options -MultiViews -Indexes

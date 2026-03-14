@@ -40,9 +40,9 @@ class SolicitudController extends Controller
 
     $q = Solicitud::with(['servicio','centro','centroCosto','marca'])
             ->when($canSeeDeleted && $filters['show_deleted'], fn($qq) => $qq->withTrashed())
-            ->when(!$u->hasAnyRole(['admin','facturacion','calidad','control','comercial','gerente_upper']),
+            ->when(!$u->hasAnyRole(['admin','facturacion','calidad','control','comercial','gerente_upper','Cliente_Gerente','Cliente_Supervisor']),
                 fn($qq) => $qq->where('id_centrotrabajo', $u->centro_trabajo_id))
-            ->when($u->hasAnyRole(['facturacion','calidad','control','comercial','gerente_upper']) && !$u->hasRole('admin'), function($qq) use ($u) {
+            ->when($u->hasAnyRole(['facturacion','calidad','control','comercial','gerente_upper','Cliente_Gerente','Cliente_Supervisor']) && !$u->hasRole('admin'), function($qq) use ($u) {
                 $ids = $this->allowedCentroIds($u);
                 if (!empty($ids)) { $qq->whereIn('id_centrotrabajo', $ids); }
             })
@@ -133,7 +133,14 @@ class SolicitudController extends Controller
         $servicios = \App\Models\ServicioEmpresa::select('id','nombre','usa_tamanos')
             ->orderBy('nombre')->get();
 
-    $canChooseCentro = $u && $u->hasAnyRole(['admin','facturacion','calidad','control','comercial']);
+        $centrosPermitidosUsuario = $u ? $this->allowedCentroIds($u) : [];
+        $clienteConMultiplesCentros = $u
+            && $u->hasAnyRole(['Cliente_Gerente','Cliente_Supervisor'])
+            && count($centrosPermitidosUsuario) > 1;
+    $canChooseCentro = $u && (
+            $u->hasAnyRole(['admin','facturacion','calidad','control','comercial'])
+            || $clienteConMultiplesCentros
+        );
         $selectedCentroId = (int)($u->centro_trabajo_id ?? 0) ?: null;
 
         $centros = collect();
@@ -141,17 +148,14 @@ class SolicitudController extends Controller
         $preciosPorCentro = [];
 
         if ($canChooseCentro) {
-            // Admin: siempre todos los centros; otros roles: solo asignados (o todos si no hay asignados)
+            // Admin: siempre todos los centros; otros roles: solo centros permitidos
             if ($u->hasRole('admin')) {
                 $centros = \App\Models\CentroTrabajo::select('id','nombre','prefijo')->orderBy('nombre')->get();
             } else {
-                $assignedCentros = $u->centros()
-                    ->select('centros_trabajo.id','centros_trabajo.nombre','centros_trabajo.prefijo')
-                    ->orderBy('centros_trabajo.nombre')
-                    ->get();
-                $centros = $assignedCentros->isNotEmpty()
-                    ? $assignedCentros
-                    : \App\Models\CentroTrabajo::select('id','nombre','prefijo')->orderBy('nombre')->get();
+                $ids = $this->allowedCentroIds($u);
+                $centros = !empty($ids)
+                    ? \App\Models\CentroTrabajo::whereIn('id', $ids)->select('id','nombre','prefijo')->orderBy('nombre')->get()
+                    : collect();
             }
 
             // Construye mapa de precios por centro y servicio
@@ -287,11 +291,27 @@ class SolicitudController extends Controller
         $serv = $esMultipleServicios ? null : ServicioEmpresa::findOrFail($req->id_servicio);
 
         // Determinar centro a usar
-    $canChooseCentro = $u && $u->hasAnyRole(['admin','facturacion','calidad','control','comercial']);
+        $centrosPermitidosUsuario = $u ? $this->allowedCentroIds($u) : [];
+        $clienteConMultiplesCentros = $u
+            && $u->hasAnyRole(['Cliente_Gerente','Cliente_Supervisor'])
+            && count($centrosPermitidosUsuario) > 1;
+    $canChooseCentro = $u && (
+            $u->hasAnyRole(['admin','facturacion','calidad','control','comercial'])
+            || $clienteConMultiplesCentros
+        );
         $centroId = null;
         if ($canChooseCentro) {
             $req->validate(['id_centrotrabajo' => ['required','integer','exists:centros_trabajo,id']]);
             $centroId = (int)$req->input('id_centrotrabajo');
+
+            if (!$u->hasRole('admin')) {
+                $centrosPermitidos = array_map('intval', $this->allowedCentroIds($u));
+                if (!in_array($centroId, $centrosPermitidos, true)) {
+                    return back()->withErrors([
+                        'id_centrotrabajo' => 'No tienes acceso al centro de trabajo seleccionado.'
+                    ])->withInput();
+                }
+            }
         } else {
             $centroId = (int)($u->centro_trabajo_id ?? 0);
         }
@@ -313,7 +333,7 @@ class SolicitudController extends Controller
         };
 
         // Para roles no privilegiados, deben tener centro_trabajo_id asignado
-    if (!($u && $u->hasAnyRole(['admin','facturacion','calidad','control','comercial'])) && (!$u || !$u->centro_trabajo_id)) {
+    if (!($u && $u->hasAnyRole(['admin','facturacion','calidad','control','comercial','Cliente_Gerente','Cliente_Supervisor'])) && (!$u || !$u->centro_trabajo_id)) {
             return back()->withErrors([
                 'centro' => 'Tu usuario no tiene un centro de trabajo asignado. Pide a un administrador que lo configure.'
             ])->withInput();
@@ -1050,7 +1070,7 @@ class SolicitudController extends Controller
 
     /**
      * Verifica si hay OTs validadas por Calidad sin autorizar que hayan excedido el tiempo límite.
-     * Si encuentra alguna en el centro del usuario, bloquea la creación de nuevas solicitudes.
+     * Si encuentra alguna del usuario cliente actual, bloquea la creación de nuevas solicitudes.
      * 
      * IMPORTANTE: El tiempo se cuenta desde que CALIDAD validó la OT, no desde que se completó.
      * Esto permite que el cliente tenga el tiempo completo para revisar después de la validación.
@@ -1070,11 +1090,6 @@ class SolicitudController extends Controller
             return null;
         }
 
-        $centroId = (int)($user->centro_trabajo_id ?? 0);
-        if (!$centroId) {
-            return null; // Sin centro asignado, no aplicar bloqueo
-        }
-
     // Obtener tiempo límite en minutos desde config
     // PARA PRUEBAS: 1 minuto
     // PARA PRODUCCIÓN: 4320 minutos (72 horas)
@@ -1084,7 +1099,9 @@ class SolicitudController extends Controller
         // 1. Estén en estado 'completada' (aún no autorizadas por cliente)
         // 2. Tengan calidad_resultado = 'validado' (ya revisadas por calidad)
         // 3. No tengan autorización del cliente
-        $otsValidadas = \App\Models\Orden::where('id_centrotrabajo', $centroId)
+        $otsValidadas = \App\Models\Orden::whereHas('solicitud', function ($q) use ($user) {
+                $q->where('id_cliente', $user->id);
+            })
             ->where('estatus', 'completada')
             ->where('calidad_resultado', 'validado')
             ->whereDoesntHave('aprobaciones', function($q) {

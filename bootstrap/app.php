@@ -3,6 +3,8 @@
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Exceptions\PostTooLargeException;
+use Illuminate\Http\Request;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -29,6 +31,16 @@ return Application::configure(basePath: dirname(__DIR__))
         //
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        $exceptions->render(function (PostTooLargeException $e, Request $request) {
+            $message = 'El archivo o formulario supera el tamano maximo permitido por el servidor. Intenta con un archivo mas pequeno o aumenta post_max_size/upload_max_filesize.';
+
+            if ($request->expectsJson()) {
+                return response()->json(['message' => $message], 413);
+            }
+
+            return back()->withErrors(['archivo' => $message]);
+        });
+
         // Deshabilitar renderizado visual de errores en producción
         // para evitar problemas con highlight_file() deshabilitado
         if (!config('app.debug')) {

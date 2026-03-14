@@ -25,7 +25,13 @@ class ClienteController extends Controller
     $u = $req->user();
         // Validación reforzada: dueño de la solicitud, admin, o gerente (antes 'cliente_centro') del mismo centro
         $esDueno = (int)($orden->solicitud->id_cliente ?? 0) === (int)$u->id;
-        $esClienteCentroMismo = $u->hasRole('Cliente_Gerente') && (int)$u->centro_trabajo_id === (int)$orden->id_centrotrabajo;
+        $centrosUsuario = $u->centros()->pluck('centros_trabajo.id')->map(fn($v)=>(int)$v)->all();
+        $primary = (int)($u->centro_trabajo_id ?? 0);
+        if ($primary) {
+            $centrosUsuario[] = $primary;
+        }
+        $centrosUsuario = array_values(array_unique($centrosUsuario));
+        $esClienteCentroMismo = $u->hasRole('Cliente_Gerente') && in_array((int)$orden->id_centrotrabajo, $centrosUsuario, true);
         if (!$u->hasRole('admin') && !$esDueno && !$esClienteCentroMismo) abort(403);
         if ($orden->calidad_resultado !== 'validado') abort(422,'Aún no está validada por Calidad.');
 

@@ -17,7 +17,7 @@ const form = useForm({
 
 const canSelectCentros = computed(() => {
   const selected = form.roles || []
-  return selected.some(r => ['admin','calidad','facturacion','control','comercial','gerente_upper'].includes(r))
+  return selected.some(r => ['admin','calidad','facturacion','control','comercial','gerente_upper','Cliente_Gerente','Cliente_Supervisor'].includes(r))
 })
 
 function save(){
@@ -171,7 +171,7 @@ function save(){
 
             </div>
 
-    <!-- Multiselección de centros (admin, calidad, facturacion, control, comercial y gerente_upper) -->
+    <!-- Multiselección de centros para roles con alcance multi-centro -->
   <div v-if="canSelectCentros" 
          class="bg-gradient-to-r from-indigo-50 to-blue-50 rounded-xl p-6 border-2 border-indigo-200">
               <label class="block text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">

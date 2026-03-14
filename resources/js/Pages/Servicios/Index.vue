@@ -134,18 +134,6 @@ function saveRow(r){
   })
 }
 
-// Formulario para clonar servicios desde otro centro al seleccionado
-const cloneForm = useForm({ centro_origen: null })
-const otherCentros = computed(() => (props.centros || []).filter(c => Number(c.id) !== Number(selCentro.value)))
-watch(otherCentros, (list) => { if (!cloneForm.centro_origen && list?.length) cloneForm.centro_origen = list[0].id }, { immediate: true })
-function doClone(){
-  if (!cloneForm.centro_origen) return
-  cloneForm.transform(() => ({
-    centro_origen: Number(cloneForm.centro_origen),
-    centro_destino: Number(selCentro.value),
-  })).post(props.urls.clonar, { preserveScroll: true })
-}
-
 // Eliminar un servicio del centro actual
 function removeRow(r){
   if (!confirm(`¿Eliminar "${r.servicio}" de este centro?`)) return
@@ -220,7 +208,7 @@ function editRow(r){
             <svg class="w-24 h-24 mx-auto text-gray-300 mb-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/>
             </svg>
-            <p class="text-xl text-gray-600 mb-8">Empieza agregando un servicio o clona desde otro centro</p>
+            <p class="text-xl text-gray-600 mb-8">Empieza agregando un servicio</p>
             
             <div class="flex flex-col sm:flex-row gap-4 justify-center items-center max-w-2xl mx-auto">
               <button @click="openCreateModal"
@@ -230,29 +218,10 @@ function editRow(r){
                 </svg>
                 Agregar servicio
               </button>
-              
-              <div v-if="otherCentros.length" class="flex items-center gap-3 bg-gray-50 px-6 py-3 rounded-xl border-2 border-gray-200">
-                <span class="text-sm font-semibold text-gray-700">o clonar desde:</span>
-                <select v-model.number="cloneForm.centro_origen" 
-                        class="px-3 py-2 rounded-lg border-2 border-gray-300 bg-white font-semibold text-gray-700">
-                  <option v-for="c in otherCentros" :key="c.id" :value="c.id">{{ c.nombre }}</option>
-                </select>
-                <button @click="doClone" 
-                        :disabled="cloneForm.processing || !cloneForm.centro_origen"
-                        class="px-4 py-2 rounded-lg bg-gray-700 text-white font-semibold hover:bg-gray-800 disabled:opacity-50 transition-all duration-200">
-                  {{ cloneForm.processing ? 'Clonando…' : 'Clonar' }}
-                </button>
-              </div>
             </div>
     
               
             
-            <p v-if="cloneForm.errors.centro_origen" class="text-red-600 text-sm mt-4 flex items-center justify-center gap-1">
-              <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
-              </svg>
-              {{ cloneForm.errors.centro_origen }}
-            </p>
           </div>
         </div>
       </div>
@@ -439,41 +408,6 @@ function editRow(r){
             </div>
           </div>
         </div>
-      </div>
-
-      <!-- Barra de clonación (cuando hay servicios) -->
-      <div v-if="rows?.length && otherCentros.length" 
-           class="mt-6 bg-white rounded-xl shadow-lg border-2 border-gray-100 p-6">
-        <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
-          <div class="flex items-center gap-2">
-            <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
-            </svg>
-            <span class="text-sm font-semibold text-gray-700">Clonar servicios desde:</span>
-          </div>
-          <select v-model.number="cloneForm.centro_origen" 
-                  class="px-4 py-2.5 rounded-lg border-2 border-gray-300 bg-white font-semibold text-gray-700 focus:ring-2 focus:ring-emerald-200 min-w-[12rem] w-full sm:w-auto">
-            <option v-for="c in otherCentros" :key="c.id" :value="c.id">{{ c.nombre }}</option>
-          </select>
-          <button @click="doClone" 
-                  :disabled="cloneForm.processing || !cloneForm.centro_origen"
-                  class="px-6 py-2.5 rounded-lg bg-gray-700 text-white font-semibold hover:bg-gray-800 disabled:opacity-50 transition-all duration-200 flex items-center gap-2 w-full sm:w-auto justify-center">
-            <svg v-if="!cloneForm.processing" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
-            </svg>
-            <svg v-else class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
-              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-            {{ cloneForm.processing ? 'Clonando…' : 'Clonar (solo faltantes)' }}
-          </button>
-        </div>
-        <p v-if="cloneForm.errors.centro_origen" class="text-red-600 text-sm mt-3 text-center flex items-center justify-center gap-1">
-          <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
-          </svg>
-          {{ cloneForm.errors.centro_origen }}
-        </p>
       </div>
 
     </div>

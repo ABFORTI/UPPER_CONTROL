@@ -7,6 +7,16 @@ use App\Models\User;
 
 class CotizacionPolicy
 {
+    private function userCentroIds(User $u): array
+    {
+        $ids = $u->centros()->pluck('centros_trabajo.id')->map(fn($v) => (int)$v)->all();
+        $primary = (int)($u->centro_trabajo_id ?? 0);
+        if ($primary) {
+            $ids[] = $primary;
+        }
+        return array_values(array_unique($ids));
+    }
+
     public function viewAny(User $u): bool
     {
         return $u->hasAnyRole([
@@ -42,7 +52,7 @@ class CotizacionPolicy
 
         // Cliente gerente: por centro
         if ($u->hasRole('Cliente_Gerente')) {
-            return (int)$c->id_centrotrabajo === (int)$u->centro_trabajo_id;
+            return in_array((int)$c->id_centrotrabajo, $this->userCentroIds($u), true);
         }
 
         // Coordinador: por centro principal
@@ -98,7 +108,7 @@ class CotizacionPolicy
         if ((int)$c->id_cliente === (int)$u->id) return true;
 
         if ($u->hasRole('Cliente_Gerente')) {
-            return (int)$c->id_centrotrabajo === (int)$u->centro_trabajo_id;
+            return in_array((int)$c->id_centrotrabajo, $this->userCentroIds($u), true);
         }
 
         return false;

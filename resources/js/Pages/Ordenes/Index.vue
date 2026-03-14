@@ -307,6 +307,7 @@ function isoWeekNumber(dateStr){
                     <th class="px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal">Producto</th>
                     <th class="px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal">Servicio</th>
                     <th class="hidden xl:table-cell px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal">Centro</th>
+                    <th class="hidden xl:table-cell px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal">Solicitante</th>
                     <th class="hidden xl:table-cell px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal">Área</th>
                     <th class="px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal">Estatus</th>
                     <th class="hidden 2xl:table-cell px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal">Centro de costo</th>
@@ -337,6 +338,7 @@ function isoWeekNumber(dateStr){
                     <td class="px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words">{{ o.producto || '-' }}</td>
                     <td class="px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words">{{ o.servicio?.nombre || '-' }}</td>
                     <td class="hidden xl:table-cell px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words">{{ o.centro?.nombre || '-' }}</td>
+                    <td class="hidden xl:table-cell px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words">{{ o.solicitante || '-' }}</td>
                     <td class="hidden xl:table-cell px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words">{{ o.area?.nombre || '-' }}</td>
                     <td class="px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words">
                       <span class="px-2.5 py-1 rounded-full text-[0.6rem] font-semibold uppercase tracking-wide"
@@ -417,6 +419,7 @@ function isoWeekNumber(dateStr){
                     <th class="px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal">Producto</th>
                     <th class="px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal">Servicio</th>
                     <th class="hidden xl:table-cell px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal">Centro</th>
+                    <th class="hidden xl:table-cell px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal">Solicitante</th>
                     <th class="hidden xl:table-cell px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal">Área</th>
                     <th class="px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal">Estatus</th>
                     <th class="hidden 2xl:table-cell px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal">Centro de costo</th>
@@ -447,6 +450,7 @@ function isoWeekNumber(dateStr){
                     <td class="px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words">{{ o.producto || '-' }}</td>
                     <td class="px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words">{{ o.servicio?.nombre || '-' }}</td>
                     <td class="hidden xl:table-cell px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words">{{ o.centro?.nombre || '-' }}</td>
+                    <td class="hidden xl:table-cell px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words">{{ o.solicitante || '-' }}</td>
                     <td class="hidden xl:table-cell px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words">{{ o.area?.nombre || '-' }}</td>
                     <td class="px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words">
                       <span class="px-2.5 py-1 rounded-full text-[0.6rem] font-semibold uppercase tracking-wide"
@@ -547,6 +551,10 @@ function isoWeekNumber(dateStr){
                 <div class="flex items-center justify-between gap-3">
                   <span class="text-slate-500">Centro</span>
                   <span class="font-medium text-slate-800 text-right">{{ o.centro?.nombre || '-' }}</span>
+                </div>
+                <div class="flex items-center justify-between gap-3">
+                  <span class="text-slate-500">Solicitante</span>
+                  <span class="font-medium text-slate-800 text-right">{{ o.solicitante || '-' }}</span>
                 </div>
                 <div class="flex items-center justify-between gap-3">
                   <span class="text-slate-500">Área</span>

@@ -1370,6 +1370,11 @@ class OrdenController extends Controller
                 && $orden->estatus === 'autorizada_cliente';
         }
 
+        $canEliminarServicioOt = $authUser instanceof \App\Models\User
+            ? $authUser->hasAnyRole(['admin', 'coordinador', 'team_leader'])
+            : false;
+        $ordenBloqueadaProduccion = $this->ordenBloqueadaParaEdicionProduccion($orden);
+
         $teamLeaders = $canAsignar
             ? User::role('team_leader')
                 ->where('centro_trabajo_id',$orden->id_centrotrabajo)
@@ -1580,8 +1585,17 @@ class OrdenController extends Controller
                 })
                 ->values();
 
-            $serviciosData = $orden->otServicios->values()->map(function ($otServicio, $idx) use ($eventosCalidad, $orden) {
+            $serviciosData = $orden->otServicios->values()->map(function ($otServicio, $idx) use ($eventosCalidad, $orden, $canEliminarServicioOt, $ordenBloqueadaProduccion) {
                 $totales = $otServicio->calcularTotales();
+                $tieneAvances = $otServicio->avances->count() > 0;
+                $tieneCompletado = $otServicio->items->sum(fn($it) => (int)($it->completado ?? 0)) > 0;
+                $tieneAjustes = $otServicio->items->sum(fn($it) => ($it->ajustes?->count() ?? 0)) > 0;
+                $canDelete = $canEliminarServicioOt
+                    && !$ordenBloqueadaProduccion
+                    && ($orden->otServicios->count() > 1)
+                    && !$tieneAvances
+                    && !$tieneCompletado
+                    && !$tieneAjustes;
 
                 $solServicios = optional($orden->solicitud)->servicios;
                 $solServicioPorIndice = $solServicios?->values()->get($idx);
@@ -1633,6 +1647,11 @@ class OrdenController extends Controller
                         'orden' => $orden->id,
                         'otServicio' => $otServicio->id,
                     ]),
+                    'delete_url' => route('ordenes.servicios.destroy', [
+                        'orden' => $orden->id,
+                        'otServicio' => $otServicio->id,
+                    ]),
+                    'can_delete' => $canDelete,
                     'tipo_cobro' => $otServicio->tipo_cobro,
                     'cantidad' => $otServicio->cantidad,
                     'precio_unitario' => $otServicio->precio_unitario,
@@ -1726,6 +1745,10 @@ class OrdenController extends Controller
                 'assign_pending_service' => $authUser instanceof \App\Models\User
                     ? Gate::allows('assignPendingService', $orden)
                     : false,
+                'eliminar_servicio_ot' => $canEliminarServicioOt && !$ordenBloqueadaProduccion,
+                'reset_ot' => $authUser instanceof \App\Models\User
+                    ? $authUser->can('resetOt', $orden)
+                    : false,
                 'delete' => $canDelete,
                 'restore' => $canRestore,
                 'force_delete' => $canForceDelete,
@@ -1765,6 +1788,7 @@ class OrdenController extends Controller
                 'evidencias_destroy'=> route('evidencias.destroy', 0),
                 'definir_tamanos'   => route('ordenes.definirTamanos', $orden),
                 'agregar_servicio_adicional' => route('ordenes.agregarServicioAdicional', $orden),
+                'reset'             => route('ordenes.reset', $orden),
                 'destroy'           => route('ordenes.destroy', $orden->id),
                 'restore'           => route('ordenes.restore', $orden->id),
                 'force'             => route('ordenes.force', $orden->id),
@@ -2072,7 +2096,7 @@ class OrdenController extends Controller
             $filters['centro_costo'] = null;
         }
     }
-    $q = Orden::with(['servicio','centro','teamLeader','solicitud.centroCosto','solicitud.marca','factura','facturas','area'])
+    $q = Orden::with(['servicio','centro','teamLeader','solicitud.cliente','solicitud.centroCosto','solicitud.marca','factura','facturas','area'])
         ->when($canSeeDeleted && $filters['show_deleted'], fn($qq) => $qq->withTrashed())
         ->when(!$isPrivilegedViewer, function($qq) use ($centrosPermitidos){
             if (!empty($centrosPermitidos)) { $qq->whereIn('id_centrotrabajo', $centrosPermitidos); }
@@ -2166,6 +2190,7 @@ class OrdenController extends Controller
                 'servicio' => ['nombre' => $o->servicio?->nombre],
                 'centro'   => ['nombre' => $o->centro?->nombre],
                 'area'     => ['nombre' => $o->area?->nombre],
+                'solicitante' => $o->solicitud?->cliente?->name,
                 'centro_costo' => ['nombre' => optional($o->solicitud?->centroCosto)->nombre],
                 'marca'        => ['nombre' => optional($o->solicitud?->marca)->nombre],
                 'team_leader' => ['name' => $o->teamLeader?->name],
@@ -2661,6 +2686,228 @@ class OrdenController extends Controller
 
             return back()->withErrors(['error' => 'Error al agregar servicio adicional: ' . $e->getMessage()]);
         }
+    }
+
+    /**
+     * Eliminar un servicio de una OT multi-servicio.
+     * Reglas:
+     * - Solo admin/coordinador/team_leader con acceso al centro.
+     * - No permitir eliminar el último servicio de la OT.
+     * - No permitir eliminar si el servicio ya tiene avances/completado/ajustes.
+     */
+    public function eliminarServicioOt(Request $request, Orden $orden, \App\Models\OTServicio $otServicio)
+    {
+        $user = $request->user();
+        if (!$user || !$user->hasAnyRole(['admin', 'coordinador', 'team_leader'])) {
+            abort(403, 'No tienes permiso para eliminar servicios de esta OT.');
+        }
+
+        $this->authorize('view', $orden);
+        $this->authorizeFromCentro($orden->id_centrotrabajo, $orden);
+
+        if ((int)$otServicio->ot_id !== (int)$orden->id) {
+            return back()->withErrors(['servicio' => 'El servicio no pertenece a esta OT.']);
+        }
+
+        if ($this->ordenBloqueadaParaEdicionProduccion($orden)) {
+            return back()->withErrors(['orden' => 'La OT está bloqueada; ya no se permite eliminar servicios.']);
+        }
+
+        $totalServicios = (int)$orden->otServicios()->count();
+        if ($totalServicios <= 1) {
+            return back()->withErrors(['servicio' => 'No se puede eliminar el último servicio de la OT.']);
+        }
+
+        $otServicio->load(['servicio', 'items.ajustes', 'avances']);
+
+        $tieneAvances = $otServicio->avances->count() > 0;
+        $tieneCompletado = $otServicio->items->sum(fn($it) => (int)($it->completado ?? 0)) > 0;
+        $tieneAjustes = $otServicio->items->sum(fn($it) => ($it->ajustes?->count() ?? 0)) > 0;
+
+        if ($tieneAvances || $tieneCompletado || $tieneAjustes) {
+            return back()->withErrors([
+                'servicio' => 'No se puede eliminar este servicio porque ya tiene movimientos registrados (avances/completados/ajustes).'
+            ]);
+        }
+
+        DB::transaction(function () use ($orden, $otServicio, $user) {
+            $servicioNombre = $otServicio->servicio?->nombre ?? 'Servicio';
+            $servicioId = (int)$otServicio->id;
+            $servicioEmpresaId = (int)($otServicio->servicio_id ?? 0);
+
+            $otServicio->delete();
+
+            // Mantener id_servicio de la OT consistente si se eliminó el que estaba como principal.
+            if ($servicioEmpresaId > 0 && (int)$orden->id_servicio === $servicioEmpresaId) {
+                $nuevoServicioPrincipal = (int)($orden->otServicios()->whereNotNull('servicio_id')->value('servicio_id') ?? 0);
+                if ($nuevoServicioPrincipal > 0) {
+                    $orden->id_servicio = $nuevoServicioPrincipal;
+                }
+            }
+
+            $orden->total_planeado = (int)$orden->otServicios()->sum('cantidad');
+            $orden->save();
+            $orden->recalcTotals();
+
+            $this->act('ordenes')
+                ->performedOn($orden)
+                ->event('servicio_eliminado')
+                ->withProperties([
+                    'ot_servicio_id' => $servicioId,
+                    'servicio_empresa_id' => $servicioEmpresaId,
+                    'servicio_nombre' => $servicioNombre,
+                ])
+                ->log("OT #{$orden->id}: servicio '{$servicioNombre}' eliminado por {$user->name}");
+        });
+
+        return back()->with('ok', 'Servicio eliminado correctamente de la OT.');
+    }
+
+    /**
+     * Resetear OT: limpia avances/evidencias/segmentos/ajustes y regresa a estado inicial.
+     */
+    public function resetOt(Request $request, Orden $orden)
+    {
+        $user = $request->user();
+        if (!$user) {
+            abort(403);
+        }
+
+        $this->authorize('resetOt', $orden);
+        $this->authorizeFromCentro($orden->id_centrotrabajo, $orden);
+
+        if ($orden->trashed()) {
+            return back()->withErrors(['reset_ot' => 'La OT está en papelera. Restáurala antes de resetearla.']);
+        }
+
+        $motivo = trim((string)$request->input('motivo', ''));
+        if (mb_strlen($motivo) < 5) {
+            return back()->withErrors(['reset_ot' => 'El motivo del reseteo es obligatorio (mínimo 5 caracteres).']);
+        }
+
+        $hasFactura = $orden->factura()->exists()
+            || (Schema::hasTable('factura_orden') && DB::table('factura_orden')->where('id_orden', $orden->id)->exists())
+            || $orden->facturas()->exists();
+
+        if ($hasFactura || (string)$orden->estatus === 'facturada') {
+            return back()->withErrors(['reset_ot' => 'La OT ya está facturada/cobrada y no se puede resetear.']);
+        }
+
+        if ((int)($orden->parent_ot_id ?? 0) > 0 || $orden->childOts()->exists()) {
+            return back()->withErrors(['reset_ot' => 'La OT forma parte de un corte (split). No se puede resetear.']);
+        }
+
+        if (Schema::hasTable('ot_cortes') && DB::table('ot_cortes')->where('ot_id', $orden->id)->exists()) {
+            return back()->withErrors(['reset_ot' => 'La OT tiene cortes registrados. No se puede resetear.']);
+        }
+
+        DB::transaction(function () use ($orden, $user, $motivo) {
+            /** @var \App\Models\Orden $ot */
+            $ot = Orden::where('id', $orden->id)->lockForUpdate()->firstOrFail();
+            $ot->load([
+                'solicitud.servicios.servicio',
+                'items',
+                'otServicios.items',
+                'evidencias',
+            ]);
+
+            // Eliminar archivos físicos de evidencias para evitar huérfanos.
+            foreach ($ot->evidencias as $evidencia) {
+                $diskPath = ltrim((string)$evidencia->archivo, '/');
+                if ($diskPath !== '' && Storage::disk('public')->exists($diskPath)) {
+                    Storage::disk('public')->delete($diskPath);
+                }
+            }
+
+            $ot->evidencias()->delete();
+            $ot->avances()->delete();
+            $ot->segmentosProduccion()->delete();
+            $ot->ajustesDetalle()->delete();
+
+            $solicitudServicios = $ot->solicitud?->servicios ?? collect();
+            $isSolicitudMulti = $solicitudServicios->count() > 0;
+
+            if ($isSolicitudMulti) {
+                // Regresar a la estructura original multi-servicio de la solicitud.
+                $ot->otServicios()->delete();
+
+                foreach ($solicitudServicios as $solServicio) {
+                    $servicioId = $solServicio->servicio_id ? (int)$solServicio->servicio_id : null;
+
+                    $nuevoServicio = \App\Models\OTServicio::create([
+                        'ot_id' => $ot->id,
+                        'servicio_id' => $servicioId,
+                        'tipo_cobro' => $solServicio->tipo_cobro ?? 'pieza',
+                        'cantidad' => (int)($solServicio->cantidad ?? 0),
+                        'precio_unitario' => (float)($solServicio->precio_unitario ?? 0),
+                        'subtotal' => (float)($solServicio->subtotal ?? 0),
+                        'sku' => $solServicio->sku,
+                        'origen_customs' => $solServicio->origen,
+                        'pedimento' => $solServicio->pedimento,
+                        'service_assignment_status' => $servicioId ? 'assigned' : 'pending',
+                        'service_locked' => $servicioId ? true : false,
+                        'service_assigned_at' => $servicioId ? now() : null,
+                        'service_assigned_by' => $servicioId ? $user->id : null,
+                    ]);
+
+                    \App\Models\OTServicioItem::create([
+                        'ot_servicio_id' => $nuevoServicio->id,
+                        'descripcion_item' => $solServicio->servicio?->nombre ?? 'Item',
+                        'planeado' => (int)($solServicio->cantidad ?? 0),
+                        'completado' => 0,
+                        'faltante' => 0,
+                        'precio_unitario' => (float)($solServicio->precio_unitario ?? 0),
+                        'subtotal' => (float)($solServicio->subtotal ?? 0),
+                    ]);
+                }
+
+                $ot->id_servicio = null;
+                $ot->total_planeado = (int)$solicitudServicios->sum('cantidad');
+                $ot->recalcTotals();
+            } else {
+                // OT tradicional: limpiar multi-servicios y resetear items tradicionales.
+                $ot->otServicios()->delete();
+
+                foreach ($ot->items as $item) {
+                    $item->cantidad_real = 0;
+                    $item->faltantes = 0;
+                    $item->subtotal = round(((float)($item->precio_unitario ?? 0)) * (int)($item->cantidad_planeada ?? 0), 2);
+                    $item->save();
+                }
+
+                $sub = (float)$ot->items()->sum('subtotal');
+                $ot->subtotal = $sub;
+                $ot->iva = round($sub * 0.16, 2);
+                $ot->total = round($ot->subtotal + $ot->iva, 2);
+                $ot->total_planeado = (int)$ot->items()->sum('cantidad_planeada');
+            }
+
+            $ot->total_real = 0;
+            $ot->estatus = 'generada';
+            $ot->calidad_resultado = 'pendiente';
+            $ot->motivo_rechazo = null;
+            $ot->acciones_correctivas = null;
+            $ot->cliente_autorizada_at = null;
+            $ot->fecha_completada = null;
+            if ((string)($ot->ot_status ?? 'active') !== 'active') {
+                $ot->ot_status = 'active';
+            }
+            $ot->save();
+
+            $this->act('ordenes')
+                ->causedBy($user)
+                ->performedOn($ot)
+                ->event('ot.reseteada')
+                ->withProperties([
+                    'orden_trabajo_id' => $ot->id,
+                    'usuario_id' => $user->id,
+                    'motivo' => $motivo,
+                    'timestamp' => now()->toIso8601String(),
+                ])
+                ->log("OT #{$ot->id}: reseteada por {$user->name}");
+        });
+
+        return back()->with('ok', 'OT reseteada correctamente a estado inicial.');
     }
 
     /**

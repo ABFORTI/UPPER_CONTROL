@@ -239,6 +239,16 @@ Route::middleware('auth')->group(function () {
         ->middleware('role:admin|coordinador|team_leader')
         ->name('ordenes.agregarServicioAdicional');
 
+    // Eliminar servicio de una OT multi-servicio
+    Route::delete('/ordenes/{orden}/servicios/{otServicio}', [OrdenController::class,'eliminarServicioOt'])
+        ->middleware('role:admin|coordinador|team_leader')
+        ->name('ordenes.servicios.destroy');
+
+    // Resetear OT a estado inicial
+    Route::post('/ordenes/{orden}/reset', [OrdenController::class,'resetOt'])
+        ->middleware('role:admin|coordinador|team_leader')
+        ->name('ordenes.reset');
+
     // Definir desglose por tamaños (flujo diferido)
     Route::post('/ordenes/{orden}/tamanos/definir', [OrdenController::class,'definirTamanos'])->name('ordenes.definirTamanos');
     Route::post('/ordenes/{orden}/servicios/{servicio}/tamanos/definir', [OrdenController::class,'definirTamanosServicio'])->name('ordenes.servicios.definirTamanos');

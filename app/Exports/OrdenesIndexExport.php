@@ -61,6 +61,7 @@ class OrdenesIndexExport implements FromCollection, WithHeadings, ShouldAutoSize
                 'centro',
                 'teamLeader',
                 'items.ajustes',
+                'solicitud.cliente',
                 'solicitud.centroCosto',
                 'solicitud.marca',
                 'factura',
@@ -137,6 +138,7 @@ class OrdenesIndexExport implements FromCollection, WithHeadings, ShouldAutoSize
                 $createdAt = $o->created_at ? Carbon::parse($o->getRawOriginal('created_at') ?? $o->created_at) : null;
                 $semana = $createdAt?->isoWeek();
                 $fechaOt = $createdAt?->format('d/m/Y');
+                $solicitante = $o->solicitud?->cliente?->name ?? null;
 
                 // Factura if any
                 $factura = null;
@@ -187,6 +189,7 @@ class OrdenesIndexExport implements FromCollection, WithHeadings, ShouldAutoSize
                                     null,
                                     $departamento,
                                     $areaSolicita,
+                                    $solicitante,
                                 ]);
                             }
 
@@ -215,6 +218,7 @@ class OrdenesIndexExport implements FromCollection, WithHeadings, ShouldAutoSize
                             null,
                             $departamento,
                             $areaSolicita,
+                            $solicitante,
                         ]);
                     }
                 } else {
@@ -249,6 +253,7 @@ class OrdenesIndexExport implements FromCollection, WithHeadings, ShouldAutoSize
                                 null,
                                 $departamento,
                                 $areaSolicita,
+                                $solicitante,
                             ]);
                         }
 
@@ -275,6 +280,7 @@ class OrdenesIndexExport implements FromCollection, WithHeadings, ShouldAutoSize
                         null,
                         $departamento,
                         $areaSolicita,
+                        $solicitante,
                     ]);
                 }
             }
@@ -300,6 +306,7 @@ class OrdenesIndexExport implements FromCollection, WithHeadings, ShouldAutoSize
             'OC',
             'DEPARTAMENTO',
             'AREA QUE SOLICITA',
+            'SOLICITANTE',
         ];
     }
 
@@ -315,7 +322,7 @@ class OrdenesIndexExport implements FromCollection, WithHeadings, ShouldAutoSize
 
     public function styles(Worksheet $sheet)
     {
-        $sheet->getStyle('A1:N1')->applyFromArray([
+        $sheet->getStyle('A1:O1')->applyFromArray([
             'font' => [
                 'bold' => true,
                 'color' => ['rgb' => 'FFFFFF'],
@@ -336,6 +343,7 @@ class OrdenesIndexExport implements FromCollection, WithHeadings, ShouldAutoSize
         $sheet->getStyle('H:H')->getAlignment()->setWrapText(true);
         $sheet->getStyle('M:M')->getAlignment()->setWrapText(true);
         $sheet->getStyle('N:N')->getAlignment()->setWrapText(true);
+        $sheet->getStyle('O:O')->getAlignment()->setWrapText(true);
 
         return [];
     }
@@ -348,7 +356,7 @@ class OrdenesIndexExport implements FromCollection, WithHeadings, ShouldAutoSize
                 $sheet->freezePane('A2');
 
                 $highestRow = $sheet->getHighestRow();
-                $range = 'A1:N' . $highestRow;
+                $range = 'A1:O' . $highestRow;
 
                 $sheet->getStyle($range)->applyFromArray([
                     'borders' => [
