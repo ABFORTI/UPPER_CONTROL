@@ -12,7 +12,7 @@ import { initializeTheme } from './Support/useTheme';
 // ...existing code...
 
 
-const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
+const appName = import.meta.env.VITE_APP_NAME || 'Upper Control';
 
 initializeTheme();
 
@@ -206,7 +206,7 @@ function guessProcessText(method = 'get', path = '') {
 }
 
 createInertiaApp({
-    title: (title) => `${title} - ${appName}`,
+    title: (title) => title ? `${title} - ${appName}` : appName,
     resolve: async (name) => {
         const mod = await resolvePageComponent(
             `./Pages/${name}.vue`,
