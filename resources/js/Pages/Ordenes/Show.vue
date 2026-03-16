@@ -49,6 +49,8 @@ const money = (v) => new Intl.NumberFormat('es-MX', {
 
 // Detectar si es multi-servicio
 const esMultiServicio = computed(() => (props.orden?.ot_servicios?.length ?? 0) > 0)
+const canCaptureContenedorFolio = computed(() => !!props.can?.capture_contenedor_folio)
+const showContenedorFolioHistory = computed(() => !!props.can?.show_contenedor_folio_history)
 
 const customFieldValue = (...values) => {
   for (const value of values) {
@@ -420,6 +422,7 @@ function eliminarServicioDeOt(servicio) {
 const avForm = useForm({
   items: items.value.map(i => ({ id_item: i.id, cantidad: '' })), // iniciar vacío para evitar el '0'
   comentario: '',
+  contenedor_folio: '',
   tarifa_tipo: 'NORMAL',
   precio_unitario_manual: ''
 })
@@ -524,6 +527,7 @@ function registrarAvance () {
     onSuccess: () => {
       // resetear inputs
       avForm.reset('comentario')
+      avForm.contenedor_folio = ''
       avForm.tarifa_tipo = 'NORMAL'
       avForm.precio_unitario_manual = ''
       avForm.items = (items.value || []).map(i => ({ id_item: i.id, cantidad: '' }))
@@ -870,6 +874,7 @@ const inicializarAvancesServicios = () => {
           cantidad: '' 
         })),
         comentario: '',
+        contenedor_folio: '',
         tarifa_tipo: 'NORMAL',
         precio_unitario_manual: ''
       }
@@ -962,6 +967,7 @@ function guardarAvanceServicio(servicioId) {
     id_servicio: servicioId,
     items: itemsConCantidad,
     comentario: formData.comentario || '',
+    contenedor_folio: formData.contenedor_folio || '',
     tarifa_tipo: formData.tarifa_tipo || 'NORMAL',
     precio_unitario_manual: formData.precio_unitario_manual || ''
   }
@@ -976,6 +982,7 @@ function guardarAvanceServicio(servicioId) {
       // Limpiar formulario
       avancesMultiServicio.value[servicioId].items.forEach(i => i.cantidad = '')
       avancesMultiServicio.value[servicioId].comentario = ''
+      avancesMultiServicio.value[servicioId].contenedor_folio = ''
       router.visit(window.location.href, { replace: true, preserveScroll: true })
     },
     onError: (errors) => {
@@ -1454,8 +1461,14 @@ function aplicarFaltantesServicio(servicioId) {
                       </div>
                     </div>
                     
+                    <div v-if="canCaptureContenedorFolio" class="lg:col-span-2">
+                      <label class="block text-[10px] font-bold text-slate-600 dark:text-slate-400 mb-1.5 uppercase tracking-wider">Contenedor / Folio</label>
+                      <input type="text" maxlength="50" v-model.trim="avForm.contenedor_folio" placeholder="Ej. MSKU1234567"
+                             class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-200 dark:bg-slate-900 dark:text-slate-100 transition-all bg-white" />
+                    </div>
+
                     <!-- Comentario -->
-                    <div :class="avForm.tarifa_tipo !== 'NORMAL' ? 'lg:col-span-5' : 'lg:col-span-7'">
+                    <div :class="avForm.tarifa_tipo !== 'NORMAL' ? (canCaptureContenedorFolio ? 'lg:col-span-3' : 'lg:col-span-5') : (canCaptureContenedorFolio ? 'lg:col-span-5' : 'lg:col-span-7')">
                       <label class="block text-[10px] font-bold text-slate-600 dark:text-slate-400 mb-1.5 uppercase tracking-wider">Comentario <span class="font-normal text-slate-400">(opcional)</span></label>
                       <textarea v-model="avForm.comentario" rows="2" placeholder="Describe el progreso..."
                                 class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-200 dark:bg-slate-900 dark:text-slate-100 transition-all bg-white resize-none min-h-[4rem]"></textarea>
@@ -1655,6 +1668,10 @@ function aplicarFaltantesServicio(servicioId) {
                         <!-- Faltantes separados -->
                         <div v-if="isFaltantesComentario(a?.comentario)" class="text-xs text-slate-600 dark:text-slate-400 mt-1">
                           {{ a.comentario }}
+                        </div>
+
+                        <div v-if="showContenedorFolioHistory && a?.contenedor_folio" class="text-xs text-slate-700 dark:text-slate-300 mt-1">
+                          <strong class="font-semibold">Contenedor / Folio:</strong> {{ a.contenedor_folio }}
                         </div>
 
                         <div v-if="evidenciasDeAvance(a?.id).length" class="mt-2.5 p-2 rounded-md border border-indigo-100 bg-indigo-50/60 dark:border-indigo-500/30 dark:bg-indigo-500/10">
@@ -1972,8 +1989,14 @@ function aplicarFaltantesServicio(servicioId) {
                       </div>
                     </div>
                     
+                    <div v-if="canCaptureContenedorFolio" class="lg:col-span-2">
+                      <label class="block text-[10px] font-bold text-slate-600 dark:text-slate-400 mb-1.5 uppercase tracking-wider">Contenedor / Folio</label>
+                      <input type="text" maxlength="50" v-model.trim="avancesMultiServicio[servicio.id].contenedor_folio" placeholder="Ej. MSKU1234567"
+                             class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-200 dark:bg-slate-900 dark:text-slate-100 transition-all bg-white" />
+                    </div>
+
                     <!-- Comentario -->
-                    <div :class="avancesMultiServicio[servicio.id].tarifa_tipo !== 'NORMAL' ? 'lg:col-span-5' : 'lg:col-span-7'">
+                    <div :class="avancesMultiServicio[servicio.id].tarifa_tipo !== 'NORMAL' ? (canCaptureContenedorFolio ? 'lg:col-span-3' : 'lg:col-span-5') : (canCaptureContenedorFolio ? 'lg:col-span-5' : 'lg:col-span-7')">
                       <label class="block text-[10px] font-bold text-slate-600 dark:text-slate-400 mb-1.5 uppercase tracking-wider">Comentario <span class="font-normal text-slate-400">(opcional)</span></label>
                       <textarea v-model="avancesMultiServicio[servicio.id].comentario" rows="2"
                                 placeholder="Describe el progreso..."
@@ -2171,6 +2194,9 @@ function aplicarFaltantesServicio(servicioId) {
                             </div>
                             <p v-if="avance.comentario" class="text-xs text-slate-600 mt-2 p-1.5 bg-white rounded border-l-2 border-purple-400 dark:bg-slate-900/30 dark:text-slate-400 dark:border-purple-500">
                               {{ avance.comentario }}
+                            </p>
+                            <p v-if="showContenedorFolioHistory && avance.contenedor_folio" class="text-xs text-slate-700 dark:text-slate-300 mt-2">
+                              <strong class="font-semibold">Contenedor / Folio:</strong> {{ avance.contenedor_folio }}
                             </p>
                           </div>
                         </div>

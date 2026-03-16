@@ -38,5 +38,13 @@ class FeatureSeeder extends Seeder
                 'descripcion' => 'Habilita captura de SKU, Origen y Pedimento en Información del Servicio.',
             ]
         );
+
+        Feature::updateOrCreate(
+            ['key' => 'avance_contenedor_folio'],
+            [
+                'nombre' => 'Contenedor / Folio en avances',
+                'descripcion' => 'Permite capturar número de contenedor o folio al registrar avances y mostrarlo en el historial del servicio.',
+            ]
+        );
     }
 }

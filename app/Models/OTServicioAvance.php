@@ -15,6 +15,7 @@ class OTServicioAvance extends Model
         'precio_unitario_aplicado',
         'cantidad_registrada',
         'comentario',
+        'contenedor_folio',
         'created_by',
         'request_id',  // Para idempotencia
     ];

@@ -590,6 +590,7 @@ class OrdenController extends Controller
 
         // Detectar si es OT multi-servicio ANTES de validar
         $esMultiServicio = $orden->otServicios()->exists();
+        $canCaptureContenedorFolio = $this->canCaptureContenedorFolio($req->user(), $orden);
         
         // Validación condicional según tipo de OT
         $rules = [
@@ -598,6 +599,7 @@ class OrdenController extends Controller
             'items.*.id_item'       => ['required','integer'],
             'items.*.cantidad'      => ['required','integer','min:1'],
             'comentario'            => ['nullable','string','max:500'],
+            'contenedor_folio'      => ['nullable','string','max:50'],
             'tarifa_tipo'           => ['nullable','in:NORMAL,EXTRA,FIN_DE_SEMANA'],
             'precio_unitario_manual'=> ['nullable','numeric','min:0.0001'],
             'evidencias'            => ['nullable','array','min:1'],
@@ -642,6 +644,14 @@ class OrdenController extends Controller
         }
 
         $comentarioFinal = $req->comentario;
+        $contenedorFolio = null;
+        if ($canCaptureContenedorFolio) {
+            $contenedorFolio = isset($data['contenedor_folio']) ? trim((string) $data['contenedor_folio']) : null;
+            if ($contenedorFolio === '') {
+                $contenedorFolio = null;
+            }
+        }
+
         if ($tipoTarifa !== 'NORMAL') {
             $tag = '[TARIFA '.str_replace('_',' ', $tipoTarifa).': $'.number_format((float)$precioManual, 4, '.', '').']';
             $comentarioFinal = trim($tag.' '.(string)($comentarioFinal ?? ''));
@@ -664,7 +674,7 @@ class OrdenController extends Controller
 
         $justCompleted = false;
         try {
-        DB::transaction(function () use ($orden, $data, $req, &$justCompleted, $tipoTarifa, $precioManual, $comentarioFinal, $esMultiServicio, $otServicio, $invocationId) {
+        DB::transaction(function () use ($orden, $data, $req, &$justCompleted, $tipoTarifa, $precioManual, $comentarioFinal, $contenedorFolio, $esMultiServicio, $otServicio, $invocationId) {
             $pricing = app(\App\Domain\Servicios\PricingService::class);
             $cantAplicada = [];
             
@@ -760,6 +770,7 @@ class OrdenController extends Controller
                             'precio_unitario_aplicado' => $precioAplicado,
                             'cantidad_registrada' => $totalCantidadRegistrada,
                             'comentario' => $comentarioFinal,
+                            'contenedor_folio' => $contenedorFolio,
                             'created_by' => Auth::id(),
                         ]
                     );
@@ -792,6 +803,7 @@ class OrdenController extends Controller
                             'id_usuario' => Auth::id(),
                             'cantidad' => (int)$totalCantidadRegistrada,
                             'comentario' => trim($marker . ' ' . (string)($comentarioFinal ?? '')),
+                            'contenedor_folio' => $contenedorFolio,
                             'es_corregido' => false,
                         ]);
                     }
@@ -1030,6 +1042,7 @@ class OrdenController extends Controller
                             'id_usuario' => Auth::id(),
                             'cantidad' => $aplicada,
                             'comentario' => $comentarioFinal ?: null,
+                            'contenedor_folio' => $contenedorFolio,
                             'es_corregido' => $isCorregido,
                         ]);
                         $avancesCreados[] = $avanceCreado;
@@ -1319,6 +1332,11 @@ class OrdenController extends Controller
         if ($authUser instanceof \App\Models\User) {
             $isAdminOrCoord = $authUser->hasAnyRole(['admin','coordinador']);
         }
+        $avanceContenedorFolioEnabled = (bool) ($orden->centro?->hasFeature('avance_contenedor_folio') ?? false);
+        $canCaptureContenedorFolio = $avanceContenedorFolioEnabled
+            && $authUser instanceof \App\Models\User
+            && $authUser->hasAnyRole(['admin', 'coordinador', 'team_leader']);
+
         $canAsignar  = $isAdminOrCoord && $orden->estatus !== 'completada';
         $canDelete = false;
         $canRestore = false;
@@ -1621,6 +1639,7 @@ class OrdenController extends Controller
                         'precio_unitario_aplicado' => $avance->precio_unitario_aplicado,
                         'cantidad_registrada' => $avance->cantidad_registrada,
                         'comentario' => $avance->comentario,
+                        'contenedor_folio' => $avance->contenedor_folio,
                         'created_by' => $avance->createdBy ? [
                             'id' => $avance->createdBy->id,
                             'name' => $avance->createdBy->name,
@@ -1753,6 +1772,8 @@ class OrdenController extends Controller
                 'restore' => $canRestore,
                 'force_delete' => $canForceDelete,
                 'cancelar' => $canCancelar,
+                'capture_contenedor_folio' => $canCaptureContenedorFolio,
+                'show_contenedor_folio_history' => $avanceContenedorFolioEnabled,
             ],
             'debug' => [
                 'orden_team_leader_id' => (int)$orden->team_leader_id,
@@ -2542,6 +2563,19 @@ class OrdenController extends Controller
             $met = $item->calcularMetricas();
             return (int) ($met['total_cobrable'] ?? 0);
         });
+    }
+
+    private function canCaptureContenedorFolio(?\App\Models\User $user, Orden $orden): bool
+    {
+        if (!($user instanceof \App\Models\User)) {
+            return false;
+        }
+
+        if (!$user->hasAnyRole(['admin', 'coordinador', 'team_leader'])) {
+            return false;
+        }
+
+        return (bool) ($orden->centro?->hasFeature('avance_contenedor_folio') ?? false);
     }
 
     /**
