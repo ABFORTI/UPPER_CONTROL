@@ -370,8 +370,8 @@ function findMatchId(list, text, getLabel) {
 }
 
 // Handler para precarga desde Excel
-function handlePrefillLoaded({ prefill, archivo, servicios, is_multi, warnings }) {
-  console.log('📋 Datos precargados desde Excel:', { prefill, archivo, servicios, is_multi, warnings })
+function handlePrefillLoaded({ prefill, archivo, servicios, is_multi, warnings = [], resumenImportacion, erroresImportacion = [] }) {
+  console.log('📋 Datos precargados desde Excel:', { prefill, archivo, servicios, is_multi, warnings, resumenImportacion, erroresImportacion })
 
   // Guardar referencia del Excel (para persistir y descargar después)
   form.excel_stored_name = archivo?.stored_name || null
@@ -381,6 +381,25 @@ function handlePrefillLoaded({ prefill, archivo, servicios, is_multi, warnings }
   if (warnings.length > 0) {
     const msg = 'Advertencias al procesar el Excel:\n\n' + warnings.join('\n')
     alert(msg)
+  }
+
+  if (resumenImportacion) {
+    const resumenMsg = [
+      'Resumen de importación:',
+      `- Con servicio asignado: ${resumenImportacion.con_servicio_asignado || 0}`,
+      `- Pendiente de asignación: ${resumenImportacion.pendiente_asignacion || 0}`,
+      `- Fallidas: ${resumenImportacion.fallidas || 0}`,
+    ].join('\n')
+
+    if (Array.isArray(erroresImportacion) && erroresImportacion.length > 0) {
+      const detalleErrores = erroresImportacion
+        .slice(0, 10)
+        .map((e) => `- ${e?.fila ? `Fila ${e.fila}: ` : ''}${e?.motivo || 'Error de importación'}`)
+        .join('\n')
+      alert(`${resumenMsg}\n\nFilas fallidas:\n${detalleErrores}`)
+    } else {
+      alert(resumenMsg)
+    }
   }
   
   // Aplicar datos al formulario (vienen como texto)

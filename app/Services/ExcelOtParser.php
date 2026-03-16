@@ -275,19 +275,41 @@ class ExcelOtParser
         for ($row = $headerRow + 1; $row <= $highestRow; $row++) {
             $sv = $sheet->getCellByColumnAndRow($serviceCol, $row)->getValue();
             $svStr = trim((string) $sv);
-            if ($svStr === '') {
-                $emptyStreak++;
-                if ($emptyStreak >= 5) break;
-                continue;
-            }
-            $emptyStreak = 0;
-
             $qv = $qtyCol ? $sheet->getCellByColumnAndRow($qtyCol, $row)->getValue() : null;
             $pv = $priceCol ? $sheet->getCellByColumnAndRow($priceCol, $row)->getValue() : null;
             $tv = $tarifaCol ? $sheet->getCellByColumnAndRow($tarifaCol, $row)->getValue() : null;
             $skuv = $skuCol ? $sheet->getCellByColumnAndRow($skuCol, $row)->getValue() : null;
             $origenv = $origenCol ? $sheet->getCellByColumnAndRow($origenCol, $row)->getValue() : null;
             $pedimentov = $pedimentoCol ? $sheet->getCellByColumnAndRow($pedimentoCol, $row)->getValue() : null;
+
+            $skuStr = trim((string) $skuv);
+            $origenStr = trim((string) $origenv);
+            $pedimentoStr = trim((string) $pedimentov);
+            $qtyStr = trim((string) $qv);
+
+            // Fila realmente vacía: cortar después de varios renglones vacíos seguidos.
+            if ($svStr === '' && $skuStr === '' && $origenStr === '' && $pedimentoStr === '' && $qtyStr === '') {
+                $emptyStreak++;
+                if ($emptyStreak >= 5) break;
+                continue;
+            }
+            $emptyStreak = 0;
+
+            // Si no trae servicio pero sí SKU/origen/pedimento/cantidad, conservar la fila
+            // para crear un detalle pendiente de asignación en el controlador.
+            if ($svStr === '') {
+                $servicios[] = [
+                    'row_number' => $row,
+                    'nombre_servicio' => null,
+                    'cantidad' => $qv,
+                    'sku' => $skuv,
+                    'origen' => $origenv,
+                    'pedimento' => $pedimentov,
+                    'tipo_tarifa' => $tv ? trim((string) $tv) : 'NORMAL',
+                    'precio_unitario' => $pv,
+                ];
+                continue;
+            }
 
             $names = $this->splitServicios($svStr);
             $qtyLines = $this->splitServicios($qv);
@@ -298,6 +320,7 @@ class ExcelOtParser
                 if ($name === '') continue;
 
                 $servicios[] = [
+                    'row_number' => $row,
                     'nombre_servicio' => $name,
                     'cantidad' => $qtyLines[$i] ?? $qv,
                     'sku' => $skuv,

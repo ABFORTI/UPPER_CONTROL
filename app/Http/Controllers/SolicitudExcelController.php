@@ -70,27 +70,65 @@ class SolicitudExcelController extends Controller
 
             // Resolver servicios contra BD
             $servicios = [];
-            $noEncontrados = [];
+            $erroresImportacion = [];
+            $conServicioAsignado = 0;
+            $pendienteAsignacion = 0;
             foreach ($serviciosRaw as $s) {
-                $nombre = trim((string)($s['nombre_servicio'] ?? ''));
-                if ($nombre === '') continue;
+                $filaExcel = isset($s['row_number']) ? (int) $s['row_number'] : null;
+                $nombre = $this->parseTexto($s['nombre_servicio'] ?? null);
+                $skuFila = $this->parseTexto($s['sku'] ?? $prefill['sku'] ?? null);
+                $origenFila = $this->parseTexto($s['origen'] ?? $prefill['origen'] ?? null);
+                $pedimentoFila = $this->parseTexto($s['pedimento'] ?? $prefill['pedimento'] ?? null);
+                $cantidadFila = $this->parseCantidad($s['cantidad'] ?? $prefill['cantidad'] ?? null);
+                $tipoTarifaFila = (string)($s['tipo_tarifa'] ?? 'NORMAL');
+                $precioUnitarioFila = $this->parsePrecio($s['precio_unitario'] ?? null);
+
+                // Regla: Tipo de Servicio vacío + SKU vacío => fila inválida.
+                if ($nombre === null) {
+                    if ($skuFila === null) {
+                        $erroresImportacion[] = [
+                            'fila' => $filaExcel,
+                            'motivo' => 'Debe existir al menos un servicio o un SKU para identificar la fila.',
+                        ];
+                        continue;
+                    }
+
+                    $servicios[] = [
+                        'id_servicio' => null,
+                        'nombre_servicio' => 'Pendiente de asignación',
+                        'service_assignment_status' => 'pending',
+                        'cantidad' => $cantidadFila,
+                        'sku' => $skuFila,
+                        'origen' => $origenFila,
+                        'pedimento' => $pedimentoFila,
+                        'tipo_tarifa' => $tipoTarifaFila,
+                        'precio_unitario' => $precioUnitarioFila,
+                    ];
+                    $pendienteAsignacion++;
+                    continue;
+                }
 
                 $serv = $this->buscarServicioPorNombreOCodigo($nombre);
                 if (!$serv) {
-                    $noEncontrados[] = $nombre;
+                    $erroresImportacion[] = [
+                        'fila' => $filaExcel,
+                        'motivo' => "No se encontró el servicio en catálogo: {$nombre}",
+                    ];
                     continue;
                 }
 
                 $servicios[] = [
                     'id_servicio' => (int) $serv->id,
                     'nombre_servicio' => (string) $serv->nombre,
-                    'cantidad' => $this->parseCantidad($s['cantidad'] ?? $prefill['cantidad'] ?? null),
-                    'sku' => $this->parseTexto($s['sku'] ?? $prefill['sku'] ?? null),
-                    'origen' => $this->parseTexto($s['origen'] ?? $prefill['origen'] ?? null),
-                    'pedimento' => $this->parseTexto($s['pedimento'] ?? $prefill['pedimento'] ?? null),
-                    'tipo_tarifa' => (string)($s['tipo_tarifa'] ?? 'NORMAL'),
-                    'precio_unitario' => $this->parsePrecio($s['precio_unitario'] ?? null),
+                    'service_assignment_status' => 'assigned',
+                    'cantidad' => $cantidadFila,
+                    'sku' => $skuFila,
+                    'origen' => $origenFila,
+                    'pedimento' => $pedimentoFila,
+                    'tipo_tarifa' => $tipoTarifaFila,
+                    'precio_unitario' => $precioUnitarioFila,
                 ];
+                $conServicioAsignado++;
             }
 
             // Consistencia: si no detectó lista pero sí hay servicio simple, tratarlo como 1 servicio
@@ -102,6 +140,7 @@ class SolicitudExcelController extends Controller
                     $servicios[] = [
                         'id_servicio' => (int) $serv->id,
                         'nombre_servicio' => (string) $serv->nombre,
+                        'service_assignment_status' => 'assigned',
                         'cantidad' => $prefill['cantidad'] ?? null,
                         'sku' => $this->parseTexto($prefill['sku'] ?? null),
                         'origen' => $this->parseTexto($prefill['origen'] ?? null),
@@ -109,16 +148,49 @@ class SolicitudExcelController extends Controller
                         'tipo_tarifa' => 'NORMAL',
                         'precio_unitario' => null,
                     ];
+                    $conServicioAsignado++;
                 } else {
-                    $noEncontrados[] = $nombre;
+                    $erroresImportacion[] = [
+                        'fila' => null,
+                        'motivo' => "No se encontró el servicio en catálogo: {$nombre}",
+                    ];
                 }
             }
 
-            if (count($noEncontrados) > 0) {
+            // Consistencia adicional: si no hubo servicio, pero sí SKU global, permitir un pendiente.
+            if (count($servicios) === 0 && empty($datos['servicio'])) {
+                $skuGlobal = $this->parseTexto($prefill['sku'] ?? null);
+                if ($skuGlobal !== null) {
+                    $servicios[] = [
+                        'id_servicio' => null,
+                        'nombre_servicio' => 'Pendiente de asignación',
+                        'service_assignment_status' => 'pending',
+                        'cantidad' => $prefill['cantidad'] ?? null,
+                        'sku' => $skuGlobal,
+                        'origen' => $this->parseTexto($prefill['origen'] ?? null),
+                        'pedimento' => $this->parseTexto($prefill['pedimento'] ?? null),
+                        'tipo_tarifa' => 'NORMAL',
+                        'precio_unitario' => null,
+                    ];
+                    $pendienteAsignacion++;
+                }
+            }
+
+            $fallidas = count($erroresImportacion);
+            $totalProcesadas = $conServicioAsignado + $pendienteAsignacion + $fallidas;
+            $resumenImportacion = [
+                'con_servicio_asignado' => $conServicioAsignado,
+                'pendiente_asignacion' => $pendienteAsignacion,
+                'fallidas' => $fallidas,
+                'total_procesadas' => $totalProcesadas,
+            ];
+
+            if (count($servicios) === 0) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'No se encontraron estos servicios en catálogo: ' . implode(', ', array_values(array_unique($noEncontrados))),
-                    'servicios_no_encontrados' => array_values(array_unique($noEncontrados)),
+                    'message' => 'No se pudo importar ninguna fila válida. Verifica el archivo e intenta nuevamente.',
+                    'resumen_importacion' => $resumenImportacion,
+                    'errores_importacion' => $erroresImportacion,
                 ], 422);
             }
 
@@ -141,6 +213,15 @@ class SolicitudExcelController extends Controller
                 'prefill' => $prefill,
                 'servicios' => $servicios,
                 'is_multi' => $isMulti,
+                'resumen_importacion' => $resumenImportacion,
+                'errores_importacion' => $erroresImportacion,
+                'warnings' => $fallidas > 0
+                    ? [
+                        "Filas con servicio asignado: {$conServicioAsignado}",
+                        "Filas pendientes de asignación: {$pendienteAsignacion}",
+                        "Filas fallidas: {$fallidas}",
+                    ]
+                    : [],
             ]);
         } catch (\Exception $e) {
             Log::error('Error al parsear Excel de solicitud (web): ' . $e->getMessage(), [

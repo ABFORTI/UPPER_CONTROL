@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\Auth;
 use App\Domain\Servicios\PricingService;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Models\Activity;
 
 class SolicitudController extends Controller
@@ -332,6 +333,30 @@ class SolicitudController extends Controller
             return $value !== '' ? $value : null;
         };
 
+        // Validación condicional para importes multi-servicio:
+        // - id_servicio puede ser null
+        // - si id_servicio está vacío, SKU es obligatorio para identificar la fila
+        if ($esMultipleServicios) {
+            $erroresCondicionales = [];
+            $skuGlobal = $normalizeCustomField($req->input('sku'));
+
+            foreach ((array) $req->input('servicios', []) as $index => $servicioData) {
+                $servicioId = $servicioData['id_servicio'] ?? null;
+                $servicioId = is_string($servicioId) ? trim($servicioId) : $servicioId;
+                $skuItem = $normalizeCustomField($servicioData['sku'] ?? null) ?? $skuGlobal;
+
+                $servicioVacio = $servicioId === null || $servicioId === '' || (is_numeric($servicioId) && (int) $servicioId <= 0);
+
+                if ($servicioVacio && $skuItem === null) {
+                    $erroresCondicionales["servicios.$index.sku"] = 'Cuando Tipo de Servicio está vacío, SKU es obligatorio.';
+                }
+            }
+
+            if (!empty($erroresCondicionales)) {
+                throw ValidationException::withMessages($erroresCondicionales);
+            }
+        }
+
         // Para roles no privilegiados, deben tener centro_trabajo_id asignado
     if (!($u && $u->hasAnyRole(['admin','facturacion','calidad','control','comercial','Cliente_Gerente','Cliente_Supervisor'])) && (!$u || !$u->centro_trabajo_id)) {
             return back()->withErrors([
@@ -425,6 +450,8 @@ class SolicitudController extends Controller
                 ]);
                 
                 $pricing = app(\App\Domain\Servicios\PricingService::class);
+                $countAssigned = 0;
+                $countPending = 0;
                 
                 // Crear cada servicio asociado
                 foreach ($req->servicios as $index => $servicioData) {
@@ -445,6 +472,7 @@ class SolicitudController extends Controller
                     if ($servicioIdItem) {
                         $serv = ServicioEmpresa::findOrFail($servicioIdItem);
                         $assignmentStatus = 'assigned';
+                        $countAssigned++;
                         
                         // Determinar si usa tamaños
                         $usaTamanosCentro = \App\Models\ServicioCentro::where('id_centrotrabajo', $centroId)
@@ -456,6 +484,9 @@ class SolicitudController extends Controller
                         if (!$usaTamanosCentro) {
                             $precioUnitario = (float)$pricing->precioUnitario($centroId, $serv->id, null);
                         }
+                    }
+                    if (!$servicioIdItem) {
+                        $countPending++;
                     }
 
                     // Crear SolicitudServicio
@@ -513,7 +544,7 @@ class SolicitudController extends Controller
                 
                 return redirect()
                     ->route('solicitudes.show', $sol->id)
-                    ->with('ok', 'Solicitud con ' . count($req->servicios) . ' servicio(s) creada exitosamente');
+                    ->with('ok', 'Solicitud creada. Servicios asignados: ' . $countAssigned . ' | Pendientes de asignación: ' . $countPending . '.');
                     
             } catch (\Throwable $ex) {
                 DB::rollBack();

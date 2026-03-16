@@ -209,14 +209,16 @@ async function cargarYParsear() {
     }
 
     archivoProcesado.value = data.archivo || null
-    warnings.value = []
+    warnings.value = Array.isArray(data?.warnings) ? data.warnings : []
 
     emit('prefill-loaded', {
       prefill: data.prefill || {},
       archivo: archivoProcesado.value,
       servicios: data.servicios || [],
       is_multi: !!data.is_multi,
-      warnings: [],
+      warnings: warnings.value,
+      resumenImportacion: data.resumen_importacion || null,
+      erroresImportacion: data.errores_importacion || [],
     })
 
     console.log('✅ Excel procesado exitosamente:', data)
@@ -227,9 +229,28 @@ async function cargarYParsear() {
     const status = error?.response?.status
     const payload = error?.response?.data
 
-    if (status === 422 && payload?.errors) {
-      const messages = Object.values(payload.errors).flat().filter(Boolean)
-      alert('Errores de validación:\n\n' + messages.join('\n'))
+    if (status === 422) {
+      if (payload?.errors) {
+        const messages = Object.values(payload.errors).flat().filter(Boolean)
+        alert('Errores de validación:\n\n' + messages.join('\n'))
+        return
+      }
+
+      if (Array.isArray(payload?.errores_importacion)) {
+        const filas = payload.errores_importacion.map(e => {
+          const fila = e?.fila ? `Fila ${e.fila}: ` : ''
+          return `${fila}${e?.motivo || 'Error de importación'}`
+        })
+        const resumen = payload?.resumen_importacion
+        const resumenTxt = resumen
+          ? `\n\nResumen:\n- Con servicio asignado: ${resumen.con_servicio_asignado || 0}\n- Pendiente de asignación: ${resumen.pendiente_asignacion || 0}\n- Fallidas: ${resumen.fallidas || 0}`
+          : ''
+
+        alert((payload?.message || 'No se pudo procesar el archivo.') + resumenTxt + '\n\n' + filas.join('\n'))
+        return
+      }
+
+      alert(payload?.message || 'No se pudo procesar el archivo.')
       return
     }
 
