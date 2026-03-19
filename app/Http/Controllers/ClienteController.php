@@ -22,18 +22,25 @@ class ClienteController extends Controller
     public function autorizar(Request $req, Orden $orden)
     {
         $this->authorize('autorizarCliente', $orden);
-    $u = $req->user();
-        // Validación reforzada: dueño de la solicitud, admin, o gerente (antes 'cliente_centro') del mismo centro
-        $esDueno = (int)($orden->solicitud->id_cliente ?? 0) === (int)$u->id;
-        $centrosUsuario = $u->centros()->pluck('centros_trabajo.id')->map(fn($v)=>(int)$v)->all();
-        $primary = (int)($u->centro_trabajo_id ?? 0);
-        if ($primary) {
-            $centrosUsuario[] = $primary;
+        $u = $req->user();
+
+        if ((string)$orden->estatus !== 'completada') {
+            abort(422, 'La OT aún no está completada.');
         }
-        $centrosUsuario = array_values(array_unique($centrosUsuario));
-        $esClienteCentroMismo = $u->hasRole('Cliente_Gerente') && in_array((int)$orden->id_centrotrabajo, $centrosUsuario, true);
-        if (!$u->hasRole('admin') && !$esDueno && !$esClienteCentroMismo) abort(403);
+
         if ($orden->calidad_resultado !== 'validado') abort(422,'Aún no está validada por Calidad.');
+
+        if (!empty($orden->cliente_autorizada_at) || (string)$orden->estatus === 'autorizada_cliente') {
+            abort(422, 'La OT ya fue autorizada por cliente.');
+        }
+
+        $yaAutorizada = $orden->aprobaciones()
+            ->where('tipo', 'cliente')
+            ->whereIn('resultado', ['aprobado', 'autorizado'])
+            ->exists();
+        if ($yaAutorizada) {
+            abort(422, 'La OT ya fue autorizada por cliente.');
+        }
 
         Aprobacion::create([
             'aprobable_type'=> Orden::class,
@@ -53,7 +60,13 @@ class ClienteController extends Controller
         $this->act('ordenes')
             ->performedOn($orden)
             ->event('cliente_autoriza')
-            ->log("OT #{$orden->id} autorizada por cliente");
+            ->causedBy($u)
+            ->withProperties([
+                'authorized_by_user_id' => (int)$u->id,
+                'authorized_by_user_name' => (string)($u->name ?? ''),
+                'authorized_by_roles' => method_exists($u, 'roles') ? $u->roles->pluck('name')->values()->all() : [],
+            ])
+            ->log("OT #{$orden->id} autorizada por cliente por {$u->name}");
 
         return back()->with('ok','Has autorizado la OT.');
     }

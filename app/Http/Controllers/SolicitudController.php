@@ -23,12 +23,18 @@ class SolicitudController extends Controller
     public function index(Request $req)
     {
         $u = $req->user();
+        $isPrivilegedViewer = $u && method_exists($u, 'hasAnyRole')
+            ? $u->hasAnyRole(['admin','facturacion','gerente_upper'])
+            : false;
         $isCliente = method_exists($u, 'hasRole') ? $u->hasRole('Cliente_Supervisor') : false;
         $isClienteCentro = method_exists($u, 'hasRole') ? $u->hasRole('Cliente_Gerente') : false;
 
         $filters = [
             'estatus'  => $req->string('estatus')->toString(),
             'servicio' => $req->integer('servicio') ?: null,
+            'marca'    => $req->integer('marca') ?: null,
+            'centro'   => $req->integer('centro') ?: null,
+            'centro_costo' => $req->integer('centro_costo') ?: null,
             'folio'    => $req->string('folio')->toString(),
             'desde'    => $req->date('desde'),
             'hasta'    => $req->date('hasta'),
@@ -39,17 +45,44 @@ class SolicitudController extends Controller
 
         $canSeeDeleted = $u->hasAnyRole(['admin', 'superadmin']);
 
-    $q = Solicitud::with(['servicio','centro','centroCosto','marca'])
+        $centrosPermitidos = $this->allowedCentroIds($u);
+
+        if (!$isPrivilegedViewer && !empty($filters['centro_costo'])) {
+            $cc = \App\Models\CentroCosto::find($filters['centro_costo']);
+            if (!$cc || !in_array((int)$cc->id_centrotrabajo, array_map('intval', $centrosPermitidos), true)) {
+                $filters['centro_costo'] = null;
+            }
+        }
+
+        if (!$isPrivilegedViewer && !empty($filters['marca'])) {
+            $marca = \App\Models\Marca::find($filters['marca']);
+            if (!$marca || !in_array((int)$marca->id_centrotrabajo, array_map('intval', $centrosPermitidos), true)) {
+                $filters['marca'] = null;
+            }
+        }
+
+        $q = Solicitud::with(['servicio','centro','centroCosto','marca'])
             ->when($canSeeDeleted && $filters['show_deleted'], fn($qq) => $qq->withTrashed())
-            ->when(!$u->hasAnyRole(['admin','facturacion','calidad','control','comercial','gerente_upper','Cliente_Gerente','Cliente_Supervisor']),
-                fn($qq) => $qq->where('id_centrotrabajo', $u->centro_trabajo_id))
-            ->when($u->hasAnyRole(['facturacion','calidad','control','comercial','gerente_upper','Cliente_Gerente','Cliente_Supervisor']) && !$u->hasRole('admin'), function($qq) use ($u) {
-                $ids = $this->allowedCentroIds($u);
-                if (!empty($ids)) { $qq->whereIn('id_centrotrabajo', $ids); }
+            ->when(!$isPrivilegedViewer, function($qq) use ($centrosPermitidos) {
+                if (!empty($centrosPermitidos)) {
+                    $qq->whereIn('id_centrotrabajo', $centrosPermitidos);
+                } else {
+                    $qq->whereRaw('1=0');
+                }
+            })
+            ->when($isPrivilegedViewer && $filters['centro'], fn($qq)=>$qq->where('id_centrotrabajo', $filters['centro']))
+            ->when(!$isPrivilegedViewer && $filters['centro'], function($qq) use ($filters, $centrosPermitidos) {
+                if (in_array((int)$filters['centro'], array_map('intval',$centrosPermitidos), true)) {
+                    $qq->where('id_centrotrabajo', $filters['centro']);
+                }
             })
             ->when($isCliente && !$isClienteCentro, fn($qq)=>$qq->where('id_cliente',$u->id))
             ->when($filters['estatus'],  fn($qq,$v)=>$qq->where('estatus',$v))
             ->when($filters['servicio'], fn($qq,$v)=>$qq->where('id_servicio',$v))
+            ->when($filters['marca'], fn($qq,$v)=>$qq->where('id_marca',$v))
+            ->when($filters['centro_costo'], function($qq,$v){
+                $qq->where('id_centrocosto', $v);
+            })
             ->when($filters['folio'],    fn($qq,$v)=>$qq->where('folio','like',"%{$v}%"))
             ->when($filters['desde'] && $filters['hasta'], fn($qq)=>$qq->whereBetween(
                 'created_at', [$filters['desde']->startOfDay(), $filters['hasta']->endOfDay()]
@@ -62,11 +95,20 @@ class SolicitudController extends Controller
             })
             ->orderByDesc('id');
 
-        $data = $q->paginate(10)->withQueryString();
+        $hasAnyFilter =
+            !empty($filters['estatus'])
+            || !empty($filters['servicio'])
+            || !empty($filters['marca'])
+            || !empty($filters['centro'])
+            || !empty($filters['centro_costo'])
+            || !empty($filters['folio'])
+            || !empty($filters['desde'])
+            || !empty($filters['hasta'])
+            || !empty($filters['year'])
+            || !empty($filters['week'])
+            || !empty($filters['show_deleted']);
 
-    $paginator = $q->with(['servicio','centro','cliente','area','archivos','centroCosto','marca'])->paginate(10)->withQueryString();
-        // Transform each item to include a formatted 'fecha' field expected by the frontend
-        $paginator->getCollection()->transform(function($s) {
+        $transform = function($s) {
             // Mostrar exactamente lo guardado en BD (sin conversión de huso). Se formatea una sola vez a 'Y-m-d H:i'.
             $raw = $s->getRawOriginal('created_at');
             $fecha = null; $fechaHumana = null; $fechaIso = null;
@@ -100,12 +142,36 @@ class SolicitudController extends Controller
                 'fecha_iso' => $fechaIso,
                 'created_at_raw' => $raw,
             ];
-        });
+        };
+
+        if ($hasAnyFilter) {
+            $all = $q->with(['servicio','centro','cliente','area','archivos','centroCosto','marca'])->get()->map($transform)->values();
+            $data = [ 'data' => $all ];
+        } else {
+            $paginator = $q->with(['servicio','centro','cliente','area','archivos','centroCosto','marca'])->paginate(10)->withQueryString();
+            $paginator->getCollection()->transform($transform);
+            $data = $paginator;
+        }
+
+        $centrosLista = $isPrivilegedViewer
+            ? \App\Models\CentroTrabajo::select('id','nombre')->orderBy('nombre')->get()
+            : \App\Models\CentroTrabajo::whereIn('id', $centrosPermitidos)->select('id','nombre')->orderBy('nombre')->get();
+
+        $centrosCostosLista = $isPrivilegedViewer
+            ? \App\Models\CentroCosto::select('id','nombre','id_centrotrabajo')->orderBy('nombre')->get()
+            : \App\Models\CentroCosto::whereIn('id_centrotrabajo', $centrosPermitidos)->select('id','nombre','id_centrotrabajo')->orderBy('nombre')->get();
+
+        $marcasLista = $isPrivilegedViewer
+            ? \App\Models\Marca::select('id','nombre','id_centrotrabajo')->orderBy('nombre')->get()
+            : \App\Models\Marca::whereIn('id_centrotrabajo', $centrosPermitidos)->select('id','nombre','id_centrotrabajo')->orderBy('nombre')->get();
 
         return Inertia::render('Solicitudes/Index', [
-            'data' => $paginator,
-            'filters' => $req->only(['estatus','servicio','folio','desde','hasta','year','week','show_deleted']),
+            'data' => $data,
+            'filters' => $req->only(['estatus','servicio','marca','centro','centro_costo','folio','desde','hasta','year','week','show_deleted']),
             'servicios'=> ServicioEmpresa::select('id','nombre')->orderBy('nombre')->get(),
+            'centros' => $centrosLista,
+            'centrosCostos' => $centrosCostosLista,
+            'marcas' => $marcasLista,
             'urls' => ['index' => route('solicitudes.index')],
             'can' => [
                 'manage_deleted' => $canSeeDeleted,
@@ -1126,17 +1192,39 @@ class SolicitudController extends Controller
     // PARA PRODUCCIÓN: 4320 minutos (72 horas)
     $timeoutMinutos = (int)config('business.ot_autorizacion_timeout_minutos', 1);
 
+        $centrosUsuario = $user->centros()->pluck('centros_trabajo.id')->map(fn($v)=>(int)$v)->all();
+        $centroPrincipal = (int)($user->centro_trabajo_id ?? 0);
+        if ($centroPrincipal) {
+            $centrosUsuario[] = $centroPrincipal;
+        }
+        $centrosUsuario = array_values(array_unique($centrosUsuario));
+
+        $esClienteGerente = $user->hasRole('Cliente_Gerente');
+
         // Buscar OTs que:
         // 1. Estén en estado 'completada' (aún no autorizadas por cliente)
         // 2. Tengan calidad_resultado = 'validado' (ya revisadas por calidad)
         // 3. No tengan autorización del cliente
-        $otsValidadas = \App\Models\Orden::whereHas('solicitud', function ($q) use ($user) {
-                $q->where('id_cliente', $user->id);
+        // 4. Alcance por rol:
+        //    - Cliente_Supervisor: solo sus solicitudes
+        //    - Cliente_Gerente: cualquier OT de sus centros
+        $otsValidadas = \App\Models\Orden::query()
+            ->when($esClienteGerente, function ($q) use ($centrosUsuario) {
+                if (!empty($centrosUsuario)) {
+                    $q->whereIn('id_centrotrabajo', $centrosUsuario);
+                } else {
+                    $q->whereRaw('1=0');
+                }
+            }, function ($q) use ($user) {
+                $q->whereHas('solicitud', function ($w) use ($user) {
+                    $w->where('id_cliente', $user->id);
+                });
             })
             ->where('estatus', 'completada')
             ->where('calidad_resultado', 'validado')
+            ->whereNull('cliente_autorizada_at')
             ->whereDoesntHave('aprobaciones', function($q) {
-                $q->where('tipo', 'cliente')->where('resultado', 'autorizado');
+                $q->where('tipo', 'cliente')->whereIn('resultado', ['aprobado', 'autorizado']);
             })
             ->with('solicitud:id,folio')
             ->get(['id', 'id_solicitud']);

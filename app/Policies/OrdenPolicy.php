@@ -8,6 +8,25 @@ use Illuminate\Support\Facades\Log;
 
 class OrdenPolicy
 {
+    private function isClientAuthorizationPending(Orden $o): bool
+    {
+        if (!empty($o->cliente_autorizada_at)) {
+            return false;
+        }
+
+        return !$o->aprobaciones()
+            ->where('tipo', 'cliente')
+            ->whereIn('resultado', ['aprobado', 'autorizado'])
+            ->exists();
+    }
+
+    private function isReadyForClientAuthorization(Orden $o): bool
+    {
+        return (string)$o->estatus === 'completada'
+            && (string)$o->calidad_resultado === 'validado'
+            && $this->isClientAuthorizationPending($o);
+    }
+
     private function userCentroIds(User $u): array
     {
         $ids = $u->centros()->pluck('centros_trabajo.id')->map(fn($v)=>(int)$v)->all();
@@ -34,7 +53,7 @@ class OrdenPolicy
     }
 
     public function viewAny(User $u): bool {
-        return $u->hasAnyRole(['admin','coordinador','team_leader','calidad','facturacion','Cliente_Supervisor','gerente_upper']);
+        return $u->hasAnyRole(['admin','coordinador','team_leader','calidad','facturacion','Cliente_Supervisor','Cliente_Gerente','gerente_upper']);
     }
 
     public function view(User $u, Orden $o): bool {
@@ -236,12 +255,19 @@ class OrdenPolicy
 
     // cliente autoriza
     public function autorizarCliente(User $u, Orden $o): bool {
+        if (!$this->isReadyForClientAuthorization($o)) {
+            return false;
+        }
+
         // Admin siempre
         if ($u->hasRole('admin')) return true;
+
         // Dueño de la solicitud
         if ((int)($o->solicitud?->id_cliente ?? 0) === (int)$u->id) return true;
+
         // Cliente con alcance a centro completo puede autorizar del mismo centro
         if ($u->hasRole('Cliente_Gerente') && in_array((int)$o->id_centrotrabajo, $this->userCentroIds($u), true)) return true;
+
         return false;
     }
 

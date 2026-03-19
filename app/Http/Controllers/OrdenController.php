@@ -1371,16 +1371,24 @@ class OrdenController extends Controller
                 if ($pendienteTamanos) { $canCalidad = false; }
             }
 
-            // Cliente autoriza: dueño de la solicitud (o admin) y calidad validada
+            // Cliente autoriza: usar policy centralizada para no divergir de backend
             $esDueno = ($orden->solicitud && (int)$orden->solicitud->id_cliente === (int)$authUser->id);
-            $canClienteAutorizar = ($authUser->hasRole('admin') || $esDueno)
-                && $orden->calidad_resultado === 'validado'
-                && $orden->estatus === 'completada';
+            $idsPermitidosCliente = $this->allowedCentroIds($authUser);
+            $mismoCentroCliente = in_array((int)$orden->id_centrotrabajo, array_map('intval', $idsPermitidosCliente), true);
+            $canClienteAutorizar = Gate::allows('autorizarCliente', $orden);
             // Motivos de bloqueo para diagnóstico front-end
             $bloqueosCliente = [];
-            if (!$esDueno && !$authUser->hasRole('admin')) { $bloqueosCliente[] = 'No eres el dueño de la solicitud'; }
+            if (!$authUser->hasRole('admin') && !$esDueno && !($authUser->hasRole('Cliente_Gerente') && $mismoCentroCliente)) {
+                $bloqueosCliente[] = 'No tienes permisos para autorizar esta OT';
+            }
+            if ($authUser->hasRole('Cliente_Gerente') && !$mismoCentroCliente) {
+                $bloqueosCliente[] = 'La OT pertenece a otro centro de trabajo';
+            }
             if ($orden->calidad_resultado !== 'validado') { $bloqueosCliente[] = 'Calidad aún no valida la OT'; }
             if ($orden->estatus !== 'completada') { $bloqueosCliente[] = 'La OT no está completada'; }
+            if (!empty($orden->cliente_autorizada_at) || (string)$orden->estatus === 'autorizada_cliente') {
+                $bloqueosCliente[] = 'La OT ya fue autorizada por cliente';
+            }
 
             // Facturar: rol facturacion o admin; mantener restricción de estatus
             // Nota: el acceso al centro ya se valida en authorizeFromCentro (facturacion tiene bypass)

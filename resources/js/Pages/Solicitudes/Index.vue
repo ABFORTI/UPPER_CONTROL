@@ -6,6 +6,9 @@ const props = defineProps({
   data: Object, // paginator
   filters: Object, // { estatus, servicio, year, week }
   servicios: Array,
+  marcas: Array,
+  centros: Array,
+  centrosCostos: Array,
   urls: Object, // { index }
   can: Object,
 })
@@ -14,20 +17,64 @@ const props = defineProps({
 const sel = ref(props.filters?.estatus || '')
 // Estatus fijos en orden coherente con el módulo
 const estatuses = computed(() => ['pendiente', 'aprobada', 'rechazada'])
-// Filtro avanzado único: servicio
+// Filtros alineados con la página de Órdenes
 const servicioSel = ref(props.filters?.servicio || '')
-const yearSel = ref(props.filters?.year || new Date().getFullYear())
+const marcaSel = ref(props.filters?.marca || '')
+const centroSel = ref(props.filters?.centro || '')
+const centroCostoSel = ref(props.filters?.centro_costo || '')
+const folioSel = ref(props.filters?.folio || '')
+const desdeSel = ref(props.filters?.desde || '')
+const hastaSel = ref(props.filters?.hasta || '')
+const yearSel = ref(props.filters?.year || '')
 const weekSel = ref(props.filters?.week || '')
 const showDeleted = ref(!!props.filters?.show_deleted)
+const availableYears = computed(() => {
+  const y = new Date().getFullYear()
+  return [y - 2, y - 1, y, y + 1]
+})
+const currentPeriod = computed(() => {
+  if (weekSel.value) return Number(weekSel.value)
+  const now = new Date()
+  const value = isoWeekNumber(now)
+  return value || '—'
+})
+const currentYear = computed(() => {
+  const parsed = Number(yearSel.value)
+  if (!Number.isNaN(parsed) && parsed) return parsed
+  return new Date().getFullYear()
+})
+const hasPagination = computed(() => Array.isArray(props.data?.links) && props.data.links.length > 0)
 const solicitudesBaseUrl = computed(() => String(props.urls?.index || '/solicitudes').replace(/\/+$/, ''))
 
 function applyFilter(){
-  const params = { estatus: sel.value }
+  const params = {}
+  if (sel.value) params.estatus = sel.value
   if (servicioSel.value) params.servicio = servicioSel.value
+  if (marcaSel.value) params.marca = marcaSel.value
+  if (centroSel.value) params.centro = centroSel.value
+  if (centroCostoSel.value) params.centro_costo = centroCostoSel.value
+  if (folioSel.value) params.folio = folioSel.value
+  if (desdeSel.value) params.desde = desdeSel.value
+  if (hastaSel.value) params.hasta = hastaSel.value
   if (yearSel.value) params.year = yearSel.value
   if (weekSel.value) params.week = weekSel.value
   if (showDeleted.value) params.show_deleted = 1
   router.get(props.urls.index, params, { preserveState: true, replace: true })
+}
+
+function clearFilters(){
+  sel.value = ''
+  servicioSel.value = ''
+  marcaSel.value = ''
+  centroSel.value = ''
+  centroCostoSel.value = ''
+  folioSel.value = ''
+  desdeSel.value = ''
+  hastaSel.value = ''
+  yearSel.value = ''
+  weekSel.value = ''
+  showDeleted.value = false
+  router.get(props.urls.index, {}, { preserveState: true, replace: true })
 }
 
 function eliminarSolicitud(id){
@@ -97,59 +144,127 @@ const roles = computed(() => page.props.auth?.user?.roles ?? [])
 const isGerente = computed(() => roles.value.includes('gerente_upper'))
 const isCoordinador = computed(() => roles.value.includes('coordinador'))
 
+function isoWeekNumber(dateStr){
+  if (!dateStr) return ''
+  const d = new Date(dateStr)
+  if (isNaN(d)) return ''
+  const target = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()))
+  const dayNr = target.getUTCDay() || 7
+  target.setUTCDate(target.getUTCDate() + 4 - dayNr)
+  const yearStart = new Date(Date.UTC(target.getUTCFullYear(), 0, 1))
+  return Math.ceil((((target - yearStart) / 86400000) + 1) / 7)
+}
+
 </script>
 
 
 <template>
-  <div class="max-w-none px-1 py-3 sm:px-2 lg:px-3">
-    <!-- Tarjeta principal -->
-    <div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
-      <!-- Header integrado -->
-      <div class="px-2 pt-3 pb-2 sm:px-3 lg:px-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-        <h1 class="font-display text-2xl sm:text-3xl font-semibold tracking-wide uppercase text-slate-900 dark:text-slate-100">Solicitudes</h1>
-        <a v-if="!isGerente && !isCoordinador" href="./solicitudes/create" class="btn btn-primary w-full sm:w-auto text-center self-start sm:self-end">AGREGAR +</a>
-      </div>
-
-      <!-- Acciones y filtros -->
-      <div class="px-2 py-2 sm:px-3 lg:px-4 space-y-3 md:space-y-0 md:flex md:flex-wrap md:items-center md:justify-between md:gap-4">
-        <div class="flex flex-col sm:flex-row sm:items-center gap-2 w-full md:w-auto">
-          <button @click="downloadExcel" class="w-full sm:w-auto px-4 py-2 rounded text-white font-semibold shadow-sm shadow-green-500/20" style="background:#22c55e">Excel</button>
-          <button @click="copyTable" class="w-full sm:w-auto px-4 py-2 rounded text-white font-semibold shadow-sm shadow-slate-500/20" style="background:#64748b">Copiar</button>
+  <div class="max-w-none px-2 py-1.5 sm:px-3 lg:px-4">
+    <div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm px-2.5 py-2 sm:px-3 sm:py-2.5">
+      <div class="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+        <div class="min-w-0">
+          <h1 class="font-display text-xl sm:text-2xl font-semibold tracking-wide uppercase text-slate-900 dark:text-slate-100 leading-tight">SOLICITUDES</h1>
         </div>
 
-        <div class="flex flex-col gap-3 w-full md:w-auto md:flex-row md:flex-wrap md:items-center md:justify-end md:gap-3">
-          <!-- Año -->
-          <select v-model="yearSel" @change="applyFilter" class="border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 p-2 rounded w-full md:w-auto md:min-w-[120px]">
-            <option v-for="y in [yearSel-2, yearSel-1, yearSel, yearSel+1]" :key="y" :value="y">{{ y }}</option>
+        <div class="flex w-full flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-end lg:w-auto">
+          <div class="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-900/5 px-2.5 py-1.5">
+            <div class="leading-tight">
+              <div class="text-[0.65rem] uppercase tracking-wide text-slate-500">Periodo actual</div>
+              <div class="text-base font-semibold text-slate-900">Periodo {{ currentPeriod }}</div>
+            </div>
+            <div class="text-xs text-slate-500">Año {{ currentYear }}</div>
+          </div>
+
+          <a v-if="!isGerente && !isCoordinador"
+             href="./solicitudes/create"
+             class="inline-flex h-9 items-center justify-center rounded-lg px-4 text-sm font-semibold text-white bg-[#1A73E8] hover:bg-[#1557b0] transition-colors">
+            AGREGAR +
+          </a>
+        </div>
+      </div>
+
+      <div class="mt-2 rounded-lg border border-slate-200/90 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/50 p-2.5">
+        <div class="grid grid-cols-1 gap-2 md:grid-cols-3 xl:grid-cols-12">
+          <div class="flex items-center gap-1.5 xl:col-span-2">
+            <button @click="downloadExcel" class="inline-flex h-9 items-center justify-center rounded-md px-3 text-sm font-semibold text-white shadow-sm shadow-green-500/20" style="background:#22c55e">Excel</button>
+            <button @click="copyTable" class="inline-flex h-9 items-center justify-center rounded-md px-3 text-sm font-semibold text-white shadow-sm shadow-slate-500/20" style="background:#64748b">Copiar</button>
+          </div>
+
+          <select v-model="centroSel" @change="applyFilter" class="h-9 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-2.5 text-sm text-slate-800 dark:text-slate-100 xl:col-span-3">
+            <option value="">Todos los centros</option>
+            <option v-for="c in (centros || [])" :key="c.id" :value="c.id">{{ c.nombre }}</option>
           </select>
 
-          <!-- Semana -->
-          <select v-model="weekSel" @change="applyFilter" class="border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 p-2 rounded w-full md:w-auto md:min-w-[140px]">
-            <option value="">Periodos</option>
-            <option v-for="w in 53" :key="w" :value="w">Periodo {{ w }}</option>
+          <select v-model="centroCostoSel" @change="applyFilter" class="h-9 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-2.5 text-sm text-slate-800 dark:text-slate-100 xl:col-span-3">
+            <option value="">Todos los centros de costo</option>
+            <option v-for="cc in (centrosCostos || [])" :key="cc.id" :value="cc.id">{{ cc.nombre }}</option>
           </select>
 
-          <!-- Select de servicio -->
-          <select v-model="servicioSel" @change="applyFilter" class="border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 p-2 rounded w-full md:w-auto md:min-w-[180px]">
+          <select v-model="servicioSel" @change="applyFilter" class="h-9 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-2.5 text-sm text-slate-800 dark:text-slate-100 xl:col-span-3">
             <option value="">Servicio: Todos</option>
             <option v-for="s in servicios" :key="s.id" :value="s.id">{{ s.nombre }}</option>
           </select>
 
-          <!-- Píldoras de estatus -->
-          <div class="flex flex-wrap sm:flex-nowrap gap-2 overflow-x-auto md:overflow-visible w-full py-1 md:w-auto">
-            <button @click="sel=''; applyFilter()" :class="['flex-shrink-0 px-4 py-2 rounded-full text-sm font-semibold border transition-colors', sel==='' ? 'text-white border-[#1A73E8]' : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-700']" :style="sel==='' ? 'background-color: #1A73E8' : ''">Todos</button>
-            <button v-for="e in estatuses" :key="e" @click="sel=e; applyFilter()" :class="['flex-shrink-0 px-4 py-2 rounded-full text-sm font-semibold border capitalize transition-colors', sel===e ? 'text-white border-[#1A73E8]' : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-700']" :style="sel===e ? 'background-color: #1A73E8' : ''">{{ e }}</button>
+          <select v-model="marcaSel" @change="applyFilter" class="h-9 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-2.5 text-sm text-slate-800 dark:text-slate-100 xl:col-span-3">
+            <option value="">Marca: Todas</option>
+            <option v-for="m in (marcas || [])" :key="m.id" :value="m.id">{{ m.nombre }}</option>
+          </select>
+
+          <input v-model="folioSel" @change="applyFilter" type="text" placeholder="Folio"
+                 class="h-9 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-2.5 text-sm text-slate-800 dark:text-slate-100 xl:col-span-1" />
+
+          <select v-model="yearSel" @change="applyFilter" class="h-9 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-2.5 text-sm text-slate-800 dark:text-slate-100 xl:col-span-1">
+            <option value="">Año</option>
+            <option v-for="y in availableYears" :key="y" :value="y">{{ y }}</option>
+          </select>
+
+          <select v-model="weekSel" @change="applyFilter" class="h-9 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-2.5 text-sm text-slate-800 dark:text-slate-100 xl:col-span-1">
+            <option value="">Periodos</option>
+            <option v-for="w in 53" :key="w" :value="w">Periodo {{ w }}</option>
+          </select>
+
+          <input
+            v-model="desdeSel"
+            type="date"
+            @change="applyFilter"
+            class="h-9 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-2.5 text-sm text-slate-800 dark:text-slate-100 xl:col-span-2"
+            title="Fecha inicial"
+          />
+
+          <input
+            v-model="hastaSel"
+            type="date"
+            @change="applyFilter"
+            class="h-9 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-2.5 text-sm text-slate-800 dark:text-slate-100 xl:col-span-2"
+            title="Fecha final"
+          />
+        </div>
+
+        <div class="mt-2 flex flex-wrap items-center justify-between gap-2">
+          <div class="flex flex-wrap items-center gap-1.5">
+            <button @click="sel=''; applyFilter()" :class="['px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors', sel==='' ? 'text-white border-[#1A73E8]' : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-700']" :style="sel==='' ? 'background-color: #1A73E8' : ''">Todos</button>
+            <button v-for="e in estatuses" :key="e" @click="sel=e; applyFilter()" :class="['px-3 py-1.5 rounded-full text-xs font-semibold border capitalize transition-colors', sel===e ? 'text-white border-[#1A73E8]' : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-700']" :style="sel===e ? 'background-color: #1A73E8' : ''">{{ e }}</button>
           </div>
 
-          <label v-if="can?.manage_deleted" class="inline-flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
-            <input type="checkbox" v-model="showDeleted" @change="applyFilter" />
-            Mostrar eliminados
-          </label>
+          <div class="flex flex-wrap items-center justify-end gap-2 ml-auto">
+            <label v-if="can?.manage_deleted" class="inline-flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+              <input type="checkbox" v-model="showDeleted" @change="applyFilter" />
+              Mostrar eliminados
+            </label>
+
+            <button
+              type="button"
+              @click="clearFilters"
+              class="inline-flex h-9 items-center justify-center rounded-md border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+            >
+              Limpiar filtros
+            </button>
+          </div>
         </div>
       </div>
 
       <!-- Tabla desktop -->
-      <div class="px-2 pb-3 sm:px-3 lg:px-4 hidden md:block">
+      <div class="mt-2 hidden md:block">
         <div class="rounded-lg shadow-sm border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/40">
           <div class="overflow-x-auto">
           <table class="w-full text-xs md:text-sm xl:text-[0.95rem] 2xl:text-base table-auto">
@@ -238,7 +353,7 @@ const isCoordinador = computed(() => roles.value.includes('coordinador'))
       </div>
 
       <!-- Listado móvil -->
-      <div class="md:hidden px-2 pb-3 sm:px-3 lg:px-4">
+      <div class="mt-2 md:hidden">
         <div class="space-y-4">
           <div v-for="s in data.data" :key="s.id" class="border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-sm bg-white dark:bg-slate-900/80 text-slate-800 dark:text-slate-100">
             <div class="flex items-start justify-between gap-3">
@@ -307,7 +422,7 @@ const isCoordinador = computed(() => roles.value.includes('coordinador'))
       </div>
 
       <!-- Paginación -->
-      <div class="px-2 sm:px-3 lg:px-4 py-3 flex flex-wrap items-center justify-center md:justify-end gap-2">
+      <div v-if="hasPagination" class="px-2 sm:px-3 lg:px-4 py-3 flex flex-wrap items-center justify-center md:justify-end gap-2">
         <button v-for="link in data.links" :key="link.label"
                 @click="toPage(link)"
                 class="px-3 py-1.5 rounded border text-sm min-w-[2.5rem] text-center border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"

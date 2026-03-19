@@ -41,6 +41,7 @@ function openBatch(){
 
 const sel = ref(props.filters?.estatus || '')
 const factSel = ref(props.filters?.facturacion || '')
+const idSel = ref(props.filters?.id || '')
 const centroSel = ref(props.filters?.centro || '')
 const centroCostoSel = ref(props.filters?.centro_costo || '')
 const desdeSel = ref(props.filters?.desde || '')
@@ -75,6 +76,7 @@ const currentYear = computed(() => {
 
 function applyFilter(){
   const params = {}
+  if (idSel.value) params.id = idSel.value
   if (sel.value) params.estatus = sel.value
   if (factSel.value) params.facturacion = factSel.value
   if (centroSel.value) params.centro = centroSel.value
@@ -88,6 +90,7 @@ function applyFilter(){
 }
 
 function clearFilters(){
+  idSel.value = ''
   sel.value = ''
   factSel.value = ''
   centroSel.value = ''
@@ -123,6 +126,9 @@ function cancelarOt(o){
 
 const exportParams = computed(() => {
   const base = { ...(props.filters || {}) }
+
+  if (idSel.value) base.id = idSel.value
+  else delete base.id
 
   // sincronizar con la UI (lo que el usuario ve actualmente)
   if (sel.value) base.estatus = sel.value
@@ -202,41 +208,38 @@ function isoWeekNumber(dateStr){
 </script>
 
 <template>
-  <div class="max-w-none px-1 py-3 sm:px-2 lg:px-3">
-    <div class="rounded-xl border bg-white shadow-sm overflow-hidden">
-      <div class="px-2 pt-3 pb-2 sm:px-3 lg:px-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-        <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight uppercase text-slate-900">Órdenes de Trabajo</h1>
-        <div class="inline-flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-900/5 px-3 py-2 self-start sm:self-end">
-          <div class="leading-tight">
-            <div class="text-[0.65rem] uppercase tracking-wide text-slate-500">Periodo actual</div>
-            <div class="text-lg font-semibold text-slate-900">Periodo {{ currentPeriod }}</div>
+  <div class="max-w-none px-2 py-1.5 sm:px-3 lg:px-4">
+    <div class="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden py-2 sm:py-2.5">
+      <div class="px-2 sm:px-3 lg:px-4">
+        <div class="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+          <h1 class="text-xl sm:text-2xl font-extrabold tracking-tight uppercase text-slate-900 leading-tight">ÓRDENES DE TRABAJO</h1>
+          <div class="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-900/5 px-2.5 py-1.5 self-start lg:self-auto">
+            <div class="leading-tight">
+              <div class="text-[0.62rem] uppercase tracking-wide text-slate-500">Periodo actual</div>
+              <div class="text-base font-semibold text-slate-900">Periodo {{ currentPeriod }}</div>
+            </div>
+            <div class="text-xs text-slate-500">Año {{ currentYear }}</div>
           </div>
-          <div class="text-xs text-slate-500">Año {{ currentYear }}</div>
-        </div>
-      </div>
-
-      <div class="px-2 py-2 sm:px-3 lg:px-4 space-y-3 lg:space-y-0 lg:flex lg:flex-wrap lg:items-center lg:justify-start lg:gap-4">
-        <div class="flex flex-col sm:flex-row sm:items-center gap-2 w-full lg:w-auto lg:justify-start">
-          <button v-if="canFacturar && anySelected" @click="openBatch" class="w-full sm:w-auto px-4 py-2 rounded text-white font-semibold" style="background:#1A73E8">Registrar factura</button>
         </div>
 
-        <div class="flex flex-col gap-3 w-full lg:w-auto lg:flex-row lg:flex-wrap lg:items-center lg:justify-start lg:gap-3">
-          <select v-model="centroSel" @change="applyFilter" class="border p-2 rounded w-full lg:w-auto lg:min-w-[180px]">
-            <option value="">Todos los centros</option>
-            <option v-for="c in (props.centros||[])" :key="c.id" :value="c.id">{{ c.nombre }}</option>
-          </select>
+        <div class="mt-2 rounded-lg border border-slate-200/90 bg-slate-50/70 p-2.5">
+          <div class="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-12">
+            <select v-model="centroSel" @change="applyFilter" class="h-9 rounded-md border border-slate-300 bg-white px-2.5 text-sm text-slate-800 xl:col-span-2" aria-label="Centro de trabajo">
+              <option value="">Centro de trabajo</option>
+              <option v-for="c in (props.centros||[])" :key="c.id" :value="c.id">{{ c.nombre }}</option>
+            </select>
 
-          <select v-model="centroCostoSel" @change="applyFilter" class="border p-2 rounded w-full lg:w-auto lg:min-w-[200px]">
-            <option value="">Todos los centros de costo</option>
+          <select v-model="centroCostoSel" @change="applyFilter" class="h-9 rounded-md border border-slate-300 bg-white px-2.5 text-sm text-slate-800 xl:col-span-2" aria-label="Centro de costo">
+            <option value="">Centro de costo</option>
             <option v-for="cc in (props.centrosCostos||[])" :key="cc.id" :value="cc.id">{{ cc.nombre }}</option>
           </select>
 
-          <select v-model="yearSel" @change="applyFilter" class="border p-2 rounded w-full lg:w-auto lg:min-w-[120px]">
+          <select v-model="yearSel" @change="applyFilter" class="h-9 rounded-md border border-slate-300 bg-white px-2.5 text-sm text-slate-800 xl:col-span-1" aria-label="Año">
             <option value="">Año</option>
             <option v-for="y in availableYears" :key="y" :value="y">{{ y }}</option>
           </select>
 
-          <select v-model="weekSel" @change="applyFilter" class="border p-2 rounded w-full lg:w-auto lg:min-w-[140px]">
+          <select v-model="weekSel" @change="applyFilter" class="h-9 rounded-md border border-slate-300 bg-white px-2.5 text-sm text-slate-800 xl:col-span-1" aria-label="Periodo">
             <option value="">Periodos</option>
             <option v-for="w in 53" :key="w" :value="w">Periodo {{ w }}</option>
           </select>
@@ -245,53 +248,71 @@ function isoWeekNumber(dateStr){
             v-model="desdeSel"
             type="date"
             @change="applyFilter"
-            class="border p-2 rounded w-full lg:w-auto lg:min-w-[165px]"
+            class="h-9 rounded-md border border-slate-300 bg-white px-2.5 text-sm text-slate-800 xl:col-span-1"
             title="Fecha inicial"
+            aria-label="Fecha inicial"
           />
 
           <input
             v-model="hastaSel"
             type="date"
             @change="applyFilter"
-            class="border p-2 rounded w-full lg:w-auto lg:min-w-[165px]"
+            class="h-9 rounded-md border border-slate-300 bg-white px-2.5 text-sm text-slate-800 xl:col-span-1"
             title="Fecha final"
+            aria-label="Fecha final"
+          />
+
+          <input
+            v-model="idSel"
+            type="number"
+            min="1"
+            @change="applyFilter"
+            class="h-9 rounded-md border border-slate-300 bg-white px-2.5 text-sm text-slate-800 xl:col-span-1"
+            placeholder="OT #"
+            aria-label="Buscar por OT"
           />
 
           <a :href="exportUrl"
-             class="w-full lg:w-auto inline-flex items-center justify-center px-4 py-2 rounded font-semibold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors">
+             class="inline-flex h-9 items-center justify-center rounded-md px-3 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors xl:col-span-1">
             Descargar Excel
           </a>
 
           <a v-if="props.urls?.export_facturacion" :href="exportFacturacionUrl"
-             class="w-full lg:w-auto inline-flex items-center justify-center px-4 py-2 rounded font-semibold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors">
+             class="inline-flex h-9 items-center justify-center rounded-md px-3 text-sm font-semibold text-white bg-teal-600 hover:bg-teal-700 transition-colors xl:col-span-1">
             Excel facturación
           </a>
 
-          <div class="flex flex-wrap sm:flex-nowrap gap-2 overflow-x-auto lg:overflow-visible w-full py-1 lg:w-auto lg:justify-start">
-            <button @click="sel=''; applyFilter()" :class="['flex-shrink-0 px-4 py-2 rounded-full text-sm font-semibold border transition-colors', sel==='' ? 'text-white border-[#1A73E8]' : 'bg-white text-slate-700 border-slate-300']" :style="sel==='' ? 'background-color: #1A73E8' : ''">Todos</button>
-            <button v-for="e in estatuses" :key="e" @click="sel=e; applyFilter()" :class="['flex-shrink-0 px-4 py-2 rounded-full text-sm font-semibold border capitalize transition-colors', sel===e ? 'text-white border-[#1A73E8]' : 'bg-white text-slate-700 border-slate-300']" :style="sel===e ? 'background-color: #1A73E8' : ''">{{ e }}</button>
-          </div>
-
-          <div class="flex items-center gap-2 w-full lg:w-auto lg:justify-start">
-            <button @click="factSel = (factSel==='sin_factura'?'': 'sin_factura'); applyFilter()"
-              :class="['w-full md:w-auto px-4 py-2 rounded-full text-sm font-semibold border uppercase transition-colors', factSel==='sin_factura' ? 'text-white border-[#0ea5e9]' : 'bg-white text-slate-700 border-slate-300']"
-              :style="factSel==='sin_factura' ? 'background-color: #0ea5e9' : ''">
-              Sin factura
-            </button>
-          </div>
-
-          <label v-if="props.can?.manage_deleted" class="inline-flex items-center gap-2 text-sm text-slate-700">
-            <input type="checkbox" v-model="showDeleted" @change="applyFilter" />
-            Mostrar eliminados
-          </label>
-
-          <button
-            type="button"
-            @click="clearFilters"
-            class="w-full lg:w-auto inline-flex items-center justify-center px-4 py-2 rounded border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 transition-colors"
-          >
-            Limpiar filtros
+          <button v-if="canFacturar && anySelected" @click="openBatch" class="inline-flex h-9 items-center justify-center rounded-md px-3 text-sm font-semibold text-white bg-[#1A73E8] hover:bg-[#1557b0] transition-colors xl:col-span-1">
+            Registrar factura
           </button>
+        </div>
+
+          <div class="mt-2 flex flex-wrap items-center justify-between gap-2">
+            <div class="flex flex-wrap items-center gap-1.5">
+              <button @click="sel=''; applyFilter()" :class="['px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors', sel==='' ? 'text-white border-[#1A73E8]' : 'bg-white text-slate-700 border-slate-300']" :style="sel==='' ? 'background-color: #1A73E8' : ''">Todos</button>
+              <button v-for="e in estatuses" :key="e" @click="sel=e; applyFilter()" :class="['px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors whitespace-nowrap', sel===e ? 'text-white border-[#1A73E8]' : 'bg-white text-slate-700 border-slate-300']" :style="sel===e ? 'background-color: #1A73E8' : ''">{{ e }}</button>
+              <button @click="factSel = (factSel==='sin_factura'?'': 'sin_factura'); applyFilter()"
+                :class="['px-3 py-1.5 rounded-full text-xs font-semibold border uppercase transition-colors whitespace-nowrap', factSel==='sin_factura' ? 'text-white border-[#0ea5e9]' : 'bg-white text-slate-700 border-slate-300']"
+                :style="factSel==='sin_factura' ? 'background-color: #0ea5e9' : ''">
+                SIN FACTURA
+              </button>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2 ml-auto">
+              <label v-if="props.can?.manage_deleted" class="inline-flex items-center gap-2 text-xs text-slate-700 whitespace-nowrap">
+                <input type="checkbox" v-model="showDeleted" @change="applyFilter" />
+                Mostrar eliminados
+              </label>
+
+              <button
+                type="button"
+                @click="clearFilters"
+                class="inline-flex h-9 items-center justify-center rounded-md border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+              >
+                Limpiar filtros
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
