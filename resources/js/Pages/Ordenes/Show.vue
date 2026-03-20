@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { router, useForm } from '@inertiajs/vue3'
 import { route } from 'ziggy-js'
 import FilePreview from '@/Components/FilePreview.vue'
@@ -327,6 +327,10 @@ const notaJustificacion = ref('')
 const cantidadServicioAdicional = ref('')
 const procesandoServicio = ref(false)
 const erroresServicio = ref({ servicio_id: null, cantidad: null, nota: null })
+const servicioAutocompleteRef = ref(null)
+const servicioAutocompleteAbierto = ref(false)
+const servicioBusqueda = ref('')
+const servicioIndiceActivo = ref(-1)
 
 // IDs de servicios ya asignados en esta OT
 const serviciosYaAsignados = computed(() => {
@@ -340,14 +344,149 @@ const servicioYaAsignado = computed(() => {
   return serviciosYaAsignados.value.includes(idSeleccionado)
 })
 
-function agregarServicioAdicional() {
-  console.log('🚀 Iniciando submit de servicio adicional')
-  console.log('📋 Estado DIRECTO:', {
-    servicio: servicioSeleccionado.value,
-    cantidad: cantidadServicioAdicional.value,
-    nota_length: notaJustificacion.value?.length || 0
+const serviciosFiltrados = computed(() => {
+  const term = String(servicioBusqueda.value || '').trim().toLowerCase()
+  const all = props.servicios_disponibles || []
+  if (!term) return all
+
+  return all.filter((servicio) => {
+    const nombre = String(servicio?.nombre || '').toLowerCase()
+    return nombre.includes(term)
   })
-  
+})
+
+const sinCoincidenciasServicio = computed(() => {
+  return servicioAutocompleteAbierto.value && serviciosFiltrados.value.length === 0
+})
+
+const servicioNombreSeleccionado = computed(() => {
+  if (!servicioSeleccionado.value) return ''
+  const id = Number(servicioSeleccionado.value)
+  const servicio = (props.servicios_disponibles || []).find((s) => Number(s.id) === id)
+  return servicio?.nombre || ''
+})
+
+const servicioDebeSeleccionarseDeLista = computed(() => {
+  return !!servicioBusqueda.value && !servicioSeleccionado.value
+})
+
+function servicioDeshabilitado(servicio) {
+  return serviciosYaAsignados.value.includes(Number(servicio?.id))
+}
+
+function cerrarListaServicios() {
+  servicioAutocompleteAbierto.value = false
+  servicioIndiceActivo.value = -1
+}
+
+function abrirListaServicios() {
+  servicioAutocompleteAbierto.value = true
+  nextTick(() => {
+    if (servicioIndiceActivo.value >= 0) return
+    servicioIndiceActivo.value = primerIndiceHabilitado()
+  })
+}
+
+function primerIndiceHabilitado() {
+  return serviciosFiltrados.value.findIndex((servicio) => !servicioDeshabilitado(servicio))
+}
+
+function moverIndiceServicio(direccion) {
+  const opciones = serviciosFiltrados.value
+  const total = opciones.length
+  if (!total) {
+    servicioIndiceActivo.value = -1
+    return
+  }
+
+  let idx = servicioIndiceActivo.value
+  for (let i = 0; i < total; i++) {
+    idx = (idx + direccion + total) % total
+    if (!servicioDeshabilitado(opciones[idx])) {
+      servicioIndiceActivo.value = idx
+      return
+    }
+  }
+
+  servicioIndiceActivo.value = -1
+}
+
+function seleccionarServicioAutocomplete(servicio) {
+  if (!servicio || servicioDeshabilitado(servicio)) return
+  servicioSeleccionado.value = String(servicio.id)
+  servicioBusqueda.value = servicio.nombre
+  erroresServicio.value.servicio_id = null
+  cerrarListaServicios()
+}
+
+function onInputServicioAutocomplete() {
+  if (servicioNombreSeleccionado.value && servicioBusqueda.value !== servicioNombreSeleccionado.value) {
+    servicioSeleccionado.value = ''
+  }
+  abrirListaServicios()
+}
+
+function onKeydownServicioAutocomplete(event) {
+  if (event.key === 'ArrowDown') {
+    event.preventDefault()
+    if (!servicioAutocompleteAbierto.value) abrirListaServicios()
+    moverIndiceServicio(1)
+    return
+  }
+
+  if (event.key === 'ArrowUp') {
+    event.preventDefault()
+    if (!servicioAutocompleteAbierto.value) abrirListaServicios()
+    moverIndiceServicio(-1)
+    return
+  }
+
+  if (event.key === 'Enter') {
+    if (!servicioAutocompleteAbierto.value) return
+    event.preventDefault()
+    const servicio = serviciosFiltrados.value[servicioIndiceActivo.value]
+    if (servicio) seleccionarServicioAutocomplete(servicio)
+    return
+  }
+
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    cerrarListaServicios()
+  }
+}
+
+function onFocusServicioAutocomplete() {
+  abrirListaServicios()
+}
+
+function onClickOutsideServicioAutocomplete(event) {
+  const root = servicioAutocompleteRef.value
+  if (!root) return
+  if (root.contains(event.target)) return
+  cerrarListaServicios()
+}
+
+watch(serviciosFiltrados, () => {
+  if (servicioIndiceActivo.value >= serviciosFiltrados.value.length) {
+    servicioIndiceActivo.value = primerIndiceHabilitado()
+  }
+})
+
+watch(servicioSeleccionado, () => {
+  if (!servicioSeleccionado.value) return
+  if (!servicioNombreSeleccionado.value) return
+  servicioBusqueda.value = servicioNombreSeleccionado.value
+})
+
+onMounted(() => {
+  document.addEventListener('mousedown', onClickOutsideServicioAutocomplete)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('mousedown', onClickOutsideServicioAutocomplete)
+})
+
+function agregarServicioAdicional() {
   // Limpiar errores
   erroresServicio.value = { servicio_id: null, cantidad: null, nota: null }
   
@@ -381,15 +520,13 @@ function agregarServicioAdicional() {
     nota: notaJustificacion.value.trim()
   }
   
-  console.log('📤 Enviando payload:', payload)
-  
   procesandoServicio.value = true
   
   router.post(props.urls.agregar_servicio_adicional, payload, {
     preserveScroll: true,
     onSuccess: () => {
-      console.log('✅ Servicio adicional guardado exitosamente')
       servicioSeleccionado.value = ''
+      servicioBusqueda.value = ''
       cantidadServicioAdicional.value = ''
       notaJustificacion.value = ''
       erroresServicio.value = { servicio_id: null, cantidad: null, nota: null }
@@ -397,11 +534,9 @@ function agregarServicioAdicional() {
       router.visit(window.location.href, { replace: true, preserveScroll: true })
     },
     onError: (errors) => {
-      console.error('❌ Error al guardar:', errors)
       erroresServicio.value = errors
     },
     onFinish: () => {
-      console.log('🏁 Request finalizada')
       procesandoServicio.value = false
     }
   })
@@ -2480,27 +2615,67 @@ function aplicarFaltantesServicio(servicioId) {
               
               <div>
                 <label for="servicio_adicional_select" class="block text-sm font-semibold text-gray-700 mb-2 dark:text-slate-200">Servicio *</label>
-                <div class="relative">
-                  <select 
+                <div ref="servicioAutocompleteRef" class="relative">
+                  <input
                     id="servicio_adicional_select"
-                    v-model.number="servicioSeleccionado"
-                    @change="console.log('🔄 Select changed:', servicioSeleccionado, typeof servicioSeleccionado, 'opciones:', servicios_disponibles.map(s => s.id))"
+                    v-model="servicioBusqueda"
+                    type="text"
                     required
-                    class="w-full px-4 py-3 pr-10 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-amber-100 focus:border-amber-400 transition-all duration-200 appearance-none bg-white text-gray-800 font-medium dark:bg-slate-900/60 dark:border-slate-700 dark:text-slate-100 dark:focus:ring-amber-400/40 dark:focus:border-amber-400/60"
-                    :class="{ 'border-red-500 dark:border-red-500': erroresServicio.servicio_id }">
-                    <option value="">— Selecciona un servicio —</option>
-                    <option v-for="servicio in servicios_disponibles" :key="'serv-'+servicio.id" :value="String(servicio.id)" :disabled="serviciosYaAsignados.includes(servicio.id)">
-                      {{ servicio.nombre }}{{ serviciosYaAsignados.includes(servicio.id) ? ' (Ya asignado)' : '' }}
-                    </option>
-                  </select>
-                  <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-400 dark:text-slate-500">
+                    autocomplete="off"
+                    placeholder="Escribe para buscar un servicio..."
+                    class="w-full pl-11 pr-10 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-amber-100 focus:border-amber-400 transition-all duration-200 bg-white text-gray-800 font-medium dark:bg-slate-900/60 dark:border-slate-700 dark:text-slate-100 dark:focus:ring-amber-400/40 dark:focus:border-amber-400/60"
+                    :class="{ 'border-red-500 dark:border-red-500': erroresServicio.servicio_id || servicioDebeSeleccionarseDeLista }"
+                    @focus="onFocusServicioAutocomplete"
+                    @input="onInputServicioAutocomplete"
+                    @keydown="onKeydownServicioAutocomplete"
+                  />
+                  <div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400 dark:text-slate-500">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35m1.6-5.15a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                    </svg>
+                  </div>
+                  <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-400 dark:text-slate-500">
+                    <svg class="w-5 h-5 transition-transform duration-200" :class="{ 'rotate-180': servicioAutocompleteAbierto }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
                     </svg>
+                  </div>
+
+                  <div
+                    v-if="servicioAutocompleteAbierto"
+                    class="absolute z-40 mt-2 w-full rounded-xl border-2 border-gray-200 bg-white shadow-xl overflow-hidden dark:border-slate-700 dark:bg-slate-900"
+                  >
+                    <ul class="max-h-60 overflow-auto py-1">
+                      <li
+                        v-for="(servicio, idx) in serviciosFiltrados"
+                        :key="'serv-ac-'+servicio.id"
+                        class="px-4 py-2.5 text-sm transition-colors"
+                        :class="[
+                          servicioDeshabilitado(servicio)
+                            ? 'cursor-not-allowed text-gray-400 dark:text-slate-500'
+                            : 'cursor-pointer text-gray-800 dark:text-slate-100',
+                          idx === servicioIndiceActivo && !servicioDeshabilitado(servicio)
+                            ? 'bg-amber-100 text-amber-900 dark:bg-amber-500/20 dark:text-amber-200'
+                            : ''
+                        ]"
+                        @mouseenter="servicioIndiceActivo = idx"
+                        @mousedown.prevent="seleccionarServicioAutocomplete(servicio)"
+                      >
+                        {{ servicio.nombre }}{{ servicioDeshabilitado(servicio) ? ' (Ya asignado)' : '' }}
+                      </li>
+                      <li
+                        v-if="sinCoincidenciasServicio"
+                        class="px-4 py-3 text-sm text-gray-500 dark:text-slate-400"
+                      >
+                        No se encontraron servicios
+                      </li>
+                    </ul>
                   </div>
                 </div>
                 <p v-if="erroresServicio.servicio_id" class="mt-2 text-sm text-red-600">
                   {{ erroresServicio.servicio_id }}
+                </p>
+                <p v-else-if="servicioDebeSeleccionarseDeLista" class="mt-2 text-sm text-red-600">
+                  Debes seleccionar un servicio de la lista.
                 </p>
                 <p v-if="servicioYaAsignado" class="mt-2 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-2 flex items-center gap-2">
                   <svg class="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
@@ -2539,7 +2714,6 @@ function aplicarFaltantesServicio(servicioId) {
                 <textarea 
                   id="justificacion_textarea"
                   v-model="notaJustificacion"
-                  @input="console.log('📝 Textarea input. servicio_id ahora es:', servicioSeleccionado, typeof servicioSeleccionado)"
                   required
                   minlength="10"
                   rows="3" 
@@ -2553,7 +2727,7 @@ function aplicarFaltantesServicio(servicioId) {
               
               <button 
                 type="submit"
-                :disabled="procesandoServicio || !servicioSeleccionado || servicioSeleccionado === '' || !cantidadServicioAdicional || Number(cantidadServicioAdicional) <= 0 || notaJustificacion.length < 10 || servicioYaAsignado"
+                :disabled="procesandoServicio || !servicioSeleccionado || servicioSeleccionado === '' || !cantidadServicioAdicional || Number(cantidadServicioAdicional) <= 0 || notaJustificacion.length < 10 || servicioYaAsignado || servicioDebeSeleccionarseDeLista"
                 class="w-full px-6 py-3 bg-gradient-to-r from-amber-600 to-orange-600 text-white font-bold rounded-xl shadow-lg hover:shadow-xl hover:scale-105 transform transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:scale-100 dark:from-amber-500 dark:to-orange-500">
                 <span v-if="servicioYaAsignado">⚠️ Servicio ya asignado a esta OT</span>
                 <span v-else-if="procesandoServicio">Agregando...</span>

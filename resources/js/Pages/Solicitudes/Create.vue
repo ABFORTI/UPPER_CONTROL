@@ -2,6 +2,7 @@
 import { computed, watch, ref } from 'vue'
 import { useForm, usePage } from '@inertiajs/vue3'
 import UploadSolicitudExcel from '@/Components/UploadSolicitudExcel.vue'
+import SearchableSelect from '@/Components/ui/SearchableSelect.vue'
 
 const page = usePage()
 const enabledFeatures = computed(() => page.props.auth?.features ?? [])
@@ -109,6 +110,48 @@ const filteredMarcas = computed(() => {
     return props.marcasPorCentro?.[cid] || []
   }
   return props.marcas || []
+})
+
+const centrosTrabajoOptions = computed(() => {
+  return (props.centros || []).map((c) => ({
+    value: c.id,
+    label: `${c.prefijo || ''} — ${c.nombre || ''}`,
+  }))
+})
+
+const centrosCostosOptions = computed(() => {
+  return (filteredCentrosCostos.value || []).map((cc) => ({
+    value: cc.id,
+    label: cc.nombre,
+  }))
+})
+
+const marcasOptions = computed(() => {
+  return (filteredMarcas.value || []).map((m) => ({
+    value: m.id,
+    label: m.nombre,
+  }))
+})
+
+const serviciosOptions = computed(() => {
+  return (filteredServicios.value || []).map((s) => ({
+    value: s.id,
+    label: `${s.nombre} ${serviceUsesSizesInCentro(s.id) ? '(Por tamaños)' : '(Unitario)'}`,
+  }))
+})
+
+const serviciosOptionsMultiples = computed(() => {
+  return (filteredServicios.value || []).map((s) => ({
+    value: s.id,
+    label: s.nombre,
+  }))
+})
+
+const areasOptions = computed(() => {
+  return (filteredAreas.value || []).map((a) => ({
+    value: a.id,
+    label: a.nombre,
+  }))
 })
 
 const servicio = computed(() => filteredServicios.value.find(s => s.id === Number(form.id_servicio)) || null)
@@ -535,7 +578,7 @@ function handlePrefillLoaded({ prefill, archivo, servicios, is_multi, warnings =
           />
           
           <!-- Sección: Información del Servicio -->
-          <div class="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
+          <div class="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-visible">
             <div class="px-6 py-4" style="background: linear-gradient(90deg, #1E1C8F 0%, #19176F 100%);">
               <h2 class="text-white font-semibold flex items-center gap-2">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -555,12 +598,14 @@ function handlePrefillLoaded({ prefill, archivo, servicios, is_multi, warnings =
                     Centro de Trabajo
                   </span>
                 </label>
-                <select 
-                  v-model="form.id_centrotrabajo" 
-                  class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none bg-gray-50 hover:bg-white"
-                >
-                  <option v-for="c in centros" :key="c.id" :value="c.id">{{ c.prefijo }} — {{ c.nombre }}</option>
-                </select>
+                <SearchableSelect
+                  v-model="form.id_centrotrabajo"
+                  :options="centrosTrabajoOptions"
+                  placeholder="Escribe para buscar centro de trabajo..."
+                  no-results-text="No se encontraron centros de trabajo"
+                  :error="!!form.errors.id_centrotrabajo"
+                  input-class="focus:border-blue-500 focus:ring-blue-100"
+                />
                 <p v-if="form.errors.id_centrotrabajo" class="text-red-600 text-sm mt-2 flex items-center gap-1">
                   <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                     <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
@@ -581,13 +626,17 @@ function handlePrefillLoaded({ prefill, archivo, servicios, is_multi, warnings =
                       <span class="text-red-500">*</span>
                     </span>
                   </label>
-                  <select 
-                    v-model="form.id_centrocosto" 
-                    class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all outline-none bg-gray-50 hover:bg-white"
-                  >
-                    <option :value="null">— Seleccione —</option>
-                    <option v-for="cc in filteredCentrosCostos" :key="cc.id" :value="cc.id">{{ cc.nombre }}</option>
-                  </select>
+                  <SearchableSelect
+                    v-model="form.id_centrocosto"
+                    :options="centrosCostosOptions"
+                    placeholder="Escribe para buscar centro de costos..."
+                    no-results-text="No se encontraron centros de costos"
+                    :show-empty-option="true"
+                    empty-option-label="— Seleccione —"
+                    :empty-value="null"
+                    :error="!!form.errors.id_centrocosto"
+                    input-class="focus:border-indigo-500 focus:ring-indigo-100"
+                  />
                   <p v-if="form.errors.id_centrocosto" class="text-red-600 text-sm mt-2 flex items-center gap-1">
                     <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                       <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
@@ -606,13 +655,17 @@ function handlePrefillLoaded({ prefill, archivo, servicios, is_multi, warnings =
                       <span class="text-xs text-gray-500 font-normal">(Opcional)</span>
                     </span>
                   </label>
-                  <select 
-                    v-model="form.id_marca" 
-                    class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-fuchsia-500 focus:ring-4 focus:ring-fuchsia-100 transition-all outline-none bg-gray-50 hover:bg-white"
-                  >
-                    <option :value="null">— Seleccione —</option>
-                    <option v-for="m in filteredMarcas" :key="m.id" :value="m.id">{{ m.nombre }}</option>
-                  </select>
+                  <SearchableSelect
+                    v-model="form.id_marca"
+                    :options="marcasOptions"
+                    placeholder="Escribe para buscar marca..."
+                    no-results-text="No se encontraron marcas"
+                    :show-empty-option="true"
+                    empty-option-label="— Seleccione —"
+                    :empty-value="null"
+                    :error="!!form.errors.id_marca"
+                    input-class="focus:border-fuchsia-500 focus:ring-fuchsia-100"
+                  />
                   <p v-if="form.errors.id_marca" class="text-red-600 text-sm mt-2 flex items-center gap-1">
                     <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                       <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
@@ -638,15 +691,17 @@ function handlePrefillLoaded({ prefill, archivo, servicios, is_multi, warnings =
                           <span class="text-red-500">*</span>
                         </span>
                       </label>
-                      <select 
-                        v-model="form.id_servicio" 
-                        class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none bg-gray-50 hover:bg-white"
-                      >
-                        <option value="">— Seleccione un servicio —</option>
-                        <option v-for="s in filteredServicios" :key="s.id" :value="s.id">
-                          {{ s.nombre }} {{ serviceUsesSizesInCentro(s.id) ? '(Por tamaños)' : '(Unitario)' }}
-                        </option>
-                      </select>
+                      <SearchableSelect
+                        v-model="form.id_servicio"
+                        :options="serviciosOptions"
+                        placeholder="Escribe para buscar un servicio..."
+                        no-results-text="No se encontraron servicios"
+                        :show-empty-option="true"
+                        empty-option-label="— Seleccione un servicio —"
+                        empty-value=""
+                        :error="!!form.errors.id_servicio"
+                        input-class="focus:border-blue-500 focus:ring-blue-100"
+                      />
                       <p v-if="form.errors.id_servicio" class="text-red-600 text-sm mt-2 flex items-center gap-1">
                         <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                           <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
@@ -779,15 +834,18 @@ function handlePrefillLoaded({ prefill, archivo, servicios, is_multi, warnings =
                           <label class="block text-xs font-semibold text-gray-600 mb-1">
                             Tipo de Servicio
                           </label>
-                          <select 
+                          <SearchableSelect
                             v-model="servicio.id_servicio"
-                            class="w-full px-3 py-2 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none bg-white text-sm"
-                          >
-                            <option value="">— Pendiente de asignación —</option>
-                            <option v-for="s in filteredServicios" :key="s.id" :value="s.id">
-                              {{ s.nombre }}
-                            </option>
-                          </select>
+                            :options="serviciosOptionsMultiples"
+                            placeholder="Escribe para buscar un servicio..."
+                            no-results-text="No se encontraron servicios"
+                            :show-empty-option="true"
+                            empty-option-label="— Pendiente de asignación —"
+                            empty-value=""
+                            :error="!!form.errors[`servicios.${index}.id_servicio`]"
+                            input-class="!py-2 !rounded-lg !border !border-gray-300 focus:!border-blue-500 focus:!ring-2 focus:!ring-blue-100 !text-sm"
+                            menu-class="!rounded-lg"
+                          />
                           <div v-if="!servicio.id_servicio" class="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-200">
                             <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
                             Pendiente de asignación
@@ -879,13 +937,17 @@ function handlePrefillLoaded({ prefill, archivo, servicios, is_multi, warnings =
                     <span class="text-xs text-gray-500 font-normal">(Opcional)</span>
                   </span>
                 </label>
-                <select
+                <SearchableSelect
                   v-model="form.id_area"
-                  class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none bg-gray-50 hover:bg-white"
-                >
-                  <option :value="null">— Sin seleccionar —</option>
-                  <option v-for="a in filteredAreas" :key="a.id" :value="a.id">{{ a.nombre }}</option>
-                </select>
+                  :options="areasOptions"
+                  placeholder="Escribe para buscar un área..."
+                  no-results-text="No se encontraron áreas"
+                  :show-empty-option="true"
+                  empty-option-label="— Sin seleccionar —"
+                  :empty-value="null"
+                  :error="!!form.errors.id_area"
+                  input-class="focus:border-blue-500 focus:ring-blue-100"
+                />
                 <p v-if="form.errors.id_area" class="text-red-600 text-sm mt-2 flex items-center gap-1">
                   <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                     <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
