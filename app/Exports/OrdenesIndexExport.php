@@ -64,6 +64,7 @@ class OrdenesIndexExport implements FromCollection, WithHeadings, ShouldAutoSize
                 'servicio',
                 'centro',
                 'teamLeader',
+                'avances.usuario',
                 'items.ajustes',
                 'solicitud.cliente',
                 'solicitud.centroCosto',
@@ -72,6 +73,7 @@ class OrdenesIndexExport implements FromCollection, WithHeadings, ShouldAutoSize
                 'facturas',
                 'area',
                 'otServicios.servicio',
+                'otServicios.avances.createdBy',
                 'otServicios.items.ajustes',
             ])
             ->when(!$isPrivilegedViewer, function (Builder $qq) use ($centrosPermitidos) {
@@ -166,6 +168,9 @@ class OrdenesIndexExport implements FromCollection, WithHeadings, ShouldAutoSize
                         $marca = $o->solicitud?->marca?->nombre ?? null;
                         $departamento = trim((string) ($o->solicitud?->centroCosto?->nombre ?? '')) ?: null;
                         $areaSolicita = $o->area?->nombre ?? null;
+                        $comentariosAvances = $this->construirComentariosAvances(
+                            $s->relationLoaded('avances') ? $s->avances : collect()
+                        );
 
                         $serviceItems = $s->relationLoaded('items') ? $s->items : collect();
 
@@ -196,6 +201,7 @@ class OrdenesIndexExport implements FromCollection, WithHeadings, ShouldAutoSize
                                     $departamento,
                                     $areaSolicita,
                                     $solicitante,
+                                    $comentariosAvances,
                                 ]);
                             }
 
@@ -226,6 +232,7 @@ class OrdenesIndexExport implements FromCollection, WithHeadings, ShouldAutoSize
                             $departamento,
                             $areaSolicita,
                             $solicitante,
+                            $comentariosAvances,
                         ]);
                     }
                 } else {
@@ -234,6 +241,9 @@ class OrdenesIndexExport implements FromCollection, WithHeadings, ShouldAutoSize
                     $marca = $o->solicitud?->marca?->nombre ?? null;
                     $departamento = trim((string) ($o->solicitud?->centroCosto?->nombre ?? '')) ?: null;
                     $areaSolicita = $o->area?->nombre ?? null;
+                    $comentariosAvances = $this->construirComentariosAvances(
+                        $o->relationLoaded('avances') ? $o->avances : collect()
+                    );
 
                     $ordenItems = $o->relationLoaded('items') ? $o->items : collect();
                     if ($ordenItems->count() > 0) {
@@ -262,6 +272,7 @@ class OrdenesIndexExport implements FromCollection, WithHeadings, ShouldAutoSize
                                 $departamento,
                                 $areaSolicita,
                                 $solicitante,
+                                $comentariosAvances,
                             ]);
                         }
 
@@ -290,6 +301,7 @@ class OrdenesIndexExport implements FromCollection, WithHeadings, ShouldAutoSize
                         $departamento,
                         $areaSolicita,
                         $solicitante,
+                        $comentariosAvances,
                     ]);
                 }
             }
@@ -317,6 +329,7 @@ class OrdenesIndexExport implements FromCollection, WithHeadings, ShouldAutoSize
             'DEPARTAMENTO',
             'AREA QUE SOLICITA',
             'SOLICITANTE',
+            'Comentarios de avances',
         ];
     }
 
@@ -332,7 +345,7 @@ class OrdenesIndexExport implements FromCollection, WithHeadings, ShouldAutoSize
 
     public function styles(Worksheet $sheet)
     {
-        $sheet->getStyle('A1:P1')->applyFromArray([
+        $sheet->getStyle('A1:Q1')->applyFromArray([
             'font' => [
                 'bold' => true,
                 'color' => ['rgb' => 'FFFFFF'],
@@ -354,6 +367,7 @@ class OrdenesIndexExport implements FromCollection, WithHeadings, ShouldAutoSize
         $sheet->getStyle('N:N')->getAlignment()->setWrapText(true);
         $sheet->getStyle('O:O')->getAlignment()->setWrapText(true);
         $sheet->getStyle('P:P')->getAlignment()->setWrapText(true);
+        $sheet->getStyle('Q:Q')->getAlignment()->setWrapText(true);
 
         return [];
     }
@@ -366,7 +380,7 @@ class OrdenesIndexExport implements FromCollection, WithHeadings, ShouldAutoSize
                 $sheet->freezePane('A2');
 
                 $highestRow = $sheet->getHighestRow();
-                $range = 'A1:P' . $highestRow;
+                $range = 'A1:Q' . $highestRow;
 
                 $sheet->getStyle($range)->applyFromArray([
                     'borders' => [
@@ -443,6 +457,55 @@ class OrdenesIndexExport implements FromCollection, WithHeadings, ShouldAutoSize
         $itemConPrecio = $items->firstWhere('precio_unitario', '!=', null);
 
         return $itemConPrecio ? (float) $itemConPrecio->precio_unitario : 0.0;
+    }
+
+    private function construirComentariosAvances(Collection $avances): ?string
+    {
+        if ($avances->isEmpty()) {
+            return null;
+        }
+
+        $lineas = $avances
+            ->filter(function ($avance) {
+                return trim((string) ($avance->comentario ?? '')) !== '';
+            })
+            ->sortBy('created_at')
+            ->map(function ($avance) {
+                $comentario = trim((string) ($avance->comentario ?? ''));
+                $usuario = $avance->createdBy?->name
+                    ?? $avance->usuario?->name
+                    ?? 'Sistema';
+
+                $fecha = $this->formatearFechaComentario($avance->created_at ?? null);
+                $contexto = $fecha
+                    ? "[{$fecha} - {$usuario}]"
+                    : "[{$usuario}]";
+
+                return $contexto . ' ' . $comentario;
+            })
+            ->values();
+
+        if ($lineas->isEmpty()) {
+            return null;
+        }
+
+        return $lineas->implode("\n");
+    }
+
+    private function formatearFechaComentario(mixed $fecha): ?string
+    {
+        if (!$fecha) {
+            return null;
+        }
+
+        try {
+            $dt = $fecha instanceof Carbon ? $fecha : Carbon::parse($fecha);
+            $texto = $dt->format('d/m/Y h:i A');
+
+            return str_replace(['AM', 'PM'], ['a. m.', 'p. m.'], $texto);
+        } catch (\Throwable $e) {
+            return null;
+        }
     }
 
     private function allowedCentroIds(User $u): array

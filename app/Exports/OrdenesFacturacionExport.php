@@ -13,10 +13,13 @@ use Illuminate\Support\Carbon;
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\ShouldAutoSize;
 use Maatwebsite\Excel\Concerns\WithColumnFormatting;
+use Maatwebsite\Excel\Concerns\WithEvents;
 use Maatwebsite\Excel\Concerns\WithHeadings;
+use Maatwebsite\Excel\Events\AfterSheet;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
 
-class OrdenesFacturacionExport implements FromCollection, WithHeadings, ShouldAutoSize, WithColumnFormatting
+class OrdenesFacturacionExport implements FromCollection, WithHeadings, ShouldAutoSize, WithColumnFormatting, WithEvents
 {
     public function __construct(
         protected array $filters,
@@ -53,9 +56,11 @@ class OrdenesFacturacionExport implements FromCollection, WithHeadings, ShouldAu
             ->with([
                 'servicio',
                 'centro',
+                'avances.usuario',
                 'solicitud.centroCosto',
                 'solicitud.cliente',
                 'otServicios.servicio',
+                'otServicios.avances.createdBy',
                 'otServicios.items.ajustes',
                 'items.ajustes',
             ])
@@ -152,6 +157,9 @@ class OrdenesFacturacionExport implements FromCollection, WithHeadings, ShouldAu
                         $isPending = empty($otServicio->servicio_id) || $otServicio->service_assignment_status === 'pending';
                         $nombreServicio = $isPending ? 'Pendiente de asignación' : ($otServicio?->servicio?->nombre ?? null);
                         $itemsServicio = $otServicio->relationLoaded('items') ? $otServicio->items : collect();
+                        $comentariosAvances = $this->construirComentariosAvances(
+                            $otServicio->relationLoaded('avances') ? $otServicio->avances : collect()
+                        );
 
                         // Si hay desglose por items/tamanos, exportar una fila por item con su propio precio.
                         if (!$isPending && $itemsServicio->count() > 0) {
@@ -179,6 +187,7 @@ class OrdenesFacturacionExport implements FromCollection, WithHeadings, ShouldAu
                                     $precio,
                                     $datosOt,
                                     $fechaEntrega?->format('d/m/Y'),
+                                    $comentariosAvances,
                                 ]);
                             }
 
@@ -204,6 +213,7 @@ class OrdenesFacturacionExport implements FromCollection, WithHeadings, ShouldAu
                             $precio,
                             $datosOt,
                             $fechaEntrega?->format('d/m/Y'),
+                            $comentariosAvances,
                         ]);
                     }
 
@@ -212,6 +222,9 @@ class OrdenesFacturacionExport implements FromCollection, WithHeadings, ShouldAu
 
                 // Tradicional: si hay items, exportar una fila por item/tamano.
                 $nombreServicio = $orden?->servicio?->nombre ?? null;
+                $comentariosAvances = $this->construirComentariosAvances(
+                    $orden->relationLoaded('avances') ? $orden->avances : collect()
+                );
                 $ordenItems = $orden->relationLoaded('items') ? $orden->items : collect();
 
                 if ($ordenItems->count() > 0) {
@@ -239,6 +252,7 @@ class OrdenesFacturacionExport implements FromCollection, WithHeadings, ShouldAu
                             (float) $precio,
                             $datosOt,
                             $fechaEntrega?->format('d/m/Y'),
+                            $comentariosAvances,
                         ]);
                     }
 
@@ -262,6 +276,7 @@ class OrdenesFacturacionExport implements FromCollection, WithHeadings, ShouldAu
                     (float) $precio,
                     $datosOt,
                     $fechaEntrega?->format('d/m/Y'),
+                    $comentariosAvances,
                 ]);
             }
         });
@@ -282,6 +297,7 @@ class OrdenesFacturacionExport implements FromCollection, WithHeadings, ShouldAu
             'Precio',
             'DATOS DE LA ORDEN DE TRABAJO',
             'Fecha de entrega',
+            'Comentarios de avances',
         ];
     }
 
@@ -291,6 +307,66 @@ class OrdenesFacturacionExport implements FromCollection, WithHeadings, ShouldAu
             // Precio
             'H' => '"$" #,##0.00',
         ];
+    }
+
+    public function registerEvents(): array
+    {
+        return [
+            AfterSheet::class => function (AfterSheet $event) {
+                $sheet = $event->sheet->getDelegate();
+                $sheet->getStyle('K:K')->getAlignment()->setWrapText(true);
+                $sheet->getStyle('K:K')->getAlignment()->setVertical(Alignment::VERTICAL_TOP);
+            },
+        ];
+    }
+
+    private function construirComentariosAvances(Collection $avances): ?string
+    {
+        if ($avances->isEmpty()) {
+            return null;
+        }
+
+        $lineas = $avances
+            ->filter(function ($avance) {
+                return trim((string) ($avance->comentario ?? '')) !== '';
+            })
+            ->sortBy('created_at')
+            ->map(function ($avance) {
+                $comentario = trim((string) ($avance->comentario ?? ''));
+                $usuario = $avance->createdBy?->name
+                    ?? $avance->usuario?->name
+                    ?? 'Sistema';
+
+                $fecha = $this->formatearFechaComentario($avance->created_at ?? null);
+                $contexto = $fecha
+                    ? "[{$fecha} - {$usuario}]"
+                    : "[{$usuario}]";
+
+                return $contexto . ' ' . $comentario;
+            })
+            ->values();
+
+        if ($lineas->isEmpty()) {
+            return null;
+        }
+
+        return $lineas->implode("\n");
+    }
+
+    private function formatearFechaComentario(mixed $fecha): ?string
+    {
+        if (!$fecha) {
+            return null;
+        }
+
+        try {
+            $dt = $fecha instanceof Carbon ? $fecha : Carbon::parse($fecha);
+            $texto = $dt->format('d/m/Y h:i A');
+
+            return str_replace(['AM', 'PM'], ['a. m.', 'p. m.'], $texto);
+        } catch (\Throwable $e) {
+            return null;
+        }
     }
 
     private function cantidadCobrableServicio(OTServicio $servicio): int
