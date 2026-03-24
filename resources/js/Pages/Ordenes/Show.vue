@@ -16,6 +16,7 @@ const props = defineProps({
   servicios_con_tamanos: { type: Object, default: () => ({}) },
   precios_por_servicio: { type: Object, default: () => ({}) },
   servicios_disponibles: { type: Array, default: () => [] },
+  marcas_disponibles: { type: Array, default: () => [] },
   cortes: { type: Array, default: () => [] },
   delete_status: { type: Object, default: () => ({}) },
   auditoria: { type: Array, default: () => [] },
@@ -323,14 +324,19 @@ function asignarTL () { tlForm.patch(props.urls.asignar_tl, { preserveScroll: tr
 // ----- Agregar servicio adicional -----
 // Usar ref directo en lugar de useForm para evitar problemas de reactividad
 const servicioSeleccionado = ref('')
+const marcaSeleccionada = ref('')
+const marcaManual = ref('')
 const notaJustificacion = ref('')
 const cantidadServicioAdicional = ref('')
 const procesandoServicio = ref(false)
-const erroresServicio = ref({ servicio_id: null, cantidad: null, nota: null })
+const erroresServicio = ref({ servicio_id: null, cantidad: null, marca: null, nota: null })
 const servicioAutocompleteRef = ref(null)
 const servicioAutocompleteAbierto = ref(false)
 const servicioBusqueda = ref('')
 const servicioIndiceActivo = ref(-1)
+const MARCA_MANUAL_VALUE = '__manual__'
+const marcasDisponibles = computed(() => props.marcas_disponibles || [])
+const hayCatalogoMarcas = computed(() => (props.marcas_disponibles || []).length > 0)
 
 // IDs de servicios ya asignados en esta OT
 const serviciosYaAsignados = computed(() => {
@@ -488,7 +494,7 @@ onBeforeUnmount(() => {
 
 function agregarServicioAdicional() {
   // Limpiar errores
-  erroresServicio.value = { servicio_id: null, cantidad: null, nota: null }
+  erroresServicio.value = { servicio_id: null, cantidad: null, marca: null, nota: null }
   
   // Validación
   if (!servicioSeleccionado.value || servicioSeleccionado.value === '') {
@@ -514,10 +520,20 @@ function agregarServicioAdicional() {
     return
   }
   
+  const marcaFinal = hayCatalogoMarcas.value
+    ? (marcaSeleccionada.value === MARCA_MANUAL_VALUE ? String(marcaManual.value || '').trim() : String(marcaSeleccionada.value || '').trim())
+    : String(marcaManual.value || '').trim()
+
+  if (marcaFinal.length > 255) {
+    erroresServicio.value.marca = 'La marca no puede exceder 255 caracteres'
+    return
+  }
+
   const payload = {
     servicio_id: servicioId,
     cantidad,
-    nota: notaJustificacion.value.trim()
+    nota: notaJustificacion.value.trim(),
+    marca: marcaFinal || null,
   }
   
   procesandoServicio.value = true
@@ -527,11 +543,11 @@ function agregarServicioAdicional() {
     onSuccess: () => {
       servicioSeleccionado.value = ''
       servicioBusqueda.value = ''
+      marcaSeleccionada.value = ''
+      marcaManual.value = ''
       cantidadServicioAdicional.value = ''
       notaJustificacion.value = ''
-      erroresServicio.value = { servicio_id: null, cantidad: null, nota: null }
-      // Recargar página para mostrar el nuevo servicio
-      router.visit(window.location.href, { replace: true, preserveScroll: true })
+      erroresServicio.value = { servicio_id: null, cantidad: null, marca: null, nota: null }
     },
     onError: (errors) => {
       erroresServicio.value = errors
@@ -1871,6 +1887,9 @@ function aplicarFaltantesServicio(servicioId) {
                           Agregado por {{ servicio.added_by.name }} — {{ fmtDate(servicio.created_at) }}
                         </span>
                       </div>
+                      <div class="mt-1 text-[11px] text-white/80">
+                        <span class="font-semibold">Marca:</span> {{ servicio.marca || 'Sin asignar' }}
+                      </div>
                       <!-- SKU / Origen / Pedimento por servicio -->
                       <div v-if="servicioSku(servicio) || servicioOrigen(servicio) || servicioPedimento(servicio)" class="flex items-center gap-2 mt-1 flex-wrap">
                         <span v-if="servicioSku(servicio)" class="text-[10px] text-white/70 bg-white/10 px-1.5 py-0.5 rounded">SKU: {{ servicioSku(servicio) }}</span>
@@ -2688,6 +2707,47 @@ function aplicarFaltantesServicio(servicioId) {
               <div class="bg-blue-50 border-2 border-blue-200 rounded-xl p-3 dark:bg-blue-500/10 dark:border-blue-500/40">
                 <p class="text-sm text-blue-800 dark:text-blue-200">
                   <strong>Cantidad manual:</strong> Captura la cantidad real que corresponde a este servicio adicional. Esta cantidad es independiente de la OT principal.
+                </p>
+              </div>
+
+              <div>
+                <label for="marca_servicio_adicional" class="block text-sm font-semibold text-gray-700 mb-2 dark:text-slate-200">Marca</label>
+                <template v-if="hayCatalogoMarcas">
+                  <select
+                    id="marca_servicio_adicional"
+                    v-model="marcaSeleccionada"
+                    class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-amber-100 focus:border-amber-400 transition-all duration-200 bg-white text-gray-800 dark:bg-slate-900/60 dark:border-slate-700 dark:text-slate-100 dark:focus:ring-amber-400/40 dark:focus:border-amber-400/60"
+                    :class="{ 'border-red-500 dark:border-red-500': erroresServicio.marca }"
+                  >
+                    <option value="">Sin asignar</option>
+                    <option :value="MARCA_MANUAL_VALUE">Otra (capturar manualmente)</option>
+                    <option v-for="marca in marcasDisponibles" :key="marca.id" :value="marca.nombre">
+                      {{ marca.nombre }}
+                    </option>
+                  </select>
+                  <input
+                    v-if="marcaSeleccionada === MARCA_MANUAL_VALUE"
+                    v-model.trim="marcaManual"
+                    type="text"
+                    maxlength="255"
+                    placeholder="Escribe la marca"
+                    class="mt-3 w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-amber-100 focus:border-amber-400 transition-all duration-200 bg-white text-gray-800 dark:bg-slate-900/60 dark:border-slate-700 dark:text-slate-100 dark:focus:ring-amber-400/40 dark:focus:border-amber-400/60"
+                    :class="{ 'border-red-500 dark:border-red-500': erroresServicio.marca }"
+                  />
+                </template>
+                <template v-else>
+                  <input
+                    id="marca_servicio_adicional"
+                    v-model.trim="marcaManual"
+                    type="text"
+                    maxlength="255"
+                    placeholder="Ej. HP, Toyota"
+                    class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-amber-100 focus:border-amber-400 transition-all duration-200 bg-white text-gray-800 dark:bg-slate-900/60 dark:border-slate-700 dark:text-slate-100 dark:focus:ring-amber-400/40 dark:focus:border-amber-400/60"
+                    :class="{ 'border-red-500 dark:border-red-500': erroresServicio.marca }"
+                  />
+                </template>
+                <p v-if="erroresServicio.marca" class="mt-2 text-sm text-red-600">
+                  {{ erroresServicio.marca }}
                 </p>
               </div>
 

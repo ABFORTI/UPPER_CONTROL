@@ -23,6 +23,7 @@ class OTServicio extends Model
         'sku',
         'origen_customs',
         'pedimento',
+        'marca',
         'service_assignment_status',
         'service_locked',
         'service_assigned_at',

@@ -110,6 +110,7 @@ class OTMultiServicioController extends Controller
                         'sku' => $servicioData['sku'] ?? null,
                         'origen_customs' => $servicioData['origen'] ?? null,
                         'pedimento' => $servicioData['pedimento'] ?? null,
+                        'marca' => isset($servicioData['marca']) ? (trim((string) $servicioData['marca']) ?: null) : null,
                         'service_assignment_status' => $isPending ? 'pending' : 'assigned',
                         'service_locked' => !$isPending,
                     ]);

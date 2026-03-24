@@ -450,6 +450,7 @@ class OtSplitService
                 'subtotal'        => round($remanente * (float) $srvOrigen->precio_unitario, 2),
                 'origen'          => 'corte',
                 'nota'            => 'Remanente de OT #' . $ot->id . ', servicio #' . $srvOrigen->id,
+                'marca'           => $srvOrigen->marca,
             ]);
 
             $itemsOrigen = $srvOrigen->items()->get();

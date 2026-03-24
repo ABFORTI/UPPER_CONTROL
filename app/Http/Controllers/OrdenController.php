@@ -211,6 +211,7 @@ class OrdenController extends Controller
                         'cantidad'         => $solServicio->cantidad,
                         'precio_unitario'  => $solServicio->precio_unitario,
                         'subtotal'         => $solServicio->subtotal,
+                        'marca'            => $solicitud->marca?->nombre,
                     ]);
                     
                     // Crear item por defecto para este servicio
@@ -478,6 +479,7 @@ class OrdenController extends Controller
                         'sku'              => $solServicio->sku,
                         'origen_customs'   => $solServicio->origen,
                         'pedimento'        => $solServicio->pedimento,
+                        'marca'            => $solicitud->marca?->nombre,
                         'service_assignment_status' => $isPending ? 'pending' : 'assigned',
                         'service_locked'   => !$isPending,
                     ]);
@@ -1670,6 +1672,7 @@ class OrdenController extends Controller
                 return [
                     'id' => $otServicio->id,
                     'servicio' => $otServicio->servicio ? $otServicio->servicio->only(['id', 'nombre']) : null,
+                    'marca' => trim((string) ($otServicio->marca ?: ($orden->solicitud?->marca?->nombre ?? ''))) ?: null,
                     'assign_service_url' => route('ordenes.servicios.assignService', [
                         'orden' => $orden->id,
                         'otServicio' => $otServicio->id,
@@ -1828,6 +1831,7 @@ class OrdenController extends Controller
             'servicios_con_tamanos' => $serviciosConTamanos,
             'precios_por_servicio' => $preciosPorServicio,
             'servicios_disponibles' => $this->getServiciosDisponibles($orden->id_centrotrabajo),
+            'marcas_disponibles' => $this->getMarcasDisponibles($orden->id_centrotrabajo),
             'cortes' => $this->getCortesData($orden),
             'delete_status' => $flowCheck,
             'auditoria' => $auditoria,
@@ -2625,6 +2629,7 @@ class OrdenController extends Controller
             'servicio_id' => 'required|exists:servicios_empresa,id',
             'cantidad' => 'required|integer|gt:0',
             'nota' => 'required|string|max:1000',
+            'marca' => 'nullable|string|max:255',
         ]);
 
         $cantidadManual = (int) $validated['cantidad'];
@@ -2666,6 +2671,7 @@ class OrdenController extends Controller
                     'precio_unitario' => $precioUnitario,
                     'subtotal' => $precioUnitario * ($orden->total_planeado ?: 1),
                     'origen' => 'SOLICITADO',
+                    'marca' => $orden->solicitud?->marca?->nombre,
                 ]);
 
                 // Migrar items existentes al nuevo servicio
@@ -2708,6 +2714,7 @@ class OrdenController extends Controller
                 'origen' => 'ADICIONAL',
                 'added_by_user_id' => $user->id,
                 'nota' => $validated['nota'],
+                'marca' => trim((string) ($validated['marca'] ?? '')) ?: null,
             ]);
 
             // Crear item por defecto para el servicio adicional
@@ -2730,6 +2737,7 @@ class OrdenController extends Controller
                     'servicio_id' => $validated['servicio_id'],
                     'unidades' => $cantidadManual,
                     'nota' => $validated['nota'],
+                    'marca' => trim((string) ($validated['marca'] ?? '')) ?: null,
                 ])
                 ->log("OT #{$orden->id}: servicio adicional agregado por {$user->name}");
 
@@ -2905,6 +2913,7 @@ class OrdenController extends Controller
                         'sku' => $solServicio->sku,
                         'origen_customs' => $solServicio->origen,
                         'pedimento' => $solServicio->pedimento,
+                        'marca' => $ot->solicitud?->marca?->nombre,
                         'service_assignment_status' => $servicioId ? 'assigned' : 'pending',
                         'service_locked' => $servicioId ? true : false,
                         'service_assigned_at' => $servicioId ? now() : null,
@@ -2986,6 +2995,23 @@ class OrdenController extends Controller
                     'precio_base' => $servicioCentro->precio_base,
                 ];
             })
+            ->toArray();
+    }
+
+    /**
+     * Obtener marcas disponibles para un centro de trabajo.
+     */
+    private function getMarcasDisponibles(int $centroId): array
+    {
+        return \App\Models\Marca::query()
+            ->where('id_centrotrabajo', $centroId)
+            ->where('activo', true)
+            ->orderBy('nombre')
+            ->get(['id', 'nombre'])
+            ->map(fn ($marca) => [
+                'id' => (int) $marca->id,
+                'nombre' => (string) $marca->nombre,
+            ])
             ->toArray();
     }
 
