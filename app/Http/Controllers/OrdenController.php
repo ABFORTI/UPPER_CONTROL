@@ -2112,6 +2112,11 @@ class OrdenController extends Controller
             'show_deleted' => $req->boolean('show_deleted'),
         ];
 
+    // Si se selecciona periodo sin anio, asumir el anio actual para que el filtro aplique.
+    if (!empty($filters['week']) && empty($filters['year'])) {
+        $filters['year'] = (int) now()->year;
+    }
+
         $canSeeDeleted = $u && $u->hasAnyRole(['admin', 'superadmin']);
 
     // Centros permitidos para el usuario
@@ -2253,9 +2258,14 @@ class OrdenController extends Controller
             ? \App\Models\CentroTrabajo::select('id','nombre')->orderBy('nombre')->get()
             : \App\Models\CentroTrabajo::whereIn('id', $centrosPermitidos)->select('id','nombre')->orderBy('nombre')->get();
 
+        $responseFilters = $req->only(['id','estatus','calidad','servicio','centro','centro_costo','facturacion','desde','hasta','year','week','show_deleted']);
+        if (!empty($filters['week']) && empty($responseFilters['year']) && !empty($filters['year'])) {
+            $responseFilters['year'] = $filters['year'];
+        }
+
         return Inertia::render('Ordenes/Index', [
             'data'      => $data,
-            'filters'   => $req->only(['id','estatus','calidad','servicio','centro','centro_costo','facturacion','desde','hasta','year','week','show_deleted']),
+            'filters'   => $responseFilters,
             'servicios' => \App\Models\ServicioEmpresa::select('id','nombre')->orderBy('nombre')->get(),
             'centros'   => $centrosLista,
             'centrosCostos' => $u->hasAnyRole(['admin','facturacion','gerente_upper'])
@@ -2293,6 +2303,10 @@ class OrdenController extends Controller
             'week',
         ]);
 
+        if (!empty($filters['week']) && empty($filters['year'])) {
+            $filters['year'] = (int) now()->year;
+        }
+
         $format = $req->get('format', 'xlsx');
         $file = 'ordenes_trabajo_' . now()->format('Ymd_His') . '.' . $format;
 
@@ -2315,6 +2329,10 @@ class OrdenController extends Controller
             'year',
             'week',
         ]);
+
+        if (!empty($filters['week']) && empty($filters['year'])) {
+            $filters['year'] = (int) now()->year;
+        }
 
         $format = $req->get('format', 'xlsx');
         $file = 'excel_facturacion_' . now()->format('Ymd_His') . '.' . $format;

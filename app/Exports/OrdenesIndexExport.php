@@ -39,6 +39,10 @@ class OrdenesIndexExport implements FromCollection, WithHeadings, ShouldAutoSize
         $u = $this->user;
         $f = $this->filters;
 
+        if (!empty($f['week']) && empty($f['year'])) {
+            $f['year'] = (int) now()->year;
+        }
+
         $isPrivilegedViewer = $u->hasAnyRole(['admin', 'facturacion', 'gerente_upper']);
         $isTLStrict = $u->hasRole('team_leader') && !$u->hasAnyRole([
             'admin', 'coordinador', 'calidad', 'facturacion', 'gerente_upper', 'Cliente_Supervisor', 'Cliente_Gerente',
