@@ -104,8 +104,9 @@ function toPage(link){ if(link.url){ router.get(link.url, {}, {preserveState:tru
 
 // Exportar/Copy (cliente) - similar a Facturas
 function toCsv(items){
-  const headers = ['Folio','Usuario','Producto','Servicio','Centro','Centro de costos','Marca','Cantidad','Archivo','Estatus','Fecha']
+  const headers = ['ID Solicitud','Folio','Usuario','Producto','Servicio','Centro','Centro de costos','Marca','Cantidad','Archivo','Estatus','Periodo','Fecha']
   const rows = items.map(s => [
+    s.id_solicitud ?? s.id,
     s.folio || s.id,
     s.cliente?.name || '-',
     s.producto || '-',
@@ -116,6 +117,7 @@ function toCsv(items){
     s.cantidad ?? '',
     s.archivos?.length > 0 ? 'Sí' : 'No',
     s.estatus ?? '',
+    s.periodo ?? (isoWeekNumber(s.fecha_iso || s.created_at_raw || s.fecha) || ''),
     s.fecha || ''
   ])
   const csv = [headers, ...rows].map(r => r.map(v => `"${String(v??'').replaceAll('"','""')}"`).join(',')).join('\n')
@@ -133,7 +135,7 @@ function downloadExcel(){
 }
 async function copyTable(){
   try{
-    const tsv = (props.data?.data||[]).map(s => [s.folio||s.id, s.cliente?.name||'-', s.producto||'-', s.servicio?.nombre||'-', s.centro?.nombre||'-', s.centroCosto?.nombre||'-', s.marca?.nombre||'-', s.cantidad??'', s.archivos?.length > 0 ? 'Sí' : 'No', s.estatus??'', s.fecha||''].join('\t')).join('\n')
+    const tsv = (props.data?.data||[]).map(s => [s.id_solicitud ?? s.id, s.folio||s.id, s.cliente?.name||'-', s.producto||'-', s.servicio?.nombre||'-', s.centro?.nombre||'-', s.centroCosto?.nombre||'-', s.marca?.nombre||'-', s.cantidad??'', s.archivos?.length > 0 ? 'Sí' : 'No', s.estatus??'', s.periodo ?? (isoWeekNumber(s.fecha_iso || s.created_at_raw || s.fecha) || ''), s.fecha||''].join('\t')).join('\n')
     await navigator.clipboard.writeText(tsv)
   }catch(e){ console.warn('No se pudo copiar:', e) }
 }
@@ -270,6 +272,7 @@ function isoWeekNumber(dateStr){
           <table class="w-full text-xs md:text-sm xl:text-[0.95rem] 2xl:text-base table-auto">
             <thead class="bg-slate-800 text-white uppercase text-xs">
               <tr>
+                <th class="px-2 py-2 text-center align-top break-words xl:whitespace-nowrap">ID Solicitud</th>
                 <th class="px-2 py-2 text-center align-top break-words xl:whitespace-nowrap">Folio</th>
                 <th class="px-2 py-2 text-center align-top break-words xl:whitespace-nowrap">Usuario</th>
                 <th class="px-2 py-2 text-center align-top break-words xl:whitespace-nowrap">Producto</th>
@@ -280,12 +283,14 @@ function isoWeekNumber(dateStr){
                 <th class="px-2 py-2 text-center align-top break-words xl:whitespace-nowrap">Cantidad</th>
                 <th class="px-2 py-2 text-center align-top break-words xl:whitespace-nowrap">Archivo</th>
                 <th class="px-2 py-2 text-center align-top break-words xl:whitespace-nowrap">Estatus</th>
+                <th class="px-2 py-2 text-center align-top break-words xl:whitespace-nowrap">Periodo</th>
                 <th class="px-2 py-2 text-center align-top break-words xl:whitespace-nowrap">Fecha</th>
                 <th class="w-44 px-2 py-2 text-center align-top break-words xl:whitespace-nowrap">Acciones</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="s in data.data" :key="s.id" class="border-t border-slate-100 dark:border-slate-800 even:bg-slate-50 dark:even:bg-slate-800/40 hover:bg-slate-100/60 dark:hover:bg-slate-800/70 text-slate-800 dark:text-slate-100 transition-colors">
+                <td class="px-2 py-2 leading-snug text-center break-words whitespace-normal xl:max-w-[6rem] xl:px-3">{{ s.id_solicitud ?? s.id }}</td>
                 <td class="px-2 py-2 leading-snug text-center break-words whitespace-normal xl:max-w-[9rem] xl:px-3">{{ s.folio || s.id }}</td>
                 <td class="px-2 py-2 leading-snug text-center break-words whitespace-normal xl:max-w-[11rem] xl:px-3">{{ s.cliente?.name || '-' }}</td>
                 <td class="px-2 py-2 leading-snug text-center break-words whitespace-normal xl:max-w-[11rem] xl:px-3">{{ s.producto || '-' }}</td>
@@ -311,6 +316,7 @@ function isoWeekNumber(dateStr){
                           'bg-red-100 text-red-700 dark:bg-rose-500/20 dark:text-rose-200': s.estatus==='rechazada'
                         }">{{ s.estatus }}</span>
                 </td>
+                <td class="px-2 py-2 leading-snug text-center break-words whitespace-normal xl:max-w-[6rem] xl:px-3">{{ s.periodo ?? (isoWeekNumber(s.fecha_iso || s.created_at_raw || s.fecha) || '—') }}</td>
                 <td class="px-2 py-2 leading-snug text-center break-words whitespace-normal xl:max-w-[9rem] xl:px-3">{{ s.fecha || '' }}</td>
                 <td class="w-44 px-2 py-2 leading-snug text-center whitespace-nowrap xl:max-w-[10rem] xl:px-3">
                   <div class="inline-flex items-center justify-center gap-1.5 flex-nowrap whitespace-nowrap">
@@ -358,6 +364,8 @@ function isoWeekNumber(dateStr){
           <div v-for="s in data.data" :key="s.id" class="border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-sm bg-white dark:bg-slate-900/80 text-slate-800 dark:text-slate-100">
             <div class="flex items-start justify-between gap-3">
               <div>
+                <div class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">ID Solicitud</div>
+                <div class="text-sm font-semibold text-slate-900 dark:text-white">{{ s.id_solicitud ?? s.id }}</div>
                 <div class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Folio</div>
                 <div class="text-lg font-semibold text-slate-900 dark:text-white">{{ s.folio || s.id }}</div>
               </div>
@@ -397,6 +405,10 @@ function isoWeekNumber(dateStr){
               <div class="flex items-center justify-between gap-3">
                 <span class="text-slate-500 dark:text-slate-400">Cantidad</span>
                 <span class="font-medium text-slate-800 dark:text-slate-100 text-right">{{ s.cantidad }}</span>
+              </div>
+              <div class="flex items-center justify-between gap-3">
+                <span class="text-slate-500 dark:text-slate-400">Periodo</span>
+                <span class="font-medium text-slate-800 dark:text-slate-100 text-right">{{ s.periodo ?? (isoWeekNumber(s.fecha_iso || s.created_at_raw || s.fecha) || '—') }}</span>
               </div>
               <div class="flex items-center justify-between gap-3">
                 <span class="text-slate-500 dark:text-slate-400">Fecha</span>

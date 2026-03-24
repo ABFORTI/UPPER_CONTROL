@@ -123,6 +123,7 @@ class OrdenesFacturacionExport implements FromCollection, WithHeadings, ShouldAu
                 $fechaElaboracion = $orden?->solicitud?->created_at
                     ? Carbon::parse($orden->solicitud->getRawOriginal('created_at') ?? $orden->solicitud->created_at)
                     : null;
+                $idSolicitud = $orden?->solicitud?->id ?? $orden?->id_solicitud;
 
                 $periodoWeek = (int) ($f['week'] ?? 0);
                 $periodo = $periodoWeek > 0
@@ -173,6 +174,7 @@ class OrdenesFacturacionExport implements FromCollection, WithHeadings, ShouldAu
                                     $periodo,
                                     $centro,
                                     $centroCostos,
+                                    $idSolicitud,
                                     $cantidad,
                                     $precio,
                                     $datosOt,
@@ -197,6 +199,7 @@ class OrdenesFacturacionExport implements FromCollection, WithHeadings, ShouldAu
                             $periodo,
                             $centro,
                             $centroCostos,
+                            $idSolicitud,
                             $cantidad,
                             $precio,
                             $datosOt,
@@ -231,6 +234,7 @@ class OrdenesFacturacionExport implements FromCollection, WithHeadings, ShouldAu
                             $periodo,
                             $centro,
                             $centroCostos,
+                            $idSolicitud,
                             $cantidad,
                             (float) $precio,
                             $datosOt,
@@ -253,6 +257,7 @@ class OrdenesFacturacionExport implements FromCollection, WithHeadings, ShouldAu
                     $periodo,
                     $centro,
                     $centroCostos,
+                    $idSolicitud,
                     $cantidad,
                     (float) $precio,
                     $datosOt,
@@ -272,6 +277,7 @@ class OrdenesFacturacionExport implements FromCollection, WithHeadings, ShouldAu
             'Periodo',
             'Centro',
             'Centro de costos',
+            'ID Solicitud',
             'Cantidad',
             'Precio',
             'DATOS DE LA ORDEN DE TRABAJO',
@@ -283,7 +289,7 @@ class OrdenesFacturacionExport implements FromCollection, WithHeadings, ShouldAu
     {
         return [
             // Precio
-            'G' => '"$" #,##0.00',
+            'H' => '"$" #,##0.00',
         ];
     }
 

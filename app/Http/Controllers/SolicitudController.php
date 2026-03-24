@@ -43,6 +43,11 @@ class SolicitudController extends Controller
             'show_deleted' => $req->boolean('show_deleted'),
         ];
 
+        // Si se selecciona periodo sin anio, asumir el anio actual para que el filtro aplique.
+        if (!empty($filters['week']) && empty($filters['year'])) {
+            $filters['year'] = (int) now()->year;
+        }
+
         $canSeeDeleted = $u->hasAnyRole(['admin', 'superadmin']);
 
         $centrosPermitidos = $this->allowedCentroIds($u);
@@ -111,13 +116,14 @@ class SolicitudController extends Controller
         $transform = function($s) {
             // Mostrar exactamente lo guardado en BD (sin conversión de huso). Se formatea una sola vez a 'Y-m-d H:i'.
             $raw = $s->getRawOriginal('created_at');
-            $fecha = null; $fechaHumana = null; $fechaIso = null;
+            $fecha = null; $fechaHumana = null; $fechaIso = null; $periodo = null;
             if ($raw) {
                 try {
                     $dt = \Carbon\Carbon::parse($raw); // sin tz explícita
                     $fecha = $dt->format('Y-m-d H:i');
                     $fechaHumana = $dt->diffForHumans();
                     $fechaIso = $dt->toIso8601String();
+                    $periodo = (int) $dt->isoWeek();
                 } catch (\Throwable $e) {
                     $fecha = substr($raw, 0, 16); // fallback: yyyy-mm-dd hh:mm
                 }
@@ -125,6 +131,7 @@ class SolicitudController extends Controller
 
             return [
                 'id' => $s->id,
+                'id_solicitud' => $s->id,
                 'folio' => $s->folio,
                 'producto' => $s->descripcion ?? null,
                 'cliente' => ['name' => $s->cliente?->name ?? null],
@@ -140,6 +147,7 @@ class SolicitudController extends Controller
                 'fecha' => $fecha,
                 'fecha_humana' => $fechaHumana,
                 'fecha_iso' => $fechaIso,
+                'periodo' => $periodo,
                 'created_at_raw' => $raw,
             ];
         };
@@ -165,9 +173,14 @@ class SolicitudController extends Controller
             ? \App\Models\Marca::select('id','nombre','id_centrotrabajo')->orderBy('nombre')->get()
             : \App\Models\Marca::whereIn('id_centrotrabajo', $centrosPermitidos)->select('id','nombre','id_centrotrabajo')->orderBy('nombre')->get();
 
+        $responseFilters = $req->only(['estatus','servicio','marca','centro','centro_costo','folio','desde','hasta','year','week','show_deleted']);
+        if (!empty($filters['week']) && empty($responseFilters['year']) && !empty($filters['year'])) {
+            $responseFilters['year'] = $filters['year'];
+        }
+
         return Inertia::render('Solicitudes/Index', [
             'data' => $data,
-            'filters' => $req->only(['estatus','servicio','marca','centro','centro_costo','folio','desde','hasta','year','week','show_deleted']),
+            'filters' => $responseFilters,
             'servicios'=> ServicioEmpresa::select('id','nombre')->orderBy('nombre')->get(),
             'centros' => $centrosLista,
             'centrosCostos' => $centrosCostosLista,

@@ -143,6 +143,7 @@ class OrdenesIndexExport implements FromCollection, WithHeadings, ShouldAutoSize
                 $semana = $createdAt?->isoWeek();
                 $fechaOt = $createdAt?->format('d/m/Y');
                 $solicitante = $o->solicitud?->cliente?->name ?? null;
+                $idSolicitud = $o->solicitud?->id ?? $o->id_solicitud;
 
                 // Factura if any
                 $factura = null;
@@ -183,6 +184,7 @@ class OrdenesIndexExport implements FromCollection, WithHeadings, ShouldAutoSize
                                     $semana,
                                     $fechaFactura,
                                     $o->id,
+                                    $idSolicitud,
                                     $fechaOt,
                                     ($cantidadCobrableItem > 0 ? $cantidadCobrableItem : null),
                                     $serviceName,
@@ -212,6 +214,7 @@ class OrdenesIndexExport implements FromCollection, WithHeadings, ShouldAutoSize
                             $semana,
                             $fechaFactura,
                             $o->id,
+                            $idSolicitud,
                             $fechaOt,
                             ($cantidadCobrable > 0 ? $cantidadCobrable : null),
                             $serviceName,
@@ -247,6 +250,7 @@ class OrdenesIndexExport implements FromCollection, WithHeadings, ShouldAutoSize
                                 $semana,
                                 $fechaFactura,
                                 $o->id,
+                                $idSolicitud,
                                 $fechaOt,
                                 ($cantidadCobrableItem > 0 ? $cantidadCobrableItem : null),
                                 $proceso,
@@ -274,6 +278,7 @@ class OrdenesIndexExport implements FromCollection, WithHeadings, ShouldAutoSize
                         $semana,
                         $fechaFactura,
                         $o->id,
+                        $idSolicitud,
                         $fechaOt,
                         ($piezas > 0 ? $piezas : null),
                         $proceso,
@@ -300,6 +305,7 @@ class OrdenesIndexExport implements FromCollection, WithHeadings, ShouldAutoSize
             'SEMANA',
             'FECHA DE FACTURA',
             'Folio/OT SOLGISTIKA',
+            'ID Solicitud',
             'Fecha',
             'Ctd piezas',
             'Proceso',
@@ -318,15 +324,15 @@ class OrdenesIndexExport implements FromCollection, WithHeadings, ShouldAutoSize
     {
         return [
             // Costo unitario (MxN)
-            'J' => '"$" #,##0.00',
-            // Costo total s/iva
             'K' => '"$" #,##0.00',
+            // Costo total s/iva
+            'L' => '"$" #,##0.00',
         ];
     }
 
     public function styles(Worksheet $sheet)
     {
-        $sheet->getStyle('A1:O1')->applyFromArray([
+        $sheet->getStyle('A1:P1')->applyFromArray([
             'font' => [
                 'bold' => true,
                 'color' => ['rgb' => 'FFFFFF'],
@@ -343,11 +349,11 @@ class OrdenesIndexExport implements FromCollection, WithHeadings, ShouldAutoSize
             ],
         ]);
 
-        $sheet->getStyle('G:G')->getAlignment()->setWrapText(true);
         $sheet->getStyle('H:H')->getAlignment()->setWrapText(true);
-        $sheet->getStyle('M:M')->getAlignment()->setWrapText(true);
+        $sheet->getStyle('I:I')->getAlignment()->setWrapText(true);
         $sheet->getStyle('N:N')->getAlignment()->setWrapText(true);
         $sheet->getStyle('O:O')->getAlignment()->setWrapText(true);
+        $sheet->getStyle('P:P')->getAlignment()->setWrapText(true);
 
         return [];
     }
@@ -360,7 +366,7 @@ class OrdenesIndexExport implements FromCollection, WithHeadings, ShouldAutoSize
                 $sheet->freezePane('A2');
 
                 $highestRow = $sheet->getHighestRow();
-                $range = 'A1:O' . $highestRow;
+                $range = 'A1:P' . $highestRow;
 
                 $sheet->getStyle($range)->applyFromArray([
                     'borders' => [

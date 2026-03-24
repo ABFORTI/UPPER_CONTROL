@@ -325,6 +325,7 @@ function isoWeekNumber(dateStr){
                   <tr>
                     <th v-if="canFacturar" class="w-10 px-1 sm:px-1.5 py-2 text-center align-top"></th>
                     <th class="w-16 px-1 sm:px-1.5 py-2 text-center align-top whitespace-nowrap">ID</th>
+                    <th class="w-24 px-1 sm:px-1.5 py-2 text-center align-top whitespace-nowrap">ID Solicitud</th>
                     <th class="px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal">Producto</th>
                     <th class="px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal">Servicio</th>
                     <th class="hidden xl:table-cell px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal">Centro</th>
@@ -356,6 +357,7 @@ function isoWeekNumber(dateStr){
                       />
                     </td>
                     <td class="w-16 px-1 sm:px-1.5 py-3 leading-snug text-center font-mono whitespace-nowrap">#{{ o.id }}</td>
+                    <td class="w-24 px-1 sm:px-1.5 py-3 leading-snug text-center whitespace-nowrap">{{ o.id_solicitud ?? '—' }}</td>
                     <td class="px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words">{{ o.producto || '-' }}</td>
                     <td class="px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words">{{ o.servicio?.nombre || '-' }}</td>
                     <td class="hidden xl:table-cell px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words">{{ o.centro?.nombre || '-' }}</td>
@@ -437,6 +439,7 @@ function isoWeekNumber(dateStr){
                   <tr>
                     <th v-if="canFacturar" class="w-10 px-1 sm:px-1.5 py-2 text-center align-top"></th>
                     <th class="w-16 px-1 sm:px-1.5 py-2 text-center align-top whitespace-nowrap">ID</th>
+                    <th class="w-24 px-1 sm:px-1.5 py-2 text-center align-top whitespace-nowrap">ID Solicitud</th>
                     <th class="px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal">Producto</th>
                     <th class="px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal">Servicio</th>
                     <th class="hidden xl:table-cell px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal">Centro</th>
@@ -468,6 +471,7 @@ function isoWeekNumber(dateStr){
                       />
                     </td>
                     <td class="w-16 px-1 sm:px-1.5 py-3 leading-snug text-center font-mono whitespace-nowrap">#{{ o.id }}</td>
+                    <td class="w-24 px-1 sm:px-1.5 py-3 leading-snug text-center whitespace-nowrap">{{ o.id_solicitud ?? '—' }}</td>
                     <td class="px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words">{{ o.producto || '-' }}</td>
                     <td class="px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words">{{ o.servicio?.nombre || '-' }}</td>
                     <td class="hidden xl:table-cell px-1.5 sm:px-2 py-3 leading-snug text-center whitespace-normal break-words">{{ o.centro?.nombre || '-' }}</td>
@@ -564,6 +568,10 @@ function isoWeekNumber(dateStr){
                 <div class="flex items-center justify-between gap-3">
                   <span class="text-slate-500">Producto</span>
                   <span class="font-medium text-slate-800 text-right">{{ o.producto || '-' }}</span>
+                </div>
+                <div class="flex items-center justify-between gap-3">
+                  <span class="text-slate-500">ID Solicitud</span>
+                  <span class="font-medium text-slate-800 text-right">{{ o.id_solicitud ?? '—' }}</span>
                 </div>
                 <div class="flex items-center justify-between gap-3">
                   <span class="text-slate-500">Servicio</span>

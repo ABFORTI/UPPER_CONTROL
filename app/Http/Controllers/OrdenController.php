@@ -2215,6 +2215,7 @@ class OrdenController extends Controller
             }
             return [
                 'id' => $o->id,
+                'id_solicitud' => $o->solicitud?->id ?? $o->id_solicitud,
                 'estatus' => $o->estatus,
                 'calidad_resultado' => $o->calidad_resultado,
                 'facturacion' => $factStatus,
