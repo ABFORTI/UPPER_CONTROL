@@ -18,6 +18,12 @@ const money = (v) => new Intl.NumberFormat('es-MX', {
   maximumFractionDigits: 2,
 }).format(toNum(v))
 
+const textValue = (value) => {
+  if (value === null || value === undefined) return ''
+  const normalized = String(value).trim()
+  return normalized.length > 0 ? normalized : ''
+}
+
 // Normalizar servicios con valores numéricos seguros
 const servicios = computed(() => (props.solicitud?.servicios ?? []).map(s => ({
   ...s,
@@ -33,6 +39,28 @@ const total = computed(() => subtotal.value + iva.value)
 
 // Determinar si tiene múltiples servicios
 const esMultiServicio = computed(() => servicios.value.length > 0)
+const esIntegracionEtiquetas = computed(() => {
+  const solicitud = props.solicitud ?? {}
+  const integrationFlag = solicitud.es_integracion_etiquetas
+
+  return integrationFlag === true
+    || integrationFlag === 1
+    || integrationFlag === '1'
+    || integrationFlag === 'true'
+    || solicitud.origen_integracion === 'sistema_etiquetas'
+})
+
+const datosIntegracionEtiquetas = computed(() => {
+  const solicitud = props.solicitud ?? {}
+
+  return [
+    { label: 'Paquetería', value: textValue(solicitud.paqueteria) },
+    { label: 'Número de factura', value: textValue(solicitud.numero_factura) },
+    { label: 'Número de cajas', value: textValue(solicitud.numero_cajas) },
+    { label: 'Pedido', value: textValue(solicitud.pedido) },
+    { label: 'Solicitante externo', value: textValue(solicitud.solicitante_externo) },
+  ].filter(item => item.value)
+})
 
 function aprobar()  { router.post(props.urls.aprobar) }
 
@@ -274,6 +302,21 @@ function submitAdminAction() {
                 <div v-if="solicitud.pedimento" class="bg-gray-50 dark:bg-slate-800/70 rounded-xl p-4 border border-gray-200 dark:border-slate-700">
                   <label class="text-xs font-semibold text-gray-600 dark:text-slate-300 uppercase tracking-wide">Pedimento</label>
                   <p class="mt-1 text-lg font-bold text-gray-800 dark:text-slate-100">{{ solicitud.pedimento }}</p>
+                </div>
+              </div>
+
+              <div v-if="esIntegracionEtiquetas && datosIntegracionEtiquetas.length" class="bg-gradient-to-br from-sky-50 to-cyan-50 dark:from-sky-500/20 dark:to-cyan-500/10 rounded-xl p-4 border border-sky-100 dark:border-sky-500/40">
+                <div class="flex items-center gap-2 mb-3">
+                  <svg class="w-5 h-5 text-sky-600 dark:text-sky-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                  </svg>
+                  <label class="text-xs font-semibold text-sky-700 dark:text-sky-200 uppercase tracking-wide">Datos de integración</label>
+                </div>
+                <div class="grid md:grid-cols-2 gap-4">
+                  <div v-for="item in datosIntegracionEtiquetas" :key="item.label" class="bg-white/80 dark:bg-slate-900/40 rounded-lg p-4 border border-sky-100 dark:border-sky-500/20">
+                    <p class="text-xs font-semibold text-sky-700 dark:text-sky-200 uppercase tracking-wide">{{ item.label }}</p>
+                    <p class="mt-1 text-base font-bold text-gray-800 dark:text-slate-100 break-words">{{ item.value }}</p>
+                  </div>
                 </div>
               </div>
 

@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\QuotationController;
 use App\Http\Controllers\Api\QuotationItemController;
 use App\Http\Controllers\Api\QuotationItemServiceController;
 use App\Http\Controllers\Api\ClientQuotationController;
+use App\Http\Controllers\Api\Integraciones\EtiquetasCvaGdlSolicitudController;
 
 /*
 |--------------------------------------------------------------------------
@@ -62,6 +63,22 @@ Route::prefix('client')->group(function () {
         ->middleware('throttle:20,1')
         ->name('api.client.quotations.reject');
 });
+
+/*
+|--------------------------------------------------------------------------
+| Integraciones Externas - Sistema de Etiquetas (CVA GDL)
+|--------------------------------------------------------------------------
+|
+| Endpoint aislado de rutas web y protegido con token Sanctum.
+|
+*/
+
+Route::middleware(['auth:sanctum', 'role:integracion_api', 'throttle:30,1'])
+    ->prefix('integraciones/etiquetas/cva-gdl')
+    ->group(function () {
+        Route::post('/solicitudes', EtiquetasCvaGdlSolicitudController::class)
+            ->name('api.integraciones.etiquetas.cva_gdl.solicitudes.store');
+    });
 
 
 

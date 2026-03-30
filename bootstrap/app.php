@@ -3,8 +3,10 @@
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Auth\AuthenticationException;
 use Illuminate\Http\Exceptions\PostTooLargeException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -31,6 +33,26 @@ return Application::configure(basePath: dirname(__DIR__))
         //
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        $exceptions->render(function (AuthenticationException $e, Request $request) {
+            if ($request->is('api/integraciones/etiquetas/*')) {
+                Log::warning('TEMP DEBUG etiquetas: autenticacion fallida', [
+                    'route' => $request->path(),
+                    'method' => $request->method(),
+                    'ip' => $request->ip(),
+                    'auth_header_present' => $request->headers->has('Authorization'),
+                    'message' => $e->getMessage(),
+                ]);
+
+                return response()->json([
+                    'ok' => false,
+                    'mensaje' => 'Autenticacion requerida o token invalido.',
+                    'detalle' => 'Envia Authorization Bearer con token Sanctum vigente para un usuario con rol integracion_api.',
+                ], 401);
+            }
+
+            return null;
+        });
+
         $exceptions->render(function (PostTooLargeException $e, Request $request) {
             $message = 'El archivo o formulario supera el tamano maximo permitido por el servidor. Intenta con un archivo mas pequeno o aumenta post_max_size/upload_max_filesize.';
 

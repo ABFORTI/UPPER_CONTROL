@@ -1,0 +1,203 @@
+{
+  "info": {
+    "_postman_id": "b45c9f1a-b7f6-4f5f-9c9f-2d4a2f0c5a10",
+    "name": "Upper Control - Integracion Etiquetas Debug",
+    "description": "Coleccion para depurar el endpoint POST /api/integraciones/etiquetas/cva-gdl/solicitudes",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost/upper-control/public"
+    },
+    {
+      "key": "token",
+      "value": "PEGA_AQUI_TOKEN_SANCTUM"
+    },
+    {
+      "key": "referencia_ok",
+      "value": "LBL-CVA-GDL-DEBUG-0001"
+    }
+  ],
+  "item": [
+    {
+      "name": "01 - Exito (crear solicitud)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}",
+            "type": "text"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"referencia_externa\": \"{{referencia_ok}}\",\n  \"origen\": \"fastapi-etiquetas\",\n  \"sede\": \"cva_gdl\",\n  \"paqueteria\": \"Paquetexpress\",\n  \"numero_factura\": \"FAC-0001\",\n  \"numero_cajas\": 2,\n  \"pedido\": \"PED-12345\",\n  \"detalles_caja\": [\n    { \"caja\": 1, \"piezas\": 10, \"tipo_embalaje\": 1 },\n    { \"caja\": 2, \"piezas\": 12, \"tipo_embalaje\": 3 }\n  ]\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/integraciones/etiquetas/cva-gdl/solicitudes",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "integraciones",
+            "etiquetas",
+            "cva-gdl",
+            "solicitudes"
+          ]
+        },
+        "description": "Esperado: 201 con { ok: true, mensaje, solicitud_id, folio }"
+      }
+    },
+    {
+      "name": "02 - Validacion fallida (numero_cajas vs detalles)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}",
+            "type": "text"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"referencia_externa\": \"LBL-CVA-GDL-DEBUG-VALIDACION\",\n  \"numero_cajas\": 3,\n  \"detalles_caja\": [\n    { \"caja\": 1, \"piezas\": 10, \"tipo_embalaje\": 1 },\n    { \"caja\": 2, \"piezas\": 12, \"tipo_embalaje\": 3 }\n  ]\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/integraciones/etiquetas/cva-gdl/solicitudes",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "integraciones",
+            "etiquetas",
+            "cva-gdl",
+            "solicitudes"
+          ]
+        },
+        "description": "Esperado: 422 con { ok: false, mensaje, detalle, errors }"
+      }
+    },
+    {
+      "name": "03 - Sin token (autenticacion fallida)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"referencia_externa\": \"LBL-CVA-GDL-DEBUG-NO-TOKEN\",\n  \"numero_cajas\": 1,\n  \"detalles_caja\": [\n    { \"caja\": 1, \"piezas\": 1, \"tipo_embalaje\": 1 }\n  ]\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/integraciones/etiquetas/cva-gdl/solicitudes",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "integraciones",
+            "etiquetas",
+            "cva-gdl",
+            "solicitudes"
+          ]
+        },
+        "description": "Esperado: 401 con { ok: false, mensaje, detalle }"
+      }
+    },
+    {
+      "name": "04 - Duplicado (usar misma referencia de 01)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}",
+            "type": "text"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"referencia_externa\": \"{{referencia_ok}}\",\n  \"origen\": \"fastapi-etiquetas\",\n  \"sede\": \"cva_gdl\",\n  \"paqueteria\": \"Paquetexpress\",\n  \"numero_factura\": \"FAC-0001\",\n  \"numero_cajas\": 2,\n  \"pedido\": \"PED-12345\",\n  \"detalles_caja\": [\n    { \"caja\": 1, \"piezas\": 10, \"tipo_embalaje\": 1 },\n    { \"caja\": 2, \"piezas\": 12, \"tipo_embalaje\": 3 }\n  ]\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/integraciones/etiquetas/cva-gdl/solicitudes",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "integraciones",
+            "etiquetas",
+            "cva-gdl",
+            "solicitudes"
+          ]
+        },
+        "description": "Ejecutar despues del request 01. Esperado: 200 con { ok: false, mensaje, detalle, solicitud_id, folio }"
+      }
+    }
+  ]
+}

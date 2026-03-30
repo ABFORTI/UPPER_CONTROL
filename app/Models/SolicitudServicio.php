@@ -19,6 +19,7 @@ class SolicitudServicio extends Model
         'sku',
         'origen',
         'pedimento',
+        'descripcion',
         'tipo_cobro',
         'cantidad',
         'precio_unitario',

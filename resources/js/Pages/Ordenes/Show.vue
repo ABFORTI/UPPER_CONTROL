@@ -62,6 +62,30 @@ const customFieldValue = (...values) => {
   return ''
 }
 
+const solicitudOrden = computed(() => props.orden?.solicitud ?? null)
+const esIntegracionEtiquetas = computed(() => {
+  const solicitud = solicitudOrden.value ?? {}
+  const integrationFlag = solicitud.es_integracion_etiquetas
+
+  return integrationFlag === true
+    || integrationFlag === 1
+    || integrationFlag === '1'
+    || integrationFlag === 'true'
+    || solicitud.origen_integracion === 'sistema_etiquetas'
+})
+
+const datosIntegracionEtiquetas = computed(() => {
+  const solicitud = solicitudOrden.value ?? {}
+
+  return [
+    { label: 'Paquetería', value: customFieldValue(solicitud.paqueteria) },
+    { label: 'Número de factura', value: customFieldValue(solicitud.numero_factura) },
+    { label: 'Número de cajas', value: customFieldValue(solicitud.numero_cajas) },
+    { label: 'Pedido', value: customFieldValue(solicitud.pedido) },
+    { label: 'Solicitante externo', value: customFieldValue(solicitud.solicitante_externo) },
+  ].filter(item => item.value)
+})
+
 const servicioSku = (servicio) => customFieldValue(servicio?.sku, servicio?.solicitud?.servicios?.[0]?.sku, props.orden?.solicitud?.sku)
 const servicioOrigen = (servicio) => customFieldValue(servicio?.origen_customs, servicio?.origen, servicio?.solicitud?.servicios?.[0]?.origen, props.orden?.solicitud?.origen)
 const servicioPedimento = (servicio) => customFieldValue(servicio?.pedimento, servicio?.solicitud?.servicios?.[0]?.pedimento, props.orden?.solicitud?.pedimento)
@@ -1346,6 +1370,21 @@ function aplicarFaltantesServicio(servicioId) {
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
               </svg>
               <span class="text-gray-700 dark:text-slate-200 break-words"><strong>Pedimento:</strong> {{ orden.solicitud.pedimento }}</span>
+            </div>
+          </div>
+
+          <div v-if="esIntegracionEtiquetas && datosIntegracionEtiquetas.length" class="mt-3 rounded-xl border border-sky-200 bg-white/70 px-4 py-4 dark:border-sky-500/30 dark:bg-slate-900/70">
+            <div class="flex items-center gap-2 mb-3">
+              <svg class="w-4 h-4 text-sky-600 dark:text-sky-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+              </svg>
+              <p class="text-xs font-semibold uppercase tracking-wide text-sky-700 dark:text-sky-200">Datos de integración</p>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3">
+              <div v-for="item in datosIntegracionEtiquetas" :key="item.label" class="min-w-0 rounded-lg border border-sky-100 bg-sky-50/80 px-3 py-3 dark:border-sky-500/20 dark:bg-sky-500/10">
+                <p class="text-[11px] font-semibold uppercase tracking-wide text-sky-700 dark:text-sky-200">{{ item.label }}</p>
+                <p class="mt-1 text-sm font-bold text-gray-800 break-words dark:text-slate-100">{{ item.value }}</p>
+              </div>
             </div>
           </div>
         </div>
