@@ -82,15 +82,14 @@ class QuotationApprovalService
         $yyyymm = now()->format('Ym');
         $base = $prefijo . '-' . $yyyymm . '-';
 
-        $lastFolio = Solicitud::where('folio', 'like', $base . '%')
-            ->orderByDesc('folio')
+        // El consecutivo se calcula en forma numerica para evitar ambiguedades por orden lexicografico.
+        $maxSeq = (int) Solicitud::query()
+            ->where('folio', 'like', $base . '%')
+            ->selectRaw("MAX(CAST(SUBSTRING_INDEX(folio, '-', -1) AS UNSIGNED)) AS max_seq")
             ->lockForUpdate()
-            ->value('folio');
+            ->value('max_seq');
 
-        $seq = 1;
-        if (is_string($lastFolio) && preg_match('/-(\d{4})$/', $lastFolio, $m)) {
-            $seq = ((int)$m[1]) + 1;
-        }
+        $seq = $maxSeq + 1;
 
         return sprintf('%s%04d', $base, $seq);
     }

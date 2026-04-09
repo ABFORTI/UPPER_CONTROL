@@ -14,7 +14,6 @@ use App\Models\ServicioEmpresa;
 use App\Models\Solicitud;
 use App\Models\SolicitudServicio;
 use App\Services\Notifier;
-use App\Services\QuotationApprovalService;
 use DomainException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Database\QueryException;
@@ -51,74 +50,16 @@ class EtiquetasCvaGdlSolicitudController extends Controller
             $marca = $this->resolveMarca($centro, $config);
             $servicios = $this->resolveServiciosFromDetalles($data['detalles_caja']);
 
-            $solicitud = DB::transaction(function () use ($request, $data, $config, $centro, $centroCosto, $area, $marca, $servicios) {
-                $folioGenerator = app(QuotationApprovalService::class);
-                $pricing = app(PricingService::class);
-
-                $solicitud = Solicitud::create([
-                    'folio' => $folioGenerator->generateSolicitudFolio((int) $centro->id),
-                    'id_cliente' => (int) $request->user()->id,
-                    'id_centrotrabajo' => (int) $centro->id,
-                    'id_servicio' => null,
-                    'descripcion' => $this->buildSolicitudDescription($data),
-                    'id_area' => (int) $area->id,
-                    'id_centrocosto' => (int) $centroCosto->id,
-                    'id_marca' => (int) $marca->id,
-                    'cantidad' => $this->totalPiezas($data['detalles_caja']),
-                    'subtotal' => 0,
-                    'iva' => 0,
-                    'total' => 0,
-                    'notas' => $this->buildSolicitudNotes($data),
-                    'estatus' => 'pendiente',
-                    'origen_integracion' => $config['origen_integracion'],
-                    'referencia_externa' => $data['referencia_externa'],
-                    'paqueteria' => $data['paqueteria'] ?? null,
-                    'numero_factura' => $data['numero_factura'] ?? null,
-                    'numero_cajas' => (int) $data['numero_cajas'],
-                    'pedido' => $data['pedido'] ?? null,
-                    'es_integracion_etiquetas' => true,
-                    'solicitante_externo' => $config['solicitante'],
-                    'metadata_json' => [
-                        'integracion' => [
-                            'key' => 'sistema_etiquetas',
-                            'site' => 'cva_gdl',
-                            'payload_origen' => $data['origen'] ?? null,
-                            'payload_sede' => $data['sede'] ?? null,
-                        ],
-                        'detalles_caja' => array_map(function (array $detalle) {
-                            return [
-                                'caja' => (int) $detalle['caja'],
-                                'piezas' => (int) $detalle['piezas'],
-                                'tipo_embalaje' => (int) $detalle['tipo_embalaje'],
-                                'servicio_nombre' => $this->mapTipoEmbalajeToServiceName((int) $detalle['tipo_embalaje']),
-                            ];
-                        }, $data['detalles_caja']),
-                    ],
-                ]);
-
-                foreach ($servicios as $item) {
-                    $tipoCobro = $this->resolveTipoCobro((int) $centro->id, (int) $item['servicio']->id);
-                    $precioUnitario = $tipoCobro === 'tamanos'
-                        ? 0.0
-                        : (float) $pricing->precioUnitario((int) $centro->id, (int) $item['servicio']->id, null);
-
-                    SolicitudServicio::create([
-                        'solicitud_id' => (int) $solicitud->id,
-                        'servicio_id' => (int) $item['servicio']->id,
-                        'descripcion' => 'Caja ' . (int) $item['detalle']['caja'],
-                        'tipo_cobro' => $tipoCobro,
-                        'cantidad' => (int) $item['detalle']['piezas'],
-                        'precio_unitario' => $precioUnitario,
-                        'subtotal' => round($precioUnitario * (int) $item['detalle']['piezas'], 2),
-                        'service_assignment_status' => 'assigned',
-                    ]);
-                }
-
-                $solicitud->load('servicios');
-                $solicitud->recalcularTotales();
-
-                return $solicitud->fresh(['centro', 'centroCosto', 'marca', 'area', 'servicios.servicio']);
-            });
+            $solicitud = $this->createSolicitudWithRetry(
+                $request,
+                $data,
+                $config,
+                $centro,
+                $centroCosto,
+                $area,
+                $marca,
+                $servicios
+            );
 
             $this->notifyCentro($solicitud);
 
@@ -135,6 +76,19 @@ class EtiquetasCvaGdlSolicitudController extends Controller
                 'folio' => (string) $solicitud->folio,
             ], 201);
         } catch (QueryException $e) {
+            if ($this->isSolicitudFolioCollision($e)) {
+                Log::warning('TEMP DEBUG etiquetas: colision de folio sin recuperacion', [
+                    'message' => $e->getMessage(),
+                    'referencia_externa' => $request->input('referencia_externa'),
+                ]);
+
+                return response()->json([
+                    'ok' => false,
+                    'mensaje' => 'Conflicto temporal al generar folio. Reintenta la solicitud.',
+                    'detalle' => 'No se pudo reservar un folio unico en este intento.',
+                ], 409);
+            }
+
             if ((string) $e->getCode() === '23000') {
                 $config = $this->integrationConfig();
                 $existing = $this->findExistingSolicitud($config['origen_integracion'], $request->input('referencia_externa'));
@@ -163,6 +117,21 @@ class EtiquetasCvaGdlSolicitudController extends Controller
                 'mensaje' => 'Error de catalogos para integracion.',
                 'detalle' => $e->getMessage(),
             ], 422);
+        } catch (\RuntimeException $e) {
+            if (str_contains($e->getMessage(), 'No fue posible generar un folio unico')) {
+                Log::warning('TEMP DEBUG etiquetas: reintentos de folio agotados', [
+                    'message' => $e->getMessage(),
+                    'referencia_externa' => $request->input('referencia_externa'),
+                ]);
+
+                return response()->json([
+                    'ok' => false,
+                    'mensaje' => 'Conflicto temporal al generar folio. Reintenta la solicitud.',
+                    'detalle' => 'No fue posible generar un folio unico tras varios intentos.',
+                ], 409);
+            }
+
+            throw $e;
         } catch (\Throwable $e) {
             Log::error('Integracion etiquetas CVA GDL: error no controlado', [
                 'message' => $e->getMessage(),
@@ -175,6 +144,151 @@ class EtiquetasCvaGdlSolicitudController extends Controller
                 'detalle' => $e->getMessage(),
             ], 500);
         }
+    }
+
+    private function createSolicitudWithRetry(
+        StoreEtiquetasCvaGdlSolicitudRequest $request,
+        array $data,
+        array $config,
+        CentroTrabajo $centro,
+        CentroCosto $centroCosto,
+        Area $area,
+        Marca $marca,
+        array $servicios
+    ): Solicitud {
+        $maxAttempts = 5;
+        $lastFolioError = null;
+
+        for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
+            try {
+                return DB::transaction(function () use ($attempt, $request, $data, $config, $centro, $centroCosto, $area, $marca, $servicios) {
+                    $pricing = app(PricingService::class);
+
+                    $solicitud = Solicitud::create([
+                        'folio' => $this->generateSolicitudFolioForIntegration((int) $centro->id, $attempt - 1),
+                        'id_cliente' => (int) $request->user()->id,
+                        'id_centrotrabajo' => (int) $centro->id,
+                        'id_servicio' => null,
+                        'descripcion' => $this->buildSolicitudDescription($data),
+                        'id_area' => (int) $area->id,
+                        'id_centrocosto' => (int) $centroCosto->id,
+                        'id_marca' => (int) $marca->id,
+                        'cantidad' => $this->totalPiezas($data['detalles_caja']),
+                        'subtotal' => 0,
+                        'iva' => 0,
+                        'total' => 0,
+                        'notas' => $this->buildSolicitudNotes($data),
+                        'estatus' => 'pendiente',
+                        'origen_integracion' => $config['origen_integracion'],
+                        'referencia_externa' => $data['referencia_externa'],
+                        'paqueteria' => $data['paqueteria'] ?? null,
+                        'numero_factura' => $data['numero_factura'] ?? null,
+                        'numero_cajas' => (int) $data['numero_cajas'],
+                        'pedido' => $data['pedido'] ?? null,
+                        'es_integracion_etiquetas' => true,
+                        'solicitante_externo' => $config['solicitante'],
+                        'metadata_json' => [
+                            'integracion' => [
+                                'key' => 'sistema_etiquetas',
+                                'site' => 'cva_gdl',
+                                'payload_origen' => $data['origen'] ?? null,
+                                'payload_sede' => $data['sede'] ?? null,
+                            ],
+                            'detalles_caja' => array_map(function (array $detalle) {
+                                return [
+                                    'caja' => (int) $detalle['caja'],
+                                    'piezas' => (int) $detalle['piezas'],
+                                    'tipo_embalaje' => (int) $detalle['tipo_embalaje'],
+                                    'servicio_nombre' => $this->mapTipoEmbalajeToServiceName((int) $detalle['tipo_embalaje']),
+                                ];
+                            }, $data['detalles_caja']),
+                        ],
+                    ]);
+
+                    foreach ($servicios as $item) {
+                        $tipoCobro = $this->resolveTipoCobro((int) $centro->id, (int) $item['servicio']->id);
+                        $precioUnitario = $tipoCobro === 'tamanos'
+                            ? 0.0
+                            : (float) $pricing->precioUnitario((int) $centro->id, (int) $item['servicio']->id, null);
+
+                        SolicitudServicio::create([
+                            'solicitud_id' => (int) $solicitud->id,
+                            'servicio_id' => (int) $item['servicio']->id,
+                            'descripcion' => 'Caja ' . (int) $item['detalle']['caja'],
+                            'tipo_cobro' => $tipoCobro,
+                            'cantidad' => (int) $item['detalle']['piezas'],
+                            'precio_unitario' => $precioUnitario,
+                            'subtotal' => round($precioUnitario * (int) $item['detalle']['piezas'], 2),
+                            'service_assignment_status' => 'assigned',
+                        ]);
+                    }
+
+                    $solicitud->load('servicios');
+                    $solicitud->recalcularTotales();
+
+                    return $solicitud->fresh(['centro', 'centroCosto', 'marca', 'area', 'servicios.servicio']);
+                });
+            } catch (QueryException $e) {
+                if (!$this->isSolicitudFolioCollision($e)) {
+                    throw $e;
+                }
+
+                $lastFolioError = $e;
+
+                Log::warning('TEMP DEBUG etiquetas: colision de folio, reintentando', [
+                    'attempt' => $attempt,
+                    'max_attempts' => $maxAttempts,
+                    'message' => $e->getMessage(),
+                    'referencia_externa' => $data['referencia_externa'] ?? null,
+                ]);
+
+                usleep(100000);
+            }
+        }
+
+        throw new \RuntimeException(
+            'No fue posible generar un folio unico tras varios intentos.',
+            0,
+            $lastFolioError
+        );
+    }
+
+    private function generateSolicitudFolioForIntegration(int $centroId, int $offset = 0): string
+    {
+        $centro = CentroTrabajo::find($centroId);
+        $prefijo = $centro?->prefijo
+            ?? ($centro && $centro->nombre
+                ? strtoupper(substr(preg_replace('/[^a-z]/i', '', $centro->nombre), 0, 3))
+                : 'UPR');
+
+        $prefijo = strtoupper(substr($prefijo, 0, 10));
+        $yyyymm = now()->format('Ym');
+        $base = $prefijo . '-' . $yyyymm . '-';
+
+        $maxSeq = (int) Solicitud::query()
+            ->where('folio', 'like', $base . '%')
+            ->selectRaw("COALESCE(MAX(CAST(SUBSTRING_INDEX(folio, '-', -1) AS UNSIGNED)), 0) AS max_seq")
+            ->lockForUpdate()
+            ->value('max_seq');
+
+        $seq = $maxSeq + 1 + max(0, $offset);
+
+        return sprintf('%s%04d', $base, $seq);
+    }
+
+    private function isSolicitudFolioCollision(QueryException $e): bool
+    {
+        $message = strtolower($e->getMessage());
+
+        if ((string) $e->getCode() !== '23000') {
+            return false;
+        }
+
+        if (str_contains($message, 'solicitudes_folio_unique')) {
+            return true;
+        }
+
+        return str_contains($message, 'duplicate entry') && str_contains($message, 'folio');
     }
 
     private function integrationConfig(): array
