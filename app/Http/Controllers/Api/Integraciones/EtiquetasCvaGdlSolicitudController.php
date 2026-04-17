@@ -38,6 +38,8 @@ class EtiquetasCvaGdlSolicitudController extends Controller
         try {
             $data = $request->validated();
             $config = $this->integrationConfig();
+            $tipoPedido = $this->resolveTipoPedido($data);
+            $detalles = $this->resolveDetalles($data, $tipoPedido);
 
             $existing = $this->findExistingSolicitud($config['origen_integracion'], $data['referencia_externa']);
             if ($existing) {
@@ -48,7 +50,7 @@ class EtiquetasCvaGdlSolicitudController extends Controller
             $centroCosto = $this->resolveCentroCosto($centro, $config);
             $area = $this->resolveArea($centro, $config);
             $marca = $this->resolveMarca($centro, $config);
-            $servicios = $this->resolveServiciosFromDetalles($data['detalles_caja']);
+            $servicios = $this->resolveServiciosFromDetalles($detalles, $tipoPedido);
 
             $solicitud = $this->createSolicitudWithRetry(
                 $request,
@@ -58,7 +60,9 @@ class EtiquetasCvaGdlSolicitudController extends Controller
                 $centroCosto,
                 $area,
                 $marca,
-                $servicios
+                $servicios,
+                $tipoPedido,
+                $detalles
             );
 
             $this->notifyCentro($solicitud);
@@ -118,7 +122,10 @@ class EtiquetasCvaGdlSolicitudController extends Controller
                 'detalle' => $e->getMessage(),
             ], 422);
         } catch (\RuntimeException $e) {
-            if (str_contains($e->getMessage(), 'No fue posible generar un folio unico')) {
+            if (
+                str_contains($e->getMessage(), 'No fue posible generar un folio unico')
+                || str_contains($e->getMessage(), 'No fue posible adquirir lock para generar folio')
+            ) {
                 Log::warning('TEMP DEBUG etiquetas: reintentos de folio agotados', [
                     'message' => $e->getMessage(),
                     'referencia_externa' => $request->input('referencia_externa'),
@@ -154,56 +161,58 @@ class EtiquetasCvaGdlSolicitudController extends Controller
         CentroCosto $centroCosto,
         Area $area,
         Marca $marca,
-        array $servicios
+        array $servicios,
+        string $tipoPedido,
+        array $detalles
     ): Solicitud {
         $maxAttempts = 5;
         $lastFolioError = null;
 
         for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
             try {
-                return DB::transaction(function () use ($attempt, $request, $data, $config, $centro, $centroCosto, $area, $marca, $servicios) {
+                return DB::transaction(function () use ($attempt, $request, $data, $config, $centro, $centroCosto, $area, $marca, $servicios, $tipoPedido, $detalles) {
                     $pricing = app(PricingService::class);
+                    $lockName = $this->folioLockName((int) $centro->id);
 
-                    $solicitud = Solicitud::create([
-                        'folio' => $this->generateSolicitudFolioForIntegration((int) $centro->id, $attempt - 1),
-                        'id_cliente' => (int) $request->user()->id,
-                        'id_centrotrabajo' => (int) $centro->id,
-                        'id_servicio' => null,
-                        'descripcion' => $this->buildSolicitudDescription($data),
-                        'id_area' => (int) $area->id,
-                        'id_centrocosto' => (int) $centroCosto->id,
-                        'id_marca' => (int) $marca->id,
-                        'cantidad' => $this->totalPiezas($data['detalles_caja']),
-                        'subtotal' => 0,
-                        'iva' => 0,
-                        'total' => 0,
-                        'notas' => $this->buildSolicitudNotes($data),
-                        'estatus' => 'pendiente',
-                        'origen_integracion' => $config['origen_integracion'],
-                        'referencia_externa' => $data['referencia_externa'],
-                        'paqueteria' => $data['paqueteria'] ?? null,
-                        'numero_factura' => $data['numero_factura'] ?? null,
-                        'numero_cajas' => (int) $data['numero_cajas'],
-                        'pedido' => $data['pedido'] ?? null,
-                        'es_integracion_etiquetas' => true,
-                        'solicitante_externo' => $config['solicitante'],
-                        'metadata_json' => [
-                            'integracion' => [
-                                'key' => 'sistema_etiquetas',
-                                'site' => 'cva_gdl',
-                                'payload_origen' => $data['origen'] ?? null,
-                                'payload_sede' => $data['sede'] ?? null,
-                            ],
-                            'detalles_caja' => array_map(function (array $detalle) {
-                                return [
-                                    'caja' => (int) $detalle['caja'],
-                                    'piezas' => (int) $detalle['piezas'],
-                                    'tipo_embalaje' => (int) $detalle['tipo_embalaje'],
-                                    'servicio_nombre' => $this->mapTipoEmbalajeToServiceName((int) $detalle['tipo_embalaje']),
-                                ];
-                            }, $data['detalles_caja']),
-                        ],
-                    ]);
+                    $this->acquireFolioLock($lockName, 5);
+
+                    try {
+                        $folio = $this->generateSolicitudFolioForIntegration((int) $centro->id);
+
+                        Log::info('TEMP DEBUG etiquetas: folio candidato generado', [
+                            'attempt' => $attempt,
+                            'folio' => $folio,
+                            'referencia_externa' => $data['referencia_externa'] ?? null,
+                        ]);
+
+                        $solicitud = Solicitud::create([
+                            'folio' => $folio,
+                            'id_cliente' => (int) $request->user()->id,
+                            'id_centrotrabajo' => (int) $centro->id,
+                            'id_servicio' => null,
+                            'descripcion' => $this->buildSolicitudDescription($data),
+                            'id_area' => (int) $area->id,
+                            'id_centrocosto' => (int) $centroCosto->id,
+                            'id_marca' => (int) $marca->id,
+                            'cantidad' => $this->totalPiezas($detalles),
+                            'subtotal' => 0,
+                            'iva' => 0,
+                            'total' => 0,
+                            'notas' => $this->buildSolicitudNotes($data, $tipoPedido, $detalles),
+                            'estatus' => 'pendiente',
+                            'origen_integracion' => $config['origen_integracion'],
+                            'referencia_externa' => $data['referencia_externa'],
+                            'paqueteria' => $data['paqueteria'] ?? null,
+                            'numero_factura' => $data['numero_factura'] ?? null,
+                            'numero_cajas' => $this->numeroUnidades($detalles),
+                            'pedido' => $data['pedido'] ?? null,
+                            'es_integracion_etiquetas' => true,
+                            'solicitante_externo' => $config['solicitante'],
+                            'metadata_json' => $this->buildSolicitudMetadata($data, $detalles, $tipoPedido),
+                        ]);
+                    } finally {
+                        $this->releaseFolioLock($lockName);
+                    }
 
                     foreach ($servicios as $item) {
                         $tipoCobro = $this->resolveTipoCobro((int) $centro->id, (int) $item['servicio']->id);
@@ -211,10 +220,12 @@ class EtiquetasCvaGdlSolicitudController extends Controller
                             ? 0.0
                             : (float) $pricing->precioUnitario((int) $centro->id, (int) $item['servicio']->id, null);
 
+                        $indiceUnidad = $this->detalleIndice($item['detalle'], $tipoPedido);
+
                         SolicitudServicio::create([
                             'solicitud_id' => (int) $solicitud->id,
                             'servicio_id' => (int) $item['servicio']->id,
-                            'descripcion' => 'Caja ' . (int) $item['detalle']['caja'],
+                            'descripcion' => $this->detalleDescripcion($tipoPedido, $indiceUnidad),
                             'tipo_cobro' => $tipoCobro,
                             'cantidad' => (int) $item['detalle']['piezas'],
                             'precio_unitario' => $precioUnitario,
@@ -243,6 +254,20 @@ class EtiquetasCvaGdlSolicitudController extends Controller
                 ]);
 
                 usleep(100000);
+            } catch (\RuntimeException $e) {
+                if (!str_contains($e->getMessage(), 'No fue posible adquirir lock para generar folio')) {
+                    throw $e;
+                }
+
+                Log::warning('TEMP DEBUG etiquetas: lock de folio no disponible, reintentando', [
+                    'attempt' => $attempt,
+                    'max_attempts' => $maxAttempts,
+                    'message' => $e->getMessage(),
+                    'referencia_externa' => $data['referencia_externa'] ?? null,
+                ]);
+
+                $lastFolioError = $e;
+                usleep(100000);
             }
         }
 
@@ -253,7 +278,7 @@ class EtiquetasCvaGdlSolicitudController extends Controller
         );
     }
 
-    private function generateSolicitudFolioForIntegration(int $centroId, int $offset = 0): string
+    private function generateSolicitudFolioForIntegration(int $centroId): string
     {
         $centro = CentroTrabajo::find($centroId);
         $prefijo = $centro?->prefijo
@@ -266,12 +291,13 @@ class EtiquetasCvaGdlSolicitudController extends Controller
         $base = $prefijo . '-' . $yyyymm . '-';
 
         $maxSeq = (int) Solicitud::query()
+            ->withTrashed()
             ->where('folio', 'like', $base . '%')
             ->selectRaw("COALESCE(MAX(CAST(SUBSTRING_INDEX(folio, '-', -1) AS UNSIGNED)), 0) AS max_seq")
             ->lockForUpdate()
             ->value('max_seq');
 
-        $seq = $maxSeq + 1 + max(0, $offset);
+        $seq = $maxSeq + 1;
 
         return sprintf('%s%04d', $base, $seq);
     }
@@ -289,6 +315,41 @@ class EtiquetasCvaGdlSolicitudController extends Controller
         }
 
         return str_contains($message, 'duplicate entry') && str_contains($message, 'folio');
+    }
+
+    private function folioLockName(int $centroId): string
+    {
+        return sprintf('solicitudes_folio_%d_%s', $centroId, now()->format('Ym'));
+    }
+
+    private function acquireFolioLock(string $lockName, int $timeoutSeconds = 5): void
+    {
+        if (DB::getDriverName() !== 'mysql') {
+            return;
+        }
+
+        $row = DB::selectOne('SELECT GET_LOCK(?, ?) AS locked', [$lockName, $timeoutSeconds]);
+        $locked = (int) ($row->locked ?? 0);
+
+        if ($locked !== 1) {
+            throw new \RuntimeException('No fue posible adquirir lock para generar folio.');
+        }
+    }
+
+    private function releaseFolioLock(string $lockName): void
+    {
+        if (DB::getDriverName() !== 'mysql') {
+            return;
+        }
+
+        try {
+            DB::selectOne('SELECT RELEASE_LOCK(?) AS released', [$lockName]);
+        } catch (\Throwable $e) {
+            Log::warning('TEMP DEBUG etiquetas: no se pudo liberar lock de folio', [
+                'lock' => $lockName,
+                'message' => $e->getMessage(),
+            ]);
+        }
     }
 
     private function integrationConfig(): array
@@ -361,20 +422,81 @@ class EtiquetasCvaGdlSolicitudController extends Controller
         return $marca;
     }
 
-    private function resolveServiciosFromDetalles(array $detalles): array
+    private function resolveTipoPedido(array $data): string
+    {
+        $tipoPedido = strtolower(trim((string) ($data['tipo_pedido'] ?? 'caja')));
+
+        return $tipoPedido === 'tarima' ? 'tarima' : 'caja';
+    }
+
+    private function resolveDetalles(array $data, string $tipoPedido): array
+    {
+        $key = $tipoPedido === 'tarima' ? 'detalles_tarima' : 'detalles_caja';
+        $detalles = $data[$key] ?? [];
+
+        return is_array($detalles) ? array_values($detalles) : [];
+    }
+
+    private function numeroUnidades(array $detalles): int
+    {
+        return count($detalles);
+    }
+
+    private function detalleIndice(array $detalle, string $tipoPedido): int
+    {
+        $key = $tipoPedido === 'tarima' ? 'tarima' : 'caja';
+
+        return (int) ($detalle[$key] ?? 0);
+    }
+
+    private function detalleDescripcion(string $tipoPedido, int $indice): string
+    {
+        $prefijo = $tipoPedido === 'tarima' ? 'Tarima' : 'Caja';
+
+        return $prefijo . ' ' . $indice;
+    }
+
+    private function buildSolicitudMetadata(array $data, array $detalles, string $tipoPedido): array
+    {
+        $metadata = [
+            'integracion' => [
+                'key' => 'sistema_etiquetas',
+                'site' => 'cva_gdl',
+                'payload_origen' => $data['origen'] ?? null,
+                'payload_sede' => $data['sede'] ?? null,
+            ],
+            'tipo_pedido' => $tipoPedido,
+        ];
+
+        $detallesKey = $tipoPedido === 'tarima' ? 'detalles_tarima' : 'detalles_caja';
+        $unidadKey = $tipoPedido === 'tarima' ? 'tarima' : 'caja';
+
+        $metadata[$detallesKey] = array_map(function (array $detalle) use ($tipoPedido, $unidadKey) {
+            return [
+                $unidadKey => (int) ($detalle[$unidadKey] ?? 0),
+                'piezas' => (int) ($detalle['piezas'] ?? 0),
+                'tipo_embalaje' => $this->rawTipoEmbalaje($detalle['tipo_embalaje'] ?? null),
+                'servicio_nombre' => $this->mapTipoEmbalajeToServiceName($detalle['tipo_embalaje'] ?? null, $tipoPedido),
+            ];
+        }, $detalles);
+
+        return $metadata;
+    }
+
+    private function resolveServiciosFromDetalles(array $detalles, string $tipoPedido): array
     {
         $resolved = [];
 
         foreach ($detalles as $detalle) {
-            $tipoEmbalaje = (int) $detalle['tipo_embalaje'];
-            $serviceName = $this->mapTipoEmbalajeToServiceName($tipoEmbalaje);
+            $tipoEmbalaje = $detalle['tipo_embalaje'] ?? null;
+            $serviceName = $this->mapTipoEmbalajeToServiceName($tipoEmbalaje, $tipoPedido);
 
             $servicio = ServicioEmpresa::query()
                 ->where('nombre', $serviceName)
                 ->first();
 
             if (!$servicio) {
-                throw new DomainException('No existe el servicio configurado para tipo_embalaje ' . $tipoEmbalaje . ': ' . $serviceName);
+                throw new DomainException('No existe el servicio configurado para tipo_embalaje ' . $this->rawTipoEmbalaje($tipoEmbalaje) . ': ' . $serviceName);
             }
 
             $resolved[] = [
@@ -386,16 +508,97 @@ class EtiquetasCvaGdlSolicitudController extends Controller
         return $resolved;
     }
 
-    private function mapTipoEmbalajeToServiceName(int $tipoEmbalaje): string
+    private function mapTipoEmbalajeToServiceName($tipoEmbalaje, string $tipoPedido): string
     {
-        return match ($tipoEmbalaje) {
-            1 => 'EMBALAJE TIPO 1',
-            2 => 'EMBALAJE TIPO 2',
-            3 => 'EMBALAJE TIPO 3',
-            4 => 'EMBALAJE TIPO 4',
-            5 => 'EMBALAJE TIPO 5',
-            default => throw new DomainException('tipo_embalaje no soportado: ' . $tipoEmbalaje),
+        if ($tipoPedido === 'tarima') {
+            return $this->mapTarimaTipoEmbalajeToServiceName($tipoEmbalaje);
+        }
+
+        return $this->mapCajaTipoEmbalajeToServiceName($tipoEmbalaje);
+    }
+
+    private function mapCajaTipoEmbalajeToServiceName($tipoEmbalaje): string
+    {
+        $tipoNumero = $this->toIntegerLike($tipoEmbalaje);
+
+        if ($tipoNumero !== null) {
+            return match ($tipoNumero) {
+                1 => 'EMBALAJE TIPO 1',
+                2 => 'EMBALAJE TIPO 2',
+                3 => 'EMBALAJE TIPO 3',
+                4 => 'EMBALAJE TIPO 4',
+                5 => 'EMBALAJE TIPO 5',
+                default => throw new DomainException('tipo_embalaje no soportado para caja: ' . $tipoNumero),
+            };
+        }
+
+        $normalized = $this->normalizeText((string) $tipoEmbalaje);
+
+        return match ($normalized) {
+            'embalaje de pantalla' => 'EMBALAJE DE PANTALLA',
+            'embalaje tipo 1' => 'EMBALAJE TIPO 1',
+            'embalaje tipo 2' => 'EMBALAJE TIPO 2',
+            'embalaje tipo 3' => 'EMBALAJE TIPO 3',
+            'embalaje tipo 4' => 'EMBALAJE TIPO 4',
+            'embalaje tipo 5' => 'EMBALAJE TIPO 5',
+            default => throw new DomainException('tipo_embalaje no soportado para caja: ' . $this->rawTipoEmbalaje($tipoEmbalaje)),
         };
+    }
+
+    private function mapTarimaTipoEmbalajeToServiceName($tipoEmbalaje): string
+    {
+        $tipoNumero = $this->toIntegerLike($tipoEmbalaje);
+
+        if ($tipoNumero !== null) {
+            return match ($tipoNumero) {
+                1 => 'EMPLAYADO DE TARIMA',
+                2 => 'EMPLAYADO DE TARIMA CON ESQUINERO',
+                3 => 'EMPLAYADO Y FLEJADO DE TARIMA',
+                default => throw new DomainException('tipo_embalaje no soportado para tarima: ' . $tipoNumero),
+            };
+        }
+
+        $normalized = $this->normalizeText((string) $tipoEmbalaje);
+
+        return match ($normalized) {
+            'emplayado de tarima' => 'EMPLAYADO DE TARIMA',
+            'emplayado de tarima con esquinero' => 'EMPLAYADO DE TARIMA CON ESQUINERO',
+            'emplayado y flejado de tarima' => 'EMPLAYADO Y FLEJADO DE TARIMA',
+            default => throw new DomainException('tipo_embalaje no soportado para tarima: ' . $this->rawTipoEmbalaje($tipoEmbalaje)),
+        };
+    }
+
+    private function toIntegerLike($value): ?int
+    {
+        if (is_int($value)) {
+            return $value;
+        }
+
+        if (is_string($value) && preg_match('/^\d+$/', trim($value)) === 1) {
+            return (int) trim($value);
+        }
+
+        return null;
+    }
+
+    private function normalizeText(string $value): string
+    {
+        $normalized = preg_replace('/\s+/', ' ', trim($value));
+
+        return strtolower((string) $normalized);
+    }
+
+    private function rawTipoEmbalaje($tipoEmbalaje): string
+    {
+        if (is_string($tipoEmbalaje)) {
+            return trim($tipoEmbalaje);
+        }
+
+        if (is_int($tipoEmbalaje)) {
+            return (string) $tipoEmbalaje;
+        }
+
+        return 'null';
     }
 
     private function resolveTipoCobro(int $centroId, int $servicioId): string
@@ -420,7 +623,7 @@ class EtiquetasCvaGdlSolicitudController extends Controller
         return 'Integración etiquetas';
     }
 
-    private function buildSolicitudNotes(array $data): string
+    private function buildSolicitudNotes(array $data, string $tipoPedido, array $detalles): string
     {
         $lineas = [
             'Solicitud generada por integracion de sistema de etiquetas.',
@@ -437,7 +640,8 @@ class EtiquetasCvaGdlSolicitudController extends Controller
             $lineas[] = 'Pedido: ' . trim((string) $data['pedido']);
         }
 
-        $lineas[] = 'Cajas: ' . (int) $data['numero_cajas'];
+        $lineas[] = 'Tipo de pedido: ' . ucfirst($tipoPedido);
+        $lineas[] = ($tipoPedido === 'tarima' ? 'Tarimas: ' : 'Cajas: ') . $this->numeroUnidades($detalles);
 
         return implode("\n", $lineas);
     }

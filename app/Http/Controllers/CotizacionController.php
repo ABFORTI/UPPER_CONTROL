@@ -1300,7 +1300,8 @@ class CotizacionController extends Controller
         $yyyymm = now()->format('Ym');
         $base = $prefijo . '-' . $yyyymm . '-';
 
-        $lastFolio = Solicitud::where('folio', 'like', $base . '%')
+        $lastFolio = Solicitud::withTrashed()
+            ->where('folio', 'like', $base . '%')
             ->orderByDesc('folio')
             ->lockForUpdate()
             ->value('folio');

@@ -43,7 +43,7 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"referencia_externa\": \"{{referencia_ok}}\",\n  \"origen\": \"fastapi-etiquetas\",\n  \"sede\": \"cva_gdl\",\n  \"paqueteria\": \"Paquetexpress\",\n  \"numero_factura\": \"FAC-0001\",\n  \"numero_cajas\": 2,\n  \"pedido\": \"PED-12345\",\n  \"detalles_caja\": [\n    { \"caja\": 1, \"piezas\": 10, \"tipo_embalaje\": 1 },\n    { \"caja\": 2, \"piezas\": 12, \"tipo_embalaje\": 3 }\n  ]\n}",
+          "raw": "{\n  \"referencia_externa\": \"{{referencia_ok}}\",\n  \"tipo_pedido\": \"caja\",\n  \"origen\": \"fastapi-etiquetas\",\n  \"sede\": \"cva_gdl\",\n  \"paqueteria\": \"Paquetexpress\",\n  \"numero_factura\": \"FAC-0001\",\n  \"numero_cajas\": 2,\n  \"pedido\": \"PED-12345\",\n  \"detalles_caja\": [\n    { \"caja\": 1, \"piezas\": 10, \"tipo_embalaje\": 1 },\n    { \"caja\": 2, \"piezas\": 12, \"tipo_embalaje\": \"Embalaje de Pantalla\" }\n  ]\n}",
           "options": {
             "raw": {
               "language": "json"
@@ -176,7 +176,7 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"referencia_externa\": \"{{referencia_ok}}\",\n  \"origen\": \"fastapi-etiquetas\",\n  \"sede\": \"cva_gdl\",\n  \"paqueteria\": \"Paquetexpress\",\n  \"numero_factura\": \"FAC-0001\",\n  \"numero_cajas\": 2,\n  \"pedido\": \"PED-12345\",\n  \"detalles_caja\": [\n    { \"caja\": 1, \"piezas\": 10, \"tipo_embalaje\": 1 },\n    { \"caja\": 2, \"piezas\": 12, \"tipo_embalaje\": 3 }\n  ]\n}",
+          "raw": "{\n  \"referencia_externa\": \"{{referencia_ok}}\",\n  \"tipo_pedido\": \"caja\",\n  \"origen\": \"fastapi-etiquetas\",\n  \"sede\": \"cva_gdl\",\n  \"paqueteria\": \"Paquetexpress\",\n  \"numero_factura\": \"FAC-0001\",\n  \"numero_cajas\": 2,\n  \"pedido\": \"PED-12345\",\n  \"detalles_caja\": [\n    { \"caja\": 1, \"piezas\": 10, \"tipo_embalaje\": 1 },\n    { \"caja\": 2, \"piezas\": 12, \"tipo_embalaje\": \"Embalaje de Pantalla\" }\n  ]\n}",
           "options": {
             "raw": {
               "language": "json"
@@ -197,6 +197,52 @@
           ]
         },
         "description": "Ejecutar despues del request 01. Esperado: 200 con { ok: false, mensaje, detalle, solicitud_id, folio }"
+      }
+    },
+    {
+      "name": "05 - Exito Tarima (servicios de emplayado)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}",
+            "type": "text"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"referencia_externa\": \"LBL-CVA-GDL-DEBUG-TARIMA-0001\",\n  \"tipo_pedido\": \"tarima\",\n  \"origen\": \"fastapi-etiquetas\",\n  \"sede\": \"cva_gdl\",\n  \"paqueteria\": \"FedEx\",\n  \"numero_factura\": \"FAC-TAR-0001\",\n  \"numero_tarimas\": 2,\n  \"pedido\": \"PED-TAR-12345\",\n  \"detalles_tarima\": [\n    { \"tarima\": 1, \"piezas\": 20, \"tipo_embalaje\": \"Emplayado de Tarima\" },\n    { \"tarima\": 2, \"piezas\": 18, \"tipo_embalaje\": \"Emplayado de Tarima con Esquinero\" }\n  ]\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/integraciones/etiquetas/cva-gdl/solicitudes",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "integraciones",
+            "etiquetas",
+            "cva-gdl",
+            "solicitudes"
+          ]
+        },
+        "description": "Esperado: 201 con { ok: true, mensaje, solicitud_id, folio } para tarima."
       }
     }
   ]

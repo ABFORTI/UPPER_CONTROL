@@ -487,148 +487,162 @@ class SolicitudController extends Controller
 
         // NUEVO: Si es modo múltiple servicios, crear UNA solicitud con múltiples servicios asociados
         if ($esMultipleServicios) {
-            DB::beginTransaction();
-            try {
-                \Log::info('🔄 Creando solicitud con múltiples servicios', ['count' => count($req->servicios)]);
+            $attempts = 0; $maxAttempts = 3; $lastException = null;
+            while ($attempts < $maxAttempts) {
+                DB::beginTransaction();
+                try {
+                    \Log::info('🔄 Creando solicitud con múltiples servicios', ['count' => count($req->servicios)]);
 
-                $cantidadTotalServicios = collect($req->servicios)
-                    ->sum(function ($servicioData) {
-                        return max(1, (int)($servicioData['cantidad'] ?? 1));
-                    });
-                if ($cantidadTotalServicios <= 0) {
-                    $cantidadTotalServicios = 1;
-                }
-
-                $skuGlobal = $customsFieldsEnabled ? $normalizeCustomField($req->input('sku')) : null;
-                $origenGlobal = $customsFieldsEnabled ? $normalizeCustomField($req->input('origen')) : null;
-                $pedimentoGlobal = $customsFieldsEnabled ? $normalizeCustomField($req->input('pedimento')) : null;
-                
-                // Crear la solicitud principal (sin servicio único)
-                $sol = Solicitud::create([
-                    'folio'            => $this->generarFolio($centroId),
-                    'id_cliente'       => $u->id,
-                    'id_centrotrabajo' => $centroId,
-                    'id_servicio'      => null, // Ya no usamos este campo para múltiples
-                    'descripcion'      => $req->descripcion,
-                    'id_centrocosto'   => (int)$req->id_centrocosto,
-                    'id_marca'         => $req->filled('id_marca') ? (int)$req->id_marca : null,
-                    'id_area'          => $areaId,
-                    'sku'              => $skuGlobal,
-                    'origen'           => $origenGlobal,
-                    'pedimento'        => $pedimentoGlobal,
-                    'cantidad'         => (int)$cantidadTotalServicios,
-                    'subtotal'         => 0, // Se calculará después
-                    'iva'              => 0,
-                    'total'            => 0,
-                    'notas'            => $req->notas,
-                    'estatus'          => 'pendiente',
-                    'archivo_excel_stored_name' => $excelStoredName,
-                    'archivo_excel_nombre_original' => $excelOriginalName,
-                    'archivo_excel_subido_por' => $excelStoredName ? (int)$u->id : null,
-                    'archivo_excel_subido_at' => $excelStoredName ? now() : null,
-                ]);
-                
-                $pricing = app(\App\Domain\Servicios\PricingService::class);
-                $countAssigned = 0;
-                $countPending = 0;
-                
-                // Crear cada servicio asociado
-                foreach ($req->servicios as $index => $servicioData) {
-                    \Log::info("➡️ Creando servicio #{$index}", $servicioData);
-                    
-                    $servicioIdItem = !empty($servicioData['id_servicio']) ? (int) $servicioData['id_servicio'] : null;
-                    $cantidadServicio = (int)$servicioData['cantidad'];
-                    
-                    // SKU/Origen/Pedimento por ítem (fallback a global)
-                    $skuItem = $customsFieldsEnabled ? $normalizeCustomField($servicioData['sku'] ?? null) ?? $skuGlobal : null;
-                    $origenItem = $customsFieldsEnabled ? $normalizeCustomField($servicioData['origen'] ?? null) ?? $origenGlobal : null;
-                    $pedimentoItem = $customsFieldsEnabled ? $normalizeCustomField($servicioData['pedimento'] ?? null) ?? $pedimentoGlobal : null;
-                    
-                    $precioUnitario = 0;
-                    $tipoCobro = 'cantidad';
-                    $assignmentStatus = 'pending';
-                    
-                    if ($servicioIdItem) {
-                        $serv = ServicioEmpresa::findOrFail($servicioIdItem);
-                        $assignmentStatus = 'assigned';
-                        $countAssigned++;
-                        
-                        // Determinar si usa tamaños
-                        $usaTamanosCentro = \App\Models\ServicioCentro::where('id_centrotrabajo', $centroId)
-                            ->where('id_servicio', $serv->id)
-                            ->whereHas('tamanos')
-                            ->exists();
-                        
-                        $tipoCobro = $usaTamanosCentro ? 'tamanos' : 'cantidad';
-                        if (!$usaTamanosCentro) {
-                            $precioUnitario = (float)$pricing->precioUnitario($centroId, $serv->id, null);
-                        }
-                    }
-                    if (!$servicioIdItem) {
-                        $countPending++;
+                    $cantidadTotalServicios = collect($req->servicios)
+                        ->sum(function ($servicioData) {
+                            return max(1, (int)($servicioData['cantidad'] ?? 1));
+                        });
+                    if ($cantidadTotalServicios <= 0) {
+                        $cantidadTotalServicios = 1;
                     }
 
-                    // Crear SolicitudServicio
-                    \App\Models\SolicitudServicio::create([
-                        'solicitud_id'     => $sol->id,
-                        'servicio_id'      => $servicioIdItem,
-                        'sku'              => $skuItem,
-                        'origen'           => $origenItem,
-                        'pedimento'        => $pedimentoItem,
-                        'service_assignment_status' => $assignmentStatus,
-                        'tipo_cobro'       => $tipoCobro,
-                        'cantidad'         => $cantidadServicio,
-                        'precio_unitario'  => $precioUnitario,
-                        'subtotal'         => $precioUnitario * $cantidadServicio,
+                    $skuGlobal = $customsFieldsEnabled ? $normalizeCustomField($req->input('sku')) : null;
+                    $origenGlobal = $customsFieldsEnabled ? $normalizeCustomField($req->input('origen')) : null;
+                    $pedimentoGlobal = $customsFieldsEnabled ? $normalizeCustomField($req->input('pedimento')) : null;
+
+                    // Crear la solicitud principal (sin servicio único)
+                    $sol = Solicitud::create([
+                        'folio'            => $this->generarFolio($centroId),
+                        'id_cliente'       => $u->id,
+                        'id_centrotrabajo' => $centroId,
+                        'id_servicio'      => null, // Ya no usamos este campo para múltiples
+                        'descripcion'      => $req->descripcion,
+                        'id_centrocosto'   => (int)$req->id_centrocosto,
+                        'id_marca'         => $req->filled('id_marca') ? (int)$req->id_marca : null,
+                        'id_area'          => $areaId,
+                        'sku'              => $skuGlobal,
+                        'origen'           => $origenGlobal,
+                        'pedimento'        => $pedimentoGlobal,
+                        'cantidad'         => (int)$cantidadTotalServicios,
+                        'subtotal'         => 0, // Se calculará después
+                        'iva'              => 0,
+                        'total'            => 0,
+                        'notas'            => $req->notas,
+                        'estatus'          => 'pendiente',
+                        'archivo_excel_stored_name' => $excelStoredName,
+                        'archivo_excel_nombre_original' => $excelOriginalName,
+                        'archivo_excel_subido_por' => $excelStoredName ? (int)$u->id : null,
+                        'archivo_excel_subido_at' => $excelStoredName ? now() : null,
                     ]);
-                }
-                
-                // Recalcular totales de la solicitud
-                $sol->recalcularTotales();
-                
-                // Manejar archivos adjuntos
-                if ($req->hasFile('archivos')) {
-                    $archivos = $req->file('archivos');
-                    if (is_array($archivos)) {
-                        foreach ($archivos as $file) {
-                            if ($file && $file->isValid()) {
-                                $path = $file->store('solicitudes/' . $sol->id, 'public');
-                                $sol->archivos()->create([
-                                    'path'             => $path,
-                                    'nombre_original'  => $file->getClientOriginalName(),
-                                    'mime'             => $file->getClientMimeType(),
-                                    'size'             => $file->getSize(),
-                                    'subtipo'          => 'adjunto',
-                                ]);
+
+                    $pricing = app(\App\Domain\Servicios\PricingService::class);
+                    $countAssigned = 0;
+                    $countPending = 0;
+
+                    // Crear cada servicio asociado
+                    foreach ($req->servicios as $index => $servicioData) {
+                        \Log::info("➡️ Creando servicio #{$index}", $servicioData);
+
+                        $servicioIdItem = !empty($servicioData['id_servicio']) ? (int) $servicioData['id_servicio'] : null;
+                        $cantidadServicio = (int)$servicioData['cantidad'];
+
+                        // SKU/Origen/Pedimento por ítem (fallback a global)
+                        $skuItem = $customsFieldsEnabled ? $normalizeCustomField($servicioData['sku'] ?? null) ?? $skuGlobal : null;
+                        $origenItem = $customsFieldsEnabled ? $normalizeCustomField($servicioData['origen'] ?? null) ?? $origenGlobal : null;
+                        $pedimentoItem = $customsFieldsEnabled ? $normalizeCustomField($servicioData['pedimento'] ?? null) ?? $pedimentoGlobal : null;
+
+                        $precioUnitario = 0;
+                        $tipoCobro = 'cantidad';
+                        $assignmentStatus = 'pending';
+
+                        if ($servicioIdItem) {
+                            $serv = ServicioEmpresa::findOrFail($servicioIdItem);
+                            $assignmentStatus = 'assigned';
+                            $countAssigned++;
+
+                            // Determinar si usa tamaños
+                            $usaTamanosCentro = \App\Models\ServicioCentro::where('id_centrotrabajo', $centroId)
+                                ->where('id_servicio', $serv->id)
+                                ->whereHas('tamanos')
+                                ->exists();
+
+                            $tipoCobro = $usaTamanosCentro ? 'tamanos' : 'cantidad';
+                            if (!$usaTamanosCentro) {
+                                $precioUnitario = (float)$pricing->precioUnitario($centroId, $serv->id, null);
+                            }
+                        }
+                        if (!$servicioIdItem) {
+                            $countPending++;
+                        }
+
+                        // Crear SolicitudServicio
+                        \App\Models\SolicitudServicio::create([
+                            'solicitud_id'     => $sol->id,
+                            'servicio_id'      => $servicioIdItem,
+                            'sku'              => $skuItem,
+                            'origen'           => $origenItem,
+                            'pedimento'        => $pedimentoItem,
+                            'service_assignment_status' => $assignmentStatus,
+                            'tipo_cobro'       => $tipoCobro,
+                            'cantidad'         => $cantidadServicio,
+                            'precio_unitario'  => $precioUnitario,
+                            'subtotal'         => $precioUnitario * $cantidadServicio,
+                        ]);
+                    }
+
+                    // Recalcular totales de la solicitud
+                    $sol->recalcularTotales();
+
+                    // Manejar archivos adjuntos
+                    if ($req->hasFile('archivos')) {
+                        $archivos = $req->file('archivos');
+                        if (is_array($archivos)) {
+                            foreach ($archivos as $file) {
+                                if ($file && $file->isValid()) {
+                                    $path = $file->store('solicitudes/' . $sol->id, 'public');
+                                    $sol->archivos()->create([
+                                        'path'             => $path,
+                                        'nombre_original'  => $file->getClientOriginalName(),
+                                        'mime'             => $file->getClientMimeType(),
+                                        'size'             => $file->getSize(),
+                                        'subtipo'          => 'adjunto',
+                                    ]);
+                                }
                             }
                         }
                     }
+
+                    DB::commit();
+
+                    // Notificar a coordinador
+                    try {
+                        $serviciosNombres = $sol->servicios()->with('servicio')->get()->pluck('servicio.nombre')->join(', ');
+                        Notifier::toRoleInCentro(
+                            'coordinador',
+                            $sol->id_centrotrabajo,
+                            'Nueva solicitud',
+                            "El cliente creó la solicitud {$sol->folio} con servicios: {$serviciosNombres} ({$sol->descripcion}).",
+                            route('solicitudes.show',$sol->id)
+                        );
+                    } catch (\Throwable $e) {
+                        \Log::warning('Error al notificar solicitud', ['error' => $e->getMessage()]);
+                    }
+
+                    return redirect()
+                        ->route('solicitudes.show', $sol->id)
+                        ->with('ok', 'Solicitud creada. Servicios asignados: ' . $countAssigned . ' | Pendientes de asignación: ' . $countPending . '.');
+
+                } catch (\Throwable $ex) {
+                    DB::rollBack();
+                    // Maneja colisiones de UNIQUE tanto como UniqueConstraintViolationException como QueryException (23000)
+                    $isUnique = $ex instanceof \Illuminate\Database\UniqueConstraintViolationException
+                        || ($ex instanceof \Illuminate\Database\QueryException && (string)$ex->getCode() === '23000');
+                    if ($isUnique) {
+                        $lastException = $ex;
+                        $attempts++;
+                        usleep(120000); // 120ms
+                        continue;
+                    }
+                    throw $ex;
                 }
-                
-                DB::commit();
-                
-                // Notificar a coordinador
-                try {
-                    $serviciosNombres = $sol->servicios()->with('servicio')->get()->pluck('servicio.nombre')->join(', ');
-                    Notifier::toRoleInCentro(
-                        'coordinador',
-                        $sol->id_centrotrabajo,
-                        'Nueva solicitud',
-                        "El cliente creó la solicitud {$sol->folio} con servicios: {$serviciosNombres} ({$sol->descripcion}).",
-                        route('solicitudes.show',$sol->id)
-                    );
-                } catch (\Throwable $e) {
-                    \Log::warning('Error al notificar solicitud', ['error' => $e->getMessage()]);
-                }
-                
-                return redirect()
-                    ->route('solicitudes.show', $sol->id)
-                    ->with('ok', 'Solicitud creada. Servicios asignados: ' . $countAssigned . ' | Pendientes de asignación: ' . $countPending . '.');
-                    
-            } catch (\Throwable $ex) {
-                DB::rollBack();
-                throw $ex;
             }
+
+            throw $lastException ?? new \RuntimeException('No fue posible generar un folio único');
         }
 
         // FLUJO NORMAL: Un solo servicio (compatibilidad con código anterior)
@@ -853,9 +867,10 @@ class SolicitudController extends Controller
         $yyyymm  = now()->format('Ym');
 
         $base = $prefijo . '-' . $yyyymm . '-';
-        // Buscar el último folio que coincida y extraer el consecutivo de 4 dígitos
-        // Intentar minimizar colisiones: leer último folio con lock (si dentro de transacción)
-        $lastFolio = Solicitud::where('folio', 'like', $base . '%')
+        // Buscar el último folio (incluyendo soft-deleted) para no reutilizar consecutivos ya existentes.
+        // Intentar minimizar colisiones: leer último folio con lock (si dentro de transacción).
+        $lastFolio = Solicitud::withTrashed()
+            ->where('folio', 'like', $base . '%')
             ->orderByDesc('folio')
             ->lockForUpdate()
             ->value('folio');
