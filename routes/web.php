@@ -119,6 +119,10 @@ Route::middleware('auth')->group(function () {
     Route::get('/solicitudes', [SolicitudController::class,'index'])->name('solicitudes.index');
     Route::get('/solicitudes/create', [SolicitudController::class,'create'])->name('solicitudes.create');
     Route::post('/solicitudes', [SolicitudController::class,'store'])->name('solicitudes.store');
+    // BULK: aprobar masivo + crear OTs — debe ir ANTES de {solicitud} para evitar conflicto de binding
+    Route::post('/solicitudes/aprobar-masivo-ot', [SolicitudController::class,'aprobarMasivoOt'])
+        ->middleware('role:coordinador|admin')
+        ->name('solicitudes.aprobarMasivoOt');
     Route::get('/solicitudes/{solicitud}', [SolicitudController::class,'show'])->name('solicitudes.show');
     Route::delete('/solicitudes/{id}', [SolicitudController::class, 'destroy'])->name('solicitudes.destroy');
     Route::post('/solicitudes/{id}/restore', [SolicitudController::class, 'restore'])->name('solicitudes.restore');
@@ -223,6 +227,9 @@ Route::middleware('auth')->group(function () {
     Route::get('/ordenes/export-facturacion', [OrdenController::class,'exportFacturacion'])
         ->middleware('role:admin|facturacion|gerente_upper')
         ->name('ordenes.exportFacturacion');
+    Route::post('/ordenes/completar-masivo', [OrdenController::class,'completarMasivo'])
+        ->middleware('role:coordinador|admin|team_leader')
+        ->name('ordenes.completarMasivo');
     Route::get('/ordenes/{orden}', [OrdenController::class,'show'])->name('ordenes.show');
     Route::delete('/ordenes/{id}', [OrdenController::class, 'destroy'])->name('ordenes.destroy');
     Route::post('/ordenes/{id}/restore', [OrdenController::class, 'restore'])->name('ordenes.restore');
@@ -322,6 +329,8 @@ Route::middleware('auth')->group(function () {
     // Gerente Upper puede ver (solo lectura) las pantallas de calidad
     Route::get('/calidad', [CalidadController::class,'index'])
         ->middleware('role:calidad|admin|gerente_upper')->name('calidad.index');
+    Route::post('/calidad/validar-masivo', [CalidadController::class,'validarMasivo'])
+        ->middleware('role:calidad|admin')->name('calidad.validarMasivo');
     Route::get('/ordenes/{orden}/calidad', [CalidadController::class,'show'])
         ->middleware('role:calidad|admin|gerente_upper')->name('calidad.show');
     Route::post('/ordenes/{orden}/calidad/validar', [CalidadController::class,'validar'])
@@ -330,6 +339,10 @@ Route::middleware('auth')->group(function () {
         ->middleware('role:calidad|admin')->name('calidad.rechazar');
 
     // Supervisor (antes 'cliente')
+    Route::post('/ordenes/cliente/autorizar-masivo', [ClienteController::class,'autorizarMasivo'])
+        ->middleware('role:Cliente_Supervisor|Cliente_Gerente|admin')
+        ->name('cliente.autorizarMasivo');
+
     Route::post('/ordenes/{orden}/cliente/autorizar', [ClienteController::class,'autorizar'])
         ->name('cliente.autorizar');
 

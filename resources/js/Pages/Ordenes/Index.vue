@@ -24,6 +24,18 @@ const canFacturar = computed(() => {
   return roles.includes('admin') || roles.includes('facturacion')
 })
 
+// Permisos: solo roles cliente o admin pueden autorizar masivamente
+const canAutorizarCliente = computed(() => {
+  const roles = page.props?.auth?.user?.roles || []
+  return roles.includes('admin') || roles.includes('Cliente_Supervisor') || roles.includes('Cliente_Gerente')
+})
+
+// Permisos: coordinador, admin o TL pueden completar masivamente OTs de etiquetas
+const canCompletarMasivoEtiquetas = computed(() => {
+  const roles = page.props?.auth?.user?.roles || []
+  return roles.includes('admin') || roles.includes('coordinador') || roles.includes('team_leader')
+})
+
 // Selección múltiple para facturación (usar array para v-model de checkboxes)
 const selectedIds = ref([])
 const anySelected = computed(()=> (selectedIds.value?.length || 0) > 0)
@@ -39,6 +51,126 @@ function openBatch(){
   router.get(props.urls?.facturas_batch_create, { ids: ids.join(',') })
 }
 
+// ─── Completar masivo etiquetas ───────────────────────────────────────────────
+const etiquetasSelectedIds = ref([])
+const etiquetasAnySelected = computed(() => (etiquetasSelectedIds.value?.length || 0) > 0)
+const etiquetasSelectedCount = computed(() => etiquetasSelectedIds.value?.length || 0)
+
+function isEtiquetasCompletable(o) {
+  return !!o.puede_completar_masivo
+}
+
+const etiquetasSelectAll = computed({
+  get() {
+    const completables = rows.value.filter(isEtiquetasCompletable).map(r => Number(r.id))
+    return completables.length > 0 && completables.every(id => etiquetasSelectedIds.value.includes(id))
+  },
+  set(val) {
+    if (val) {
+      etiquetasSelectedIds.value = rows.value.filter(isEtiquetasCompletable).map(r => Number(r.id))
+    } else {
+      etiquetasSelectedIds.value = []
+    }
+  },
+})
+
+watch(rows, () => { etiquetasSelectedIds.value = [] })
+
+const showCompletarModal = ref(false)
+const confirmandoCompletar = ref(false)
+
+function abrirModalCompletar() {
+  if (!etiquetasAnySelected.value) return
+  showCompletarModal.value = true
+}
+
+function cerrarModalCompletar() {
+  showCompletarModal.value = false
+}
+
+function completarMasivoEtiquetas() {
+  if (!etiquetasAnySelected.value || confirmandoCompletar.value) return
+  confirmandoCompletar.value = true
+
+  router.post(
+    props.urls?.completar_masivo,
+    { orden_ids: etiquetasSelectedIds.value.slice() },
+    {
+      preserveScroll: true,
+      onSuccess: () => {
+        etiquetasSelectedIds.value = []
+        showCompletarModal.value = false
+        confirmandoCompletar.value = false
+      },
+      onError: () => {
+        confirmandoCompletar.value = false
+      },
+    }
+  )
+}
+// ──────────────────────────────────────────────────────────────────────────────
+
+
+const clienteSelectedIds = ref([])
+const clienteAnySelected = computed(() => (clienteSelectedIds.value?.length || 0) > 0)
+const clienteSelectedCount = computed(() => clienteSelectedIds.value?.length || 0)
+
+function isClienteAutorizable(o) {
+  return !!o.puede_autorizar_cliente
+}
+
+const clienteSelectAll = computed({
+  get() {
+    const autorizables = rows.value.filter(isClienteAutorizable).map(r => Number(r.id))
+    return autorizables.length > 0 && autorizables.every(id => clienteSelectedIds.value.includes(id))
+  },
+  set(val) {
+    if (val) {
+      clienteSelectedIds.value = rows.value.filter(isClienteAutorizable).map(r => Number(r.id))
+    } else {
+      clienteSelectedIds.value = []
+    }
+  },
+})
+
+// Limpiar selección cliente al cambiar filtros o paginación
+watch(rows, () => { clienteSelectedIds.value = [] })
+
+// Modal de confirmación
+const showConfirmModal = ref(false)
+const confirmando = ref(false)
+
+function abrirConfirmacion() {
+  if (!clienteAnySelected.value) return
+  showConfirmModal.value = true
+}
+
+function cerrarConfirmacion() {
+  showConfirmModal.value = false
+}
+
+function autorizarMasivoCliente() {
+  if (!clienteAnySelected.value || confirmando.value) return
+  confirmando.value = true
+
+  router.post(
+    props.urls?.autorizar_masivo_cliente,
+    { orden_ids: clienteSelectedIds.value.slice() },
+    {
+      preserveScroll: true,
+      onSuccess: () => {
+        clienteSelectedIds.value = []
+        showConfirmModal.value = false
+        confirmando.value = false
+      },
+      onError: () => {
+        confirmando.value = false
+      },
+    }
+  )
+}
+// ──────────────────────────────────────────────────────────────────────────────
+
 const sel = ref(props.filters?.estatus || '')
 const factSel = ref(props.filters?.facturacion || '')
 const idSel = ref(props.filters?.id || '')
@@ -49,6 +181,7 @@ const hastaSel = ref(props.filters?.hasta || '')
 const yearSel = ref(props.filters?.year || '')
 const weekSel = ref(props.filters?.week || '')
 const showDeleted = ref(!!props.filters?.show_deleted)
+const origenEtiquetasSel = ref(!!props.filters?.origen_etiquetas)
 const availableYears = computed(() => {
   const y = new Date().getFullYear()
   return [y - 2, y - 1, y, y + 1]
@@ -86,6 +219,7 @@ function applyFilter(){
   if (yearSel.value) params.year = yearSel.value
   if (weekSel.value) params.week = weekSel.value
   if (showDeleted.value) params.show_deleted = 1
+  if (origenEtiquetasSel.value) params.origen_etiquetas = 1
   router.get(props.urls.index, params, { preserveState: true, replace: true })
 }
 
@@ -100,6 +234,7 @@ function clearFilters(){
   yearSel.value = ''
   weekSel.value = ''
   showDeleted.value = false
+  origenEtiquetasSel.value = false
   router.get(props.urls.index, {}, { preserveState: true, replace: true })
 }
 
@@ -285,6 +420,22 @@ function isoWeekNumber(dateStr){
           <button v-if="canFacturar && anySelected" @click="openBatch" class="inline-flex h-9 items-center justify-center rounded-md px-3 text-sm font-semibold text-white bg-[#1A73E8] hover:bg-[#1557b0] transition-colors xl:col-span-1">
             Registrar factura
           </button>
+
+          <button v-if="canAutorizarCliente && clienteAnySelected" @click="abrirConfirmacion" class="inline-flex h-9 items-center gap-1.5 justify-center rounded-md px-3 text-sm font-semibold text-white bg-violet-600 hover:bg-violet-700 transition-colors xl:col-span-2">
+            <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+            </svg>
+            Autorizar como cliente
+            <span class="ml-1 inline-flex items-center justify-center w-5 h-5 rounded-full bg-white/20 text-xs font-bold">{{ clienteSelectedCount }}</span>
+          </button>
+
+          <button v-if="canCompletarMasivoEtiquetas && etiquetasAnySelected && props.urls?.completar_masivo" @click="abrirModalCompletar" class="inline-flex h-9 items-center gap-1.5 justify-center rounded-md px-3 text-sm font-semibold text-white bg-orange-500 hover:bg-orange-600 transition-colors xl:col-span-2">
+            <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            Completar al 100%
+            <span class="ml-1 inline-flex items-center justify-center w-5 h-5 rounded-full bg-white/20 text-xs font-bold">{{ etiquetasSelectedCount }}</span>
+          </button>
         </div>
 
           <div class="mt-2 flex flex-wrap items-center justify-between gap-2">
@@ -295,6 +446,11 @@ function isoWeekNumber(dateStr){
                 :class="['px-3 py-1.5 rounded-full text-xs font-semibold border uppercase transition-colors whitespace-nowrap', factSel==='sin_factura' ? 'text-white border-[#0ea5e9]' : 'bg-white text-slate-700 border-slate-300']"
                 :style="factSel==='sin_factura' ? 'background-color: #0ea5e9' : ''">
                 SIN FACTURA
+              </button>
+              <button @click="origenEtiquetasSel = !origenEtiquetasSel; applyFilter()"
+                :class="['px-3 py-1.5 rounded-full text-xs font-semibold border uppercase transition-colors whitespace-nowrap', origenEtiquetasSel ? 'text-white border-orange-500' : 'bg-white text-slate-700 border-slate-300']"
+                :style="origenEtiquetasSel ? 'background-color: #f97316' : ''">
+                ETIQUETAS
               </button>
             </div>
 
@@ -324,6 +480,13 @@ function isoWeekNumber(dateStr){
                 <thead class="bg-slate-800 text-white uppercase text-xs">
                   <tr>
                     <th v-if="canFacturar" class="w-10 px-1 sm:px-1.5 py-2 text-center align-top"></th>
+                    <th v-if="canAutorizarCliente && props.urls?.autorizar_masivo_cliente" class="w-10 px-1 sm:px-1.5 py-2 text-center align-middle" title="Seleccionar autorizables">
+                      <input type="checkbox" v-model="clienteSelectAll" class="cursor-pointer accent-violet-500" title="Seleccionar/deseleccionar todas las autorizables" aria-label="Seleccionar todas las autorizables" />
+                    </th>                    <th v-if="canCompletarMasivoEtiquetas && props.urls?.completar_masivo" class="w-10 px-1 sm:px-1.5 py-2 text-center align-middle" title="Seleccionar etiquetas">
+                      <input type="checkbox" v-model="etiquetasSelectAll" class="cursor-pointer accent-orange-500" title="Seleccionar/deseleccionar todas las completables" aria-label="Seleccionar todas las completables" />
+                    </th>                    <th v-if="canCompletarMasivoEtiquetas && props.urls?.completar_masivo" class="w-10 px-1 sm:px-1.5 py-2 text-center align-middle" title="Seleccionar etiquetas">
+                      <input type="checkbox" v-model="etiquetasSelectAll" class="cursor-pointer accent-orange-500" title="Seleccionar/deseleccionar todas las completables" aria-label="Seleccionar todas las completables" />
+                    </th>
                     <th class="w-16 px-1 sm:px-1.5 py-2 text-center align-top whitespace-nowrap">ID</th>
                     <th class="w-24 px-1 sm:px-1.5 py-2 text-center align-top whitespace-nowrap">ID Solicitud</th>
                     <th class="px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal">Producto</th>
@@ -353,6 +516,26 @@ function isoWeekNumber(dateStr){
                         "
                         :title="!isSelectable(o) ? 'No seleccionable: ya facturada o sin autorización del cliente' : 'Seleccionar para facturar'"
                         v-model="selectedIds"
+                        :value="Number(o.id)"
+                      />
+                    </td>
+                    <td v-if="canAutorizarCliente && props.urls?.autorizar_masivo_cliente" class="w-10 px-1 sm:px-1.5 py-3 text-center align-middle">
+                      <input
+                        type="checkbox"
+                        :disabled="!isClienteAutorizable(o)"
+                        :class="!isClienteAutorizable(o) ? 'opacity-30 cursor-not-allowed accent-gray-300' : 'cursor-pointer accent-violet-500'"
+                        :title="!isClienteAutorizable(o) ? 'Esta OT no está disponible para autorizar' : 'Seleccionar para autorizar como cliente'"
+                        v-model="clienteSelectedIds"
+                        :value="Number(o.id)"
+                      />
+                    </td>
+                    <td v-if="canCompletarMasivoEtiquetas && props.urls?.completar_masivo" class="w-10 px-1 sm:px-1.5 py-3 text-center align-middle">
+                      <input
+                        type="checkbox"
+                        :disabled="!isEtiquetasCompletable(o)"
+                        :class="!isEtiquetasCompletable(o) ? 'opacity-30 cursor-not-allowed accent-gray-300' : 'cursor-pointer accent-orange-500'"
+                        :title="!isEtiquetasCompletable(o) ? 'Esta OT no está disponible para completar' : 'Seleccionar para completar al 100%'"
+                        v-model="etiquetasSelectedIds"
                         :value="Number(o.id)"
                       />
                     </td>
@@ -438,6 +621,9 @@ function isoWeekNumber(dateStr){
                 <thead class="bg-slate-800 text-white uppercase text-xs">
                   <tr>
                     <th v-if="canFacturar" class="w-10 px-1 sm:px-1.5 py-2 text-center align-top"></th>
+                    <th v-if="canAutorizarCliente && props.urls?.autorizar_masivo_cliente" class="w-10 px-1 sm:px-1.5 py-2 text-center align-middle" title="Seleccionar autorizables">
+                      <input type="checkbox" v-model="clienteSelectAll" class="cursor-pointer accent-violet-500" title="Seleccionar/deseleccionar todas las autorizables" aria-label="Seleccionar todas las autorizables" />
+                    </th>
                     <th class="w-16 px-1 sm:px-1.5 py-2 text-center align-top whitespace-nowrap">ID</th>
                     <th class="w-24 px-1 sm:px-1.5 py-2 text-center align-top whitespace-nowrap">ID Solicitud</th>
                     <th class="px-1.5 sm:px-2 py-2 text-center align-top break-words whitespace-normal">Producto</th>
@@ -467,6 +653,26 @@ function isoWeekNumber(dateStr){
                         "
                         :title="!isSelectable(o) ? 'No seleccionable: ya facturada o sin autorización del cliente' : 'Seleccionar para facturar'"
                         v-model="selectedIds"
+                        :value="Number(o.id)"
+                      />
+                    </td>
+                    <td v-if="canAutorizarCliente && props.urls?.autorizar_masivo_cliente" class="w-10 px-1 sm:px-1.5 py-3 text-center align-middle">
+                      <input
+                        type="checkbox"
+                        :disabled="!isClienteAutorizable(o)"
+                        :class="!isClienteAutorizable(o) ? 'opacity-30 cursor-not-allowed accent-gray-300' : 'cursor-pointer accent-violet-500'"
+                        :title="!isClienteAutorizable(o) ? 'Esta OT no está disponible para autorizar' : 'Seleccionar para autorizar como cliente'"
+                        v-model="clienteSelectedIds"
+                        :value="Number(o.id)"
+                      />
+                    </td>
+                    <td v-if="canCompletarMasivoEtiquetas && props.urls?.completar_masivo" class="w-10 px-1 sm:px-1.5 py-3 text-center align-middle">
+                      <input
+                        type="checkbox"
+                        :disabled="!isEtiquetasCompletable(o)"
+                        :class="!isEtiquetasCompletable(o) ? 'opacity-30 cursor-not-allowed accent-gray-300' : 'cursor-pointer accent-orange-500'"
+                        :title="!isEtiquetasCompletable(o) ? 'Esta OT no está disponible para completar' : 'Seleccionar para completar al 100%'"
+                        v-model="etiquetasSelectedIds"
                         :value="Number(o.id)"
                       />
                     </td>
@@ -549,6 +755,8 @@ function isoWeekNumber(dateStr){
               <div class="flex items-start justify-between gap-3">
                 <div class="flex items-center gap-2">
                   <input v-if="canFacturar" type="checkbox" :disabled="!isSelectable(o)" :class="!isSelectable(o) ? 'opacity-40 cursor-not-allowed accent-gray-300' : 'cursor-pointer accent-[#1A73E8] hover:accent-[#1557b0]'" :title="!isSelectable(o) ? 'No seleccionable: ya facturada o sin autorización del cliente' : 'Seleccionar para facturar'" v-model="selectedIds" :value="Number(o.id)" />
+                  <input v-if="canAutorizarCliente && props.urls?.autorizar_masivo_cliente" type="checkbox" :disabled="!isClienteAutorizable(o)" :class="!isClienteAutorizable(o) ? 'opacity-30 cursor-not-allowed accent-gray-300' : 'cursor-pointer accent-violet-500'" :title="!isClienteAutorizable(o) ? 'Esta OT no está disponible para autorizar' : 'Seleccionar para autorizar como cliente'" v-model="clienteSelectedIds" :value="Number(o.id)" />
+                  <input v-if="canCompletarMasivoEtiquetas && props.urls?.completar_masivo" type="checkbox" :disabled="!isEtiquetasCompletable(o)" :class="!isEtiquetasCompletable(o) ? 'opacity-30 cursor-not-allowed accent-gray-300' : 'cursor-pointer accent-orange-500'" :title="!isEtiquetasCompletable(o) ? 'Esta OT no está disponible para completar' : 'Seleccionar para completar al 100%'" v-model="etiquetasSelectedIds" :value="Number(o.id)" />
                   <div>
                     <div class="text-xs uppercase tracking-wide text-slate-500">Folio</div>
                     <div class="text-lg font-semibold text-slate-900">#{{ o.id }}</div>
@@ -649,4 +857,104 @@ function isoWeekNumber(dateStr){
       </div>
     </div>
   </div>
+
+  <!-- Modal de confirmación: Autorizar masivamente como cliente -->
+  <Teleport to="body">
+    <div v-if="showConfirmModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" @click.self="cerrarConfirmacion">
+      <div class="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 p-6">
+        <div class="flex items-start gap-3 mb-4">
+          <div class="flex-shrink-0 w-10 h-10 rounded-full bg-violet-100 flex items-center justify-center">
+            <svg class="w-5 h-5 text-violet-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+          </div>
+          <div>
+            <h3 class="text-base font-semibold text-slate-900">Confirmar autorización masiva</h3>
+            <p class="mt-1 text-sm text-slate-600">
+              Se procesarán <strong>{{ clienteSelectedCount }} orden(es) de trabajo</strong> seleccionadas.
+            </p>
+            <p class="mt-1 text-xs text-slate-500">
+              El sistema re-validará cada OT antes de autorizarla. Si alguna ya no cumple las condiciones será omitida y se informará en el resultado.
+            </p>
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-2 mt-5">
+          <button
+            type="button"
+            @click="cerrarConfirmacion"
+            :disabled="confirmando"
+            class="inline-flex h-9 items-center justify-center rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            @click="autorizarMasivoCliente"
+            :disabled="confirmando"
+            class="inline-flex h-9 items-center justify-center gap-2 rounded-md px-4 text-sm font-semibold text-white bg-violet-600 hover:bg-violet-700 transition-colors disabled:opacity-60"
+          >
+            <svg v-if="confirmando" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+            </svg>
+            <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+            </svg>
+            {{ confirmando ? 'Procesando…' : 'Autorizar como cliente' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </Teleport>
+
+  <!-- Modal de confirmación: Completar masivamente (etiquetas) -->
+  <Teleport to="body">
+    <div v-if="showCompletarModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" @click.self="cerrarModalCompletar">
+      <div class="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 p-6">
+        <div class="flex items-start gap-3 mb-4">
+          <div class="flex-shrink-0 w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center">
+            <svg class="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+          </div>
+          <div>
+            <h3 class="text-base font-semibold text-slate-900">Confirmar completado masivo</h3>
+            <p class="mt-1 text-sm text-slate-600">
+              Se completarán al 100% <strong>{{ etiquetasSelectedCount }} OT(s)</strong> del sistema de etiquetas.
+            </p>
+            <p class="mt-1 text-xs text-slate-500">
+              El sistema re-validará cada OT antes de procesarla. Las que no cumplan las condiciones serán omitidas.
+            </p>
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-2 mt-5">
+          <button
+            type="button"
+            @click="cerrarModalCompletar"
+            :disabled="confirmandoCompletar"
+            class="inline-flex h-9 items-center justify-center rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            @click="completarMasivoEtiquetas"
+            :disabled="confirmandoCompletar"
+            class="inline-flex h-9 items-center justify-center gap-2 rounded-md px-4 text-sm font-semibold text-white bg-orange-500 hover:bg-orange-600 transition-colors disabled:opacity-60"
+          >
+            <svg v-if="confirmandoCompletar" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+            </svg>
+            <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            {{ confirmandoCompletar ? 'Procesando…' : 'Completar al 100%' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </Teleport>
 </template>

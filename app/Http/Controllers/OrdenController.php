@@ -2102,18 +2102,19 @@ class OrdenController extends Controller
     $isClienteCentro = $u && method_exists($u, 'hasRole') ? $u->hasRole('Cliente_Gerente') : false;
 
     $filters = [
-            'estatus'      => $req->string('estatus')->toString(),
-            'calidad'      => $req->string('calidad')->toString(),
-            'servicio'     => $req->integer('servicio') ?: null,
-            'centro'       => $req->integer('centro') ?: null,
-            'centro_costo' => $req->integer('centro_costo') ?: null,
-            'facturacion'  => $req->string('facturacion')->toString(),
-            'desde'        => $req->date('desde'),
-            'hasta'        => $req->date('hasta'),
-            'id'           => $req->integer('id') ?: null,
-            'year'         => $req->integer('year') ?: null,
-            'week'         => $req->integer('week') ?: null,
-            'show_deleted' => $req->boolean('show_deleted'),
+            'estatus'          => $req->string('estatus')->toString(),
+            'calidad'          => $req->string('calidad')->toString(),
+            'servicio'         => $req->integer('servicio') ?: null,
+            'centro'           => $req->integer('centro') ?: null,
+            'centro_costo'     => $req->integer('centro_costo') ?: null,
+            'facturacion'      => $req->string('facturacion')->toString(),
+            'desde'            => $req->date('desde'),
+            'hasta'            => $req->date('hasta'),
+            'id'               => $req->integer('id') ?: null,
+            'year'             => $req->integer('year') ?: null,
+            'week'             => $req->integer('week') ?: null,
+            'show_deleted'     => $req->boolean('show_deleted'),
+            'origen_etiquetas' => $req->boolean('origen_etiquetas') ?: null,
         ];
 
     // Si se selecciona periodo sin anio, asumir el anio actual para que el filtro aplique.
@@ -2176,6 +2177,9 @@ class OrdenController extends Controller
             ->when($filters['year'] && !$filters['week'], function($qq) use ($filters) {
                 $qq->whereYear('created_at', $filters['year']);
             })
+            ->when($filters['origen_etiquetas'], function($qq) {
+                $qq->whereHas('solicitud', fn($w) => $w->where('es_integracion_etiquetas', true));
+            })
             ->orderByDesc('id');
 
     $hasAnyFilter =
@@ -2190,10 +2194,11 @@ class OrdenController extends Controller
         || !empty($filters['hasta'])
         || !empty($filters['year'])
         || !empty($filters['week'])
-        || !empty($filters['show_deleted']);
+        || !empty($filters['show_deleted'])
+        || !empty($filters['origen_etiquetas']);
 
         // Reutilizamos el mismo mapeo para paginado o listado completo
-        $transform = function ($o) {
+        $transform = function ($o) use ($u, $centrosPermitidos) {
             // Estatus de facturación real priorizando la factura en pivot (única por integridad)
             // Orden de prioridad: pivot -> directa -> fallback por estatus de OT
             $factStatus = 'sin_factura';
@@ -2244,8 +2249,40 @@ class OrdenController extends Controller
                 ],
                 'created_at_raw' => $raw,
                 'fecha_iso' => $fechaIso,
-            
-                ];
+                'puede_autorizar_cliente' => (function() use ($o, $u, $centrosPermitidos): bool {
+                    // Condición de estado: completada + validada por calidad + sin autorización previa
+                    if ((string)$o->estatus !== 'completada') return false;
+                    if ((string)$o->calidad_resultado !== 'validado') return false;
+                    if (!empty($o->cliente_autorizada_at)) return false;
+
+                    // Admin siempre puede
+                    if ($u->hasRole('admin')) return true;
+
+                    // Dueño de la solicitud (Cliente_Supervisor propietario)
+                    if ((int)($o->solicitud?->id_cliente ?? 0) === (int)$u->id) return true;
+
+                    // Cliente_Gerente con acceso al centro de la OT
+                    if ($u->hasRole('Cliente_Gerente') && in_array((int)$o->id_centrotrabajo, $centrosPermitidos, true)) {
+                        return true;
+                    }
+
+                    return false;
+                })(),
+
+                'es_orden_etiquetas' => (bool)($o->solicitud?->es_integracion_etiquetas),
+
+                'puede_completar_masivo' => (function() use ($o, $u, $centrosPermitidos): bool {
+                    if (!($o->solicitud?->es_integracion_etiquetas)) return false;
+                    if (in_array((string)$o->estatus, ['completada', 'autorizada_cliente', 'facturada', 'entregada', 'cancelada'], true)) return false;
+                    if (in_array((string)($o->ot_status ?? 'active'), ['partial', 'closed', 'canceled'], true)) return false;
+                    if (!is_null($o->deleted_at)) return false;
+                    if ($o->relationLoaded('factura') && $o->factura) return false;
+                    if ($o->relationLoaded('facturas') && $o->facturas && $o->facturas->count() > 0) return false;
+                    if (!$u->hasAnyRole(['admin', 'coordinador', 'team_leader'])) return false;
+                    if (!$u->hasRole('admin') && !in_array((int)$o->id_centrotrabajo, array_map('intval', $centrosPermitidos), true)) return false;
+                    return true;
+                })(),
+            ];
         };
 
         if ($hasAnyFilter) {
@@ -2263,7 +2300,7 @@ class OrdenController extends Controller
             ? \App\Models\CentroTrabajo::select('id','nombre')->orderBy('nombre')->get()
             : \App\Models\CentroTrabajo::whereIn('id', $centrosPermitidos)->select('id','nombre')->orderBy('nombre')->get();
 
-        $responseFilters = $req->only(['id','estatus','calidad','servicio','centro','centro_costo','facturacion','desde','hasta','year','week','show_deleted']);
+        $responseFilters = $req->only(['id','estatus','calidad','servicio','centro','centro_costo','facturacion','desde','hasta','year','week','show_deleted','origen_etiquetas']);
         if (!empty($filters['week']) && empty($responseFilters['year']) && !empty($filters['year'])) {
             $responseFilters['year'] = $filters['year'];
         }
@@ -2284,11 +2321,84 @@ class OrdenController extends Controller
                     : null,
                 'facturas_batch' => route('facturas.batch'),
                 'facturas_batch_create' => route('facturas.batch.create'),
+                'autorizar_masivo_cliente' => $u->hasAnyRole(['Cliente_Supervisor', 'Cliente_Gerente', 'admin'])
+                    ? route('cliente.autorizarMasivo')
+                    : null,
+                'completar_masivo' => $u->hasAnyRole(['coordinador', 'admin', 'team_leader'])
+                    ? route('ordenes.completarMasivo')
+                    : null,
             ],
             'can' => [
                 'manage_deleted' => $canSeeDeleted,
             ],
         ]);
+    }
+
+    /**
+     * Completar masivamente al 100% las OT del sistema de etiquetas seleccionadas.
+     * Solo roles: coordinador, admin, team_leader.
+     */
+    public function completarMasivo(Request $req)
+    {
+        $req->validate([
+            'orden_ids'   => ['required', 'array', 'min:1', 'max:100'],
+            'orden_ids.*' => ['required', 'integer', 'exists:ordenes_trabajo,id'],
+        ]);
+
+        $u = $req->user();
+        /** @var \App\Models\User $u */
+        $centrosPermitidos = array_map('intval', $this->allowedCentroIds($u));
+
+        $ordenes = Orden::with(['solicitud', 'items.ajustes', 'otServicios.items.ajustes', 'factura', 'facturas'])
+            ->whereIn('id', $req->input('orden_ids'))
+            ->get();
+
+        $action     = app(\App\Actions\CompletarOrdenEtiquetasAction::class);
+        $procesadas = [];
+        $omitidas   = [];
+
+        foreach ($ordenes as $orden) {
+            // Re-validar elegibilidad en el servidor
+            if (!($orden->solicitud?->es_integracion_etiquetas)) {
+                $omitidas[] = ['id' => $orden->id, 'folio' => $orden->folio ?? "#{$orden->id}", 'motivo' => 'No es una OT del sistema de etiquetas'];
+                continue;
+            }
+            if (in_array((string)$orden->estatus, ['completada', 'autorizada_cliente', 'facturada', 'entregada', 'cancelada'], true)) {
+                $omitidas[] = ['id' => $orden->id, 'folio' => $orden->folio ?? "#{$orden->id}", 'motivo' => "Estatus no permite completar ({$orden->estatus})"];
+                continue;
+            }
+            if (!$u->hasRole('admin') && !empty($centrosPermitidos) && !in_array((int)$orden->id_centrotrabajo, $centrosPermitidos, true)) {
+                $omitidas[] = ['id' => $orden->id, 'folio' => $orden->folio ?? "#{$orden->id}", 'motivo' => 'Sin acceso al centro de trabajo'];
+                continue;
+            }
+
+            try {
+                $action->execute($orden, $u);
+                $procesadas[] = ['id' => $orden->id, 'folio' => $orden->folio ?? "#{$orden->id}"];
+            } catch (\Throwable $e) {
+                Log::error('OrdenController.completarMasivo: error al completar OT', [
+                    'orden_id' => $orden->id,
+                    'error'    => $e->getMessage(),
+                ]);
+                $omitidas[] = ['id' => $orden->id, 'folio' => $orden->folio ?? "#{$orden->id}", 'motivo' => 'Error interno al procesar'];
+            }
+        }
+
+        $totalProcesadas = count($procesadas);
+        $totalOmitidas   = count($omitidas);
+
+        if ($totalProcesadas > 0 && $totalOmitidas === 0) {
+            return back()->with('ok', "Se completaron {$totalProcesadas} OT(s) al 100% exitosamente.")
+                         ->with('bulk_result', ['procesadas' => $procesadas, 'omitidas' => $omitidas]);
+        }
+
+        if ($totalProcesadas > 0) {
+            return back()->with('ok', "Se completaron {$totalProcesadas} OT(s). {$totalOmitidas} omitidas.")
+                         ->with('bulk_result', ['procesadas' => $procesadas, 'omitidas' => $omitidas]);
+        }
+
+        return back()->withErrors(['orden_ids' => "No se pudo completar ninguna OT. {$totalOmitidas} omitidas."])
+                     ->with('bulk_result', ['procesadas' => $procesadas, 'omitidas' => $omitidas]);
     }
 
     /** Exportar Excel con los mismos filtros del listado */

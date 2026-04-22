@@ -113,7 +113,11 @@ class SolicitudController extends Controller
             || !empty($filters['week'])
             || !empty($filters['show_deleted']);
 
-        $transform = function($s) {
+        $isCoordinadorOrAdmin = $u && method_exists($u, 'hasAnyRole')
+            ? $u->hasAnyRole(['coordinador', 'admin'])
+            : false;
+
+        $transform = function($s) use ($u, $centrosPermitidos, $isCoordinadorOrAdmin) {
             // Mostrar exactamente lo guardado en BD (sin conversión de huso). Se formatea una sola vez a 'Y-m-d H:i'.
             $raw = $s->getRawOriginal('created_at');
             $fecha = null; $fechaHumana = null; $fechaIso = null; $periodo = null;
@@ -149,14 +153,23 @@ class SolicitudController extends Controller
                 'fecha_iso' => $fechaIso,
                 'periodo' => $periodo,
                 'created_at_raw' => $raw,
+                'tiene_ot' => ($s->ordenes_count ?? 0) > 0,
+                'puede_aceptar_y_crear_ot' => $isCoordinadorOrAdmin
+                    && (string)$s->estatus === 'pendiente'
+                    && is_null($s->deleted_at)
+                    && ($s->ordenes_count ?? 0) === 0
+                    && (
+                        $u->hasRole('admin')
+                        || in_array((int)$s->id_centrotrabajo, array_map('intval', $centrosPermitidos), true)
+                    ),
             ];
         };
 
         if ($hasAnyFilter) {
-            $all = $q->with(['servicio','centro','cliente','area','archivos','centroCosto','marca'])->get()->map($transform)->values();
+            $all = $q->with(['servicio','centro','cliente','area','archivos','centroCosto','marca'])->withCount('ordenes')->get()->map($transform)->values();
             $data = [ 'data' => $all ];
         } else {
-            $paginator = $q->with(['servicio','centro','cliente','area','archivos','centroCosto','marca'])->paginate(10)->withQueryString();
+            $paginator = $q->with(['servicio','centro','cliente','area','archivos','centroCosto','marca'])->withCount('ordenes')->paginate(10)->withQueryString();
             $paginator->getCollection()->transform($transform);
             $data = $paginator;
         }
@@ -185,9 +198,15 @@ class SolicitudController extends Controller
             'centros' => $centrosLista,
             'centrosCostos' => $centrosCostosLista,
             'marcas' => $marcasLista,
-            'urls' => ['index' => route('solicitudes.index')],
+            'urls' => [
+                'index'            => route('solicitudes.index'),
+                'aprobar_masivo_ot' => $isCoordinadorOrAdmin
+                    ? route('solicitudes.aprobarMasivoOt')
+                    : null,
+            ],
             'can' => [
-                'manage_deleted' => $canSeeDeleted,
+                'manage_deleted'           => $canSeeDeleted,
+                'puede_masivo_coordinador' => $isCoordinadorOrAdmin,
             ],
         ]);
     }
@@ -833,6 +852,87 @@ class SolicitudController extends Controller
         );
 
         return back()->with('ok','Solicitud rechazada');
+    }
+
+    /**
+     * Acción masiva: aprobar solicitudes pendientes y generar su OT automáticamente.
+     * Rol: coordinador o admin.
+     */
+    public function aprobarMasivoOt(Request $req)
+    {
+        $req->validate([
+            'solicitud_ids'   => ['required', 'array', 'min:1', 'max:100'],
+            'solicitud_ids.*' => ['required', 'integer', 'exists:solicitudes,id'],
+        ]);
+
+        /** @var \App\Models\User $u */
+        $u = $req->user();
+
+        $centrosPermitidos = array_map('intval', $this->allowedCentroIds($u));
+
+        $solicitudes = Solicitud::with(['servicio', 'tamanos', 'servicios.servicio', 'marca', 'cliente'])
+            ->withCount('ordenes')
+            ->whereIn('id', $req->input('solicitud_ids'))
+            ->get();
+
+        $action    = app(\App\Actions\AceptarYCrearOrdenAction::class);
+        $procesadas = [];
+        $omitidas   = [];
+
+        foreach ($solicitudes as $solicitud) {
+            // ── Re-validaciones de seguridad ──────────────────────────────
+            if ((string)$solicitud->estatus !== 'pendiente') {
+                $omitidas[] = ['id' => $solicitud->id, 'folio' => $solicitud->folio, 'motivo' => 'No está pendiente'];
+                continue;
+            }
+            if ($solicitud->ordenes_count > 0) {
+                $omitidas[] = ['id' => $solicitud->id, 'folio' => $solicitud->folio, 'motivo' => 'Ya tiene OT'];
+                continue;
+            }
+            if (!$u->hasRole('admin') && !in_array((int)$solicitud->id_centrotrabajo, $centrosPermitidos, true)) {
+                $omitidas[] = ['id' => $solicitud->id, 'folio' => $solicitud->folio, 'motivo' => 'Sin acceso al centro'];
+                continue;
+            }
+            if (!is_null($solicitud->deleted_at)) {
+                $omitidas[] = ['id' => $solicitud->id, 'folio' => $solicitud->folio, 'motivo' => 'Solicitud eliminada'];
+                continue;
+            }
+
+            // ── Ejecutar (cada llamada es su propio DB::transaction) ──────
+            try {
+                $orden = $action->execute($solicitud, $u);
+                $procesadas[] = [
+                    'solicitud_id' => $solicitud->id,
+                    'folio_sol'    => $solicitud->folio,
+                    'orden_id'     => $orden->id,
+                    'folio_ot'     => $orden->folio,
+                ];
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::error('aprobarMasivoOt: fallo en solicitud', [
+                    'solicitud_id' => $solicitud->id,
+                    'error'        => $e->getMessage(),
+                ]);
+                $omitidas[] = ['id' => $solicitud->id, 'folio' => $solicitud->folio, 'motivo' => 'Error interno'];
+            }
+        }
+
+        $totalProcesadas = count($procesadas);
+        $totalOmitidas   = count($omitidas);
+
+        if ($totalProcesadas === 0) {
+            return back()
+                ->with('error', "No se procesó ninguna solicitud. {$totalOmitidas} omitida(s).")
+                ->with('bulk_result', ['procesadas' => $procesadas, 'omitidas' => $omitidas]);
+        }
+
+        $msg = "Se procesaron {$totalProcesadas} solicitud(es) y se generaron sus OTs.";
+        if ($totalOmitidas > 0) {
+            $msg .= " {$totalOmitidas} omitida(s).";
+        }
+
+        return back()
+            ->with('ok', $msg)
+            ->with('bulk_result', ['procesadas' => $procesadas, 'omitidas' => $omitidas]);
     }
 
     private function authorizeCentro(int $centroId): void

@@ -313,6 +313,11 @@ class CalidadController extends Controller
         'review' => route('calidad.show', $o),
         'show'   => route('ordenes.show', $o),
       ],
+      'puede_validar_calidad_masivo' => (
+        (string)$o->estatus === 'completada'
+        && (string)($o->calidad_resultado ?? '') === 'pendiente'
+        && !$o->deleted_at
+      ),
     ];
   });
 
@@ -324,7 +329,12 @@ class CalidadController extends Controller
   return \Inertia\Inertia::render('Calidad/Index', [
     'data'    => $data,
     'filters' => $filters,
-    'urls'    => [ 'index' => route('calidad.index') ],
+    'urls'    => [
+      'index'         => route('calidad.index'),
+      'validar_masivo' => ($u->hasRole('calidad') || $u->hasRole('admin'))
+        ? route('calidad.validarMasivo')
+        : null,
+    ],
     'centros' => $centrosLista,
   ]);
   }
@@ -344,6 +354,72 @@ class CalidadController extends Controller
   private function calidadVisibleStatuses(): array
   {
     return ['completada','autorizada_cliente','facturada'];
+  }
+
+  /**
+   * Validar masivamente calidad en varias OT completadas.
+   * Solo roles: calidad, admin.
+   */
+  public function validarMasivo(Request $req)
+  {
+    $req->validate([
+      'orden_ids'   => ['required', 'array', 'min:1', 'max:100'],
+      'orden_ids.*' => ['required', 'integer', 'exists:ordenes_trabajo,id'],
+    ]);
+
+    $u = $req->user();
+    /** @var \App\Models\User $u */
+    $centrosPermitidos = array_map('intval', $this->allowedCentroIds($u));
+
+    $ordenes = Orden::with(['solicitud.tamanos', 'otServicios', 'items'])
+      ->whereIn('id', $req->input('orden_ids'))
+      ->get();
+
+    $action     = app(\App\Actions\ValidarOrdenCalidadAction::class);
+    $procesadas = [];
+    $omitidas   = [];
+
+    foreach ($ordenes as $orden) {
+      if ((string)$orden->estatus !== 'completada') {
+        $omitidas[] = ['id' => $orden->id, 'folio' => $orden->folio ?? "#{$orden->id}", 'motivo' => "No está completada ({$orden->estatus})"];
+        continue;
+      }
+      if ((string)($orden->calidad_resultado ?? '') === 'validado') {
+        $omitidas[] = ['id' => $orden->id, 'folio' => $orden->folio ?? "#{$orden->id}", 'motivo' => 'Ya validada por calidad'];
+        continue;
+      }
+      if (!$u->hasRole('admin') && !empty($centrosPermitidos) && !in_array((int)$orden->id_centrotrabajo, $centrosPermitidos, true)) {
+        $omitidas[] = ['id' => $orden->id, 'folio' => $orden->folio ?? "#{$orden->id}", 'motivo' => 'Sin acceso al centro de trabajo'];
+        continue;
+      }
+
+      try {
+        $action->execute($orden, $u);
+        $procesadas[] = ['id' => $orden->id, 'folio' => $orden->folio ?? "#{$orden->id}"];
+      } catch (\Throwable $e) {
+        Log::error('CalidadController.validarMasivo: error al validar OT', [
+          'orden_id' => $orden->id,
+          'error'    => $e->getMessage(),
+        ]);
+        $omitidas[] = ['id' => $orden->id, 'folio' => $orden->folio ?? "#{$orden->id}", 'motivo' => $e->getMessage()];
+      }
+    }
+
+    $totalProcesadas = count($procesadas);
+    $totalOmitidas   = count($omitidas);
+
+    if ($totalProcesadas > 0 && $totalOmitidas === 0) {
+      return back()->with('ok', "Se validaron {$totalProcesadas} OT(s) por calidad exitosamente.")
+                   ->with('bulk_result', ['procesadas' => $procesadas, 'omitidas' => $omitidas]);
+    }
+
+    if ($totalProcesadas > 0) {
+      return back()->with('ok', "Se validaron {$totalProcesadas} OT(s). {$totalOmitidas} omitidas.")
+                   ->with('bulk_result', ['procesadas' => $procesadas, 'omitidas' => $omitidas]);
+    }
+
+    return back()->withErrors(['orden_ids' => "No se pudo validar ninguna OT. {$totalOmitidas} omitidas."])
+                 ->with('bulk_result', ['procesadas' => $procesadas, 'omitidas' => $omitidas]);
   }
 
 }
