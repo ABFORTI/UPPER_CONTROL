@@ -228,7 +228,7 @@ Route::middleware('auth')->group(function () {
         ->middleware('role:admin|facturacion|gerente_upper')
         ->name('ordenes.exportFacturacion');
     Route::post('/ordenes/completar-masivo', [OrdenController::class,'completarMasivo'])
-        ->middleware('role:coordinador|admin|team_leader')
+        ->middleware(['role:coordinador|admin|team_leader', 'feature:completar_masivo_etiquetas'])
         ->name('ordenes.completarMasivo');
     Route::get('/ordenes/{orden}', [OrdenController::class,'show'])->name('ordenes.show');
     Route::delete('/ordenes/{id}', [OrdenController::class, 'destroy'])->name('ordenes.destroy');
@@ -340,7 +340,7 @@ Route::middleware('auth')->group(function () {
 
     // Supervisor (antes 'cliente')
     Route::post('/ordenes/cliente/autorizar-masivo', [ClienteController::class,'autorizarMasivo'])
-        ->middleware('role:Cliente_Supervisor|Cliente_Gerente|Cliente_Autorizador_Integraciones|admin')
+        ->middleware(['role:Cliente_Supervisor|Cliente_Gerente|Cliente_Autorizador_Integraciones|admin', 'feature:autorizar_masivo_cliente'])
         ->name('cliente.autorizarMasivo');
 
     Route::post('/ordenes/{orden}/cliente/autorizar', [ClienteController::class,'autorizar'])

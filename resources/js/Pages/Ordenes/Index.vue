@@ -27,13 +27,19 @@ const canFacturar = computed(() => {
 // Permisos: solo roles cliente o admin pueden autorizar masivamente
 const canAutorizarCliente = computed(() => {
   const roles = page.props?.auth?.user?.roles || []
-  return roles.includes('admin') || roles.includes('Cliente_Supervisor') || roles.includes('Cliente_Gerente') || roles.includes('Cliente_Autorizador_Integraciones')
+  const features = page.props?.auth?.features || []
+  const isAdmin = roles.includes('admin')
+  const hasRole = roles.includes('Cliente_Supervisor') || roles.includes('Cliente_Gerente') || roles.includes('Cliente_Autorizador_Integraciones')
+  return (isAdmin || hasRole) && (isAdmin || features.includes('autorizar_masivo_cliente'))
 })
 
 // Permisos: coordinador, admin o TL pueden completar masivamente OTs de etiquetas
 const canCompletarMasivoEtiquetas = computed(() => {
   const roles = page.props?.auth?.user?.roles || []
-  return roles.includes('admin') || roles.includes('coordinador') || roles.includes('team_leader')
+  const features = page.props?.auth?.features || []
+  const isAdmin = roles.includes('admin')
+  const hasRole = roles.includes('coordinador') || roles.includes('team_leader')
+  return (isAdmin || hasRole) && (isAdmin || features.includes('completar_masivo_etiquetas'))
 })
 
 // Selección múltiple para facturación (usar array para v-model de checkboxes)

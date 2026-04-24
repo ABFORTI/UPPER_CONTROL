@@ -2342,12 +2342,14 @@ class OrdenController extends Controller
                     : null,
                 'facturas_batch' => route('facturas.batch'),
                 'facturas_batch_create' => route('facturas.batch.create'),
-                'autorizar_masivo_cliente' => $u->hasAnyRole(['Cliente_Supervisor', 'Cliente_Gerente', 'Cliente_Autorizador_Integraciones', 'admin'])
-                    ? route('cliente.autorizarMasivo')
-                    : null,
-                'completar_masivo' => $u->hasAnyRole(['coordinador', 'admin', 'team_leader'])
-                    ? route('ordenes.completarMasivo')
-                    : null,
+                'autorizar_masivo_cliente' => (
+                    $u->hasAnyRole(['Cliente_Supervisor', 'Cliente_Gerente', 'Cliente_Autorizador_Integraciones', 'admin'])
+                    && ($u->hasRole('admin') || (bool)($u->centro?->hasFeature('autorizar_masivo_cliente') ?? false))
+                ) ? route('cliente.autorizarMasivo') : null,
+                'completar_masivo' => (
+                    $u->hasAnyRole(['coordinador', 'admin', 'team_leader'])
+                    && ($u->hasRole('admin') || (bool)($u->centro?->hasFeature('completar_masivo_etiquetas') ?? false))
+                ) ? route('ordenes.completarMasivo') : null,
             ],
             'can' => [
                 'manage_deleted' => $canSeeDeleted,
