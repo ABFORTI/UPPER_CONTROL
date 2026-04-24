@@ -208,6 +208,7 @@ class EtiquetasCvaGdlSolicitudController extends Controller
                             'pedido' => $data['pedido'] ?? null,
                             'es_integracion_etiquetas' => true,
                             'solicitante_externo' => $config['solicitante'],
+                            'origen_solicitud' => 'python_etiquetas',
                             'metadata_json' => $this->buildSolicitudMetadata($data, $detalles, $tipoPedido),
                         ]);
                     } finally {

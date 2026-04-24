@@ -2096,10 +2096,11 @@ class OrdenController extends Controller
     $isTL = $u && method_exists($u, 'hasRole') ? $u->hasRole('team_leader') : false;
     // Si además de TL tiene otros roles con mayor alcance, no restringir el listado a sus OTs
     $isTLStrict = $u && method_exists($u, 'hasAnyRole')
-        ? ($isTL && !$u->hasAnyRole(['admin','coordinador','calidad','facturacion','gerente_upper','Cliente_Supervisor','Cliente_Gerente']))
+        ? ($isTL && !$u->hasAnyRole(['admin','coordinador','calidad','facturacion','gerente_upper','Cliente_Supervisor','Cliente_Gerente','Cliente_Autorizador_Integraciones']))
         : $isTL;
     $isCliente = $u && method_exists($u, 'hasRole') ? $u->hasRole('Cliente_Supervisor') : false;
     $isClienteCentro = $u && method_exists($u, 'hasRole') ? $u->hasRole('Cliente_Gerente') : false;
+    $isAutorizadorIntegraciones = $u && method_exists($u, 'hasRole') ? $u->hasRole('Cliente_Autorizador_Integraciones') : false;
 
     $filters = [
             'estatus'          => $req->string('estatus')->toString(),
@@ -2137,10 +2138,24 @@ class OrdenController extends Controller
     }
     $q = Orden::with(['servicio','centro','teamLeader','solicitud.cliente','solicitud.centroCosto','solicitud.marca','factura','facturas','area'])
         ->when($canSeeDeleted && $filters['show_deleted'], fn($qq) => $qq->withTrashed())
-        ->when(!$isPrivilegedViewer, function($qq) use ($centrosPermitidos){
-            if (!empty($centrosPermitidos)) { $qq->whereIn('id_centrotrabajo', $centrosPermitidos); }
-            else { $qq->whereRaw('1=0'); }
+        ->when(!$isPrivilegedViewer, function($qq) use ($centrosPermitidos, $isAutorizadorIntegraciones, $u){
+            if (!empty($centrosPermitidos)) {
+                $qq->whereIn('id_centrotrabajo', $centrosPermitidos);
+            } elseif ($isAutorizadorIntegraciones) {
+                // Sin centro asignado: mostrar solo OTs de solicitudes python_etiquetas propias
+                $qq->whereHas('solicitud', fn($w) => $w->where('origen_solicitud', 'python_etiquetas')
+                    ->where('id_cliente', $u->id));
+            } else {
+                $qq->whereRaw('1=0');
+            }
         })
+        // Autorizador de integraciones con centro(s): restringir a OTs propias o de origen python_etiquetas
+        ->when($isAutorizadorIntegraciones && !empty($centrosPermitidos), fn($qq) =>
+            $qq->whereHas('solicitud', fn($w) =>
+                $w->where('origen_solicitud', 'python_etiquetas')
+                  ->orWhere('id_cliente', $u->id)
+            )
+        )
         ->when($isPrivilegedViewer && $filters['centro'], fn($qq)=>$qq->where('id_centrotrabajo', $filters['centro']))
         ->when(!$isPrivilegedViewer && $filters['centro'], function($qq) use ($filters, $centrosPermitidos){
             // Aplicar filtro solo si el centro está permitido
@@ -2149,7 +2164,7 @@ class OrdenController extends Controller
             }
         })
         ->when($isTLStrict, fn($qq)=>$qq->where('team_leader_id',$u->id))
-        ->when($isCliente && !$isClienteCentro, fn($qq)=>$qq->whereHas('solicitud', fn($w)=>$w->where('id_cliente',$u->id)))
+        ->when($isCliente && !$isClienteCentro && !$isAutorizadorIntegraciones, fn($qq)=>$qq->whereHas('solicitud', fn($w)=>$w->where('id_cliente',$u->id)))
             ->when($filters['id'], fn($qq,$v)=>$qq->where('id',$v))
             ->when($filters['estatus'], fn($qq,$v)=>$qq->where('estatus',$v))
             ->when($filters['calidad'], fn($qq,$v)=>$qq->where('calidad_resultado',$v))
@@ -2266,6 +2281,12 @@ class OrdenController extends Controller
                         return true;
                     }
 
+                    // Autorizador de integraciones: solo OTs de origen python_etiquetas en su centro
+                    if ($u->hasRole('Cliente_Autorizador_Integraciones')) {
+                        $esPython = ($o->solicitud?->origen_solicitud ?? 'manual') === 'python_etiquetas';
+                        return $esPython && in_array((int)$o->id_centrotrabajo, $centrosPermitidos, true);
+                    }
+
                     return false;
                 })(),
 
@@ -2321,7 +2342,7 @@ class OrdenController extends Controller
                     : null,
                 'facturas_batch' => route('facturas.batch'),
                 'facturas_batch_create' => route('facturas.batch.create'),
-                'autorizar_masivo_cliente' => $u->hasAnyRole(['Cliente_Supervisor', 'Cliente_Gerente', 'admin'])
+                'autorizar_masivo_cliente' => $u->hasAnyRole(['Cliente_Supervisor', 'Cliente_Gerente', 'Cliente_Autorizador_Integraciones', 'admin'])
                     ? route('cliente.autorizarMasivo')
                     : null,
                 'completar_masivo' => $u->hasAnyRole(['coordinador', 'admin', 'team_leader'])

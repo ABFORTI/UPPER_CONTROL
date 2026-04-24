@@ -28,6 +28,10 @@ class SolicitudController extends Controller
             : false;
         $isCliente = method_exists($u, 'hasRole') ? $u->hasRole('Cliente_Supervisor') : false;
         $isClienteCentro = method_exists($u, 'hasRole') ? $u->hasRole('Cliente_Gerente') : false;
+        // Nuevo rol: puede ver sus solicitudes propias + solicitudes de integración Python del mismo centro
+        $isAutorizadorIntegraciones = method_exists($u, 'hasRole')
+            ? $u->hasRole('Cliente_Autorizador_Integraciones')
+            : false;
 
         $filters = [
             'estatus'  => $req->string('estatus')->toString(),
@@ -81,7 +85,17 @@ class SolicitudController extends Controller
                     $qq->where('id_centrotrabajo', $filters['centro']);
                 }
             })
-            ->when($isCliente && !$isClienteCentro, fn($qq)=>$qq->where('id_cliente',$u->id))
+            // Cliente_Supervisor: solo sus propias solicitudes
+            // Cliente_Autorizador_Integraciones: sus solicitudes + solicitudes python_etiquetas del mismo centro
+            ->when($isCliente && !$isClienteCentro && !$isAutorizadorIntegraciones,
+                fn($qq) => $qq->where('id_cliente', $u->id)
+            )
+            ->when($isAutorizadorIntegraciones && !$isClienteCentro, function($qq) use ($u) {
+                $qq->where(function($inner) use ($u) {
+                    $inner->where('id_cliente', $u->id)
+                          ->orWhere('origen_solicitud', 'python_etiquetas');
+                });
+            })
             ->when($filters['estatus'],  fn($qq,$v)=>$qq->where('estatus',$v))
             ->when($filters['servicio'], fn($qq,$v)=>$qq->where('id_servicio',$v))
             ->when($filters['marca'], fn($qq,$v)=>$qq->where('id_marca',$v))
@@ -162,6 +176,10 @@ class SolicitudController extends Controller
                         $u->hasRole('admin')
                         || in_array((int)$s->id_centrotrabajo, array_map('intval', $centrosPermitidos), true)
                     ),
+                // Campos de integración para mostrar etiqueta visual en cliente
+                'origen_solicitud'    => $s->origen_solicitud ?? 'manual',
+                'es_integracion_etiquetas' => (bool)($s->es_integracion_etiquetas ?? false),
+                'solicitante_externo' => $s->solicitante_externo,
             ];
         };
 
@@ -207,6 +225,7 @@ class SolicitudController extends Controller
             'can' => [
                 'manage_deleted'           => $canSeeDeleted,
                 'puede_masivo_coordinador' => $isCoordinadorOrAdmin,
+                'es_autorizador_integraciones' => $isAutorizadorIntegraciones,
             ],
         ]);
     }

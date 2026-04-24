@@ -360,7 +360,17 @@ function isoWeekNumber(dateStr){
                   <span v-else class="block w-4 h-4 rounded bg-slate-200 dark:bg-slate-700 mx-auto" title="No disponible"></span>
                 </td>
                 <td class="px-2 py-2 leading-snug text-center break-words whitespace-normal xl:max-w-[6rem] xl:px-3">{{ s.id_solicitud ?? s.id }}</td>
-                <td class="px-2 py-2 leading-snug text-center break-words whitespace-normal xl:max-w-[9rem] xl:px-3">{{ s.folio || s.id }}</td>
+                <td class="px-2 py-2 leading-snug text-center break-words whitespace-normal xl:max-w-[9rem] xl:px-3">
+                  {{ s.folio || s.id }}
+                  <span v-if="s.origen_solicitud === 'python_etiquetas'"
+                    class="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
+                    title="Generada automáticamente por la integración de etiquetas">
+                    <svg class="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18"/>
+                    </svg>
+                    Auto
+                  </span>
+                </td>
                 <td class="px-2 py-2 leading-snug text-center break-words whitespace-normal xl:max-w-[11rem] xl:px-3">{{ s.cliente?.name || '-' }}</td>
                 <td class="px-2 py-2 leading-snug text-center break-words whitespace-normal xl:max-w-[11rem] xl:px-3">{{ s.producto || '-' }}</td>
                 <td class="px-2 py-2 leading-snug text-center break-words whitespace-normal xl:max-w-[12rem] xl:px-3">{{ s.servicio?.nombre || '-' }}</td>
@@ -441,6 +451,14 @@ function isoWeekNumber(dateStr){
                 <div class="text-sm font-semibold text-slate-900 dark:text-white">{{ s.id_solicitud ?? s.id }}</div>
                 <div class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Folio</div>
                 <div class="text-lg font-semibold text-slate-900 dark:text-white">{{ s.folio || s.id }}</div>
+                <span v-if="s.origen_solicitud === 'python_etiquetas'"
+                  class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
+                  title="Generada automáticamente por la integración de etiquetas">
+                  <svg class="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18"/>
+                  </svg>
+                  Generada automáticamente
+                </span>
               </div>
               <span class="px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wide"
                     :class="{

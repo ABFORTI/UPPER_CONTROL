@@ -27,7 +27,7 @@ const canFacturar = computed(() => {
 // Permisos: solo roles cliente o admin pueden autorizar masivamente
 const canAutorizarCliente = computed(() => {
   const roles = page.props?.auth?.user?.roles || []
-  return roles.includes('admin') || roles.includes('Cliente_Supervisor') || roles.includes('Cliente_Gerente')
+  return roles.includes('admin') || roles.includes('Cliente_Supervisor') || roles.includes('Cliente_Gerente') || roles.includes('Cliente_Autorizador_Integraciones')
 })
 
 // Permisos: coordinador, admin o TL pueden completar masivamente OTs de etiquetas
@@ -482,9 +482,8 @@ function isoWeekNumber(dateStr){
                     <th v-if="canFacturar" class="w-10 px-1 sm:px-1.5 py-2 text-center align-top"></th>
                     <th v-if="canAutorizarCliente && props.urls?.autorizar_masivo_cliente" class="w-10 px-1 sm:px-1.5 py-2 text-center align-middle" title="Seleccionar autorizables">
                       <input type="checkbox" v-model="clienteSelectAll" class="cursor-pointer accent-violet-500" title="Seleccionar/deseleccionar todas las autorizables" aria-label="Seleccionar todas las autorizables" />
-                    </th>                    <th v-if="canCompletarMasivoEtiquetas && props.urls?.completar_masivo" class="w-10 px-1 sm:px-1.5 py-2 text-center align-middle" title="Seleccionar etiquetas">
-                      <input type="checkbox" v-model="etiquetasSelectAll" class="cursor-pointer accent-orange-500" title="Seleccionar/deseleccionar todas las completables" aria-label="Seleccionar todas las completables" />
-                    </th>                    <th v-if="canCompletarMasivoEtiquetas && props.urls?.completar_masivo" class="w-10 px-1 sm:px-1.5 py-2 text-center align-middle" title="Seleccionar etiquetas">
+                    </th>
+                    <th v-if="canCompletarMasivoEtiquetas && props.urls?.completar_masivo" class="w-10 px-1 sm:px-1.5 py-2 text-center align-middle" title="Seleccionar etiquetas">
                       <input type="checkbox" v-model="etiquetasSelectAll" class="cursor-pointer accent-orange-500" title="Seleccionar/deseleccionar todas las completables" aria-label="Seleccionar todas las completables" />
                     </th>
                     <th class="w-16 px-1 sm:px-1.5 py-2 text-center align-top whitespace-nowrap">ID</th>
@@ -623,6 +622,9 @@ function isoWeekNumber(dateStr){
                     <th v-if="canFacturar" class="w-10 px-1 sm:px-1.5 py-2 text-center align-top"></th>
                     <th v-if="canAutorizarCliente && props.urls?.autorizar_masivo_cliente" class="w-10 px-1 sm:px-1.5 py-2 text-center align-middle" title="Seleccionar autorizables">
                       <input type="checkbox" v-model="clienteSelectAll" class="cursor-pointer accent-violet-500" title="Seleccionar/deseleccionar todas las autorizables" aria-label="Seleccionar todas las autorizables" />
+                    </th>
+                    <th v-if="canCompletarMasivoEtiquetas && props.urls?.completar_masivo" class="w-10 px-1 sm:px-1.5 py-2 text-center align-middle" title="Seleccionar completables">
+                      <input type="checkbox" v-model="etiquetasSelectAll" class="cursor-pointer accent-orange-500" title="Seleccionar/deseleccionar todas las completables" aria-label="Seleccionar todas las completables" />
                     </th>
                     <th class="w-16 px-1 sm:px-1.5 py-2 text-center align-top whitespace-nowrap">ID</th>
                     <th class="w-24 px-1 sm:px-1.5 py-2 text-center align-top whitespace-nowrap">ID Solicitud</th>

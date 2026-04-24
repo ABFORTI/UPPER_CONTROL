@@ -33,7 +33,10 @@ class SolicitudPolicy
     }
 
     public function viewAny(User $u): bool {
-        return $u->hasAnyRole(['admin','Cliente_Supervisor','coordinador','calidad','facturacion','team_leader','gerente_upper']);
+        return $u->hasAnyRole([
+            'admin','Cliente_Supervisor','Cliente_Gerente','Cliente_Autorizador_Integraciones',
+            'coordinador','calidad','facturacion','team_leader','gerente_upper',
+        ]);
     }
 
     public function view(User $u, Solicitud $s): bool {
@@ -43,6 +46,12 @@ class SolicitudPolicy
         // Cliente con alcance a todo el centro (opcional)
         if ($u->hasRole('Cliente_Gerente')) {
             return in_array((int)$s->id_centrotrabajo, $this->userCentroIds($u), true);
+        }
+        // Autorizador de integraciones: sus propias solicitudes O solicitudes python_etiquetas del mismo centro
+        if ($u->hasRole('Cliente_Autorizador_Integraciones')) {
+            if ((int)$s->id_cliente === (int)$u->id) return true;
+            return ($s->origen_solicitud ?? 'manual') === 'python_etiquetas'
+                && in_array((int)$s->id_centrotrabajo, $this->userCentroIds($u), true);
         }
         // Supervisor (antes 'cliente'): sólo sus propias solicitudes
         if ($u->hasRole('Cliente_Supervisor')) return $s->id_cliente === $u->id;

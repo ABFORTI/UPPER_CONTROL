@@ -340,7 +340,7 @@ Route::middleware('auth')->group(function () {
 
     // Supervisor (antes 'cliente')
     Route::post('/ordenes/cliente/autorizar-masivo', [ClienteController::class,'autorizarMasivo'])
-        ->middleware('role:Cliente_Supervisor|Cliente_Gerente|admin')
+        ->middleware('role:Cliente_Supervisor|Cliente_Gerente|Cliente_Autorizador_Integraciones|admin')
         ->name('cliente.autorizarMasivo');
 
     Route::post('/ordenes/{orden}/cliente/autorizar', [ClienteController::class,'autorizar'])

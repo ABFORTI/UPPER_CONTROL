@@ -53,7 +53,7 @@ class OrdenPolicy
     }
 
     public function viewAny(User $u): bool {
-        return $u->hasAnyRole(['admin','coordinador','team_leader','calidad','facturacion','Cliente_Supervisor','Cliente_Gerente','gerente_upper']);
+        return $u->hasAnyRole(['admin','coordinador','team_leader','calidad','facturacion','Cliente_Supervisor','Cliente_Gerente','Cliente_Autorizador_Integraciones','gerente_upper']);
     }
 
     public function view(User $u, Orden $o): bool {
@@ -97,6 +97,14 @@ class OrdenPolicy
         if ($u->hasRole('Cliente_Gerente')) {
             $checkedAnyScope = true;
             $allowed = $allowed || in_array((int)$o->id_centrotrabajo, $this->userCentroIds($u), true);
+        }
+
+        // Autorizador de integraciones: OTs propias O de origen python_etiquetas en su centro
+        if ($u->hasRole('Cliente_Autorizador_Integraciones')) {
+            $checkedAnyScope = true;
+            $esPython = ($o->solicitud?->origen_solicitud ?? 'manual') === 'python_etiquetas';
+            $enSuCentro = in_array((int)$o->id_centrotrabajo, $this->userCentroIds($u), true);
+            $allowed = $allowed || $isOwner || ($esPython && $enSuCentro);
         }
 
         // Supervisor: sólo sus propias OTs
@@ -267,6 +275,14 @@ class OrdenPolicy
 
         // Cliente con alcance a centro completo puede autorizar del mismo centro
         if ($u->hasRole('Cliente_Gerente') && in_array((int)$o->id_centrotrabajo, $this->userCentroIds($u), true)) return true;
+
+        // Autorizador de integraciones: solo puede autorizar órdenes generadas por la integración Python
+        // del mismo centro al que pertenece el usuario
+        if ($u->hasRole('Cliente_Autorizador_Integraciones')) {
+            $origenSolicitud = $o->solicitud?->origen_solicitud ?? 'manual';
+            return $origenSolicitud === 'python_etiquetas'
+                && in_array((int)$o->id_centrotrabajo, $this->userCentroIds($u), true);
+        }
 
         return false;
     }
