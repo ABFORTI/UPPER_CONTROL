@@ -194,7 +194,7 @@ class EtiquetasCvaGdlSolicitudController extends Controller
                             'id_area' => (int) $area->id,
                             'id_centrocosto' => (int) $centroCosto->id,
                             'id_marca' => (int) $marca->id,
-                            'cantidad' => $this->totalPiezas($detalles),
+                            'cantidad' => $this->numeroUnidades($detalles),
                             'subtotal' => 0,
                             'iva' => 0,
                             'total' => 0,
@@ -221,16 +221,16 @@ class EtiquetasCvaGdlSolicitudController extends Controller
                             ? 0.0
                             : (float) $pricing->precioUnitario((int) $centro->id, (int) $item['servicio']->id, null);
 
-                        $indiceUnidad = $this->detalleIndice($item['detalle'], $tipoPedido);
+                        $cantidadUnidades = (int) $item['cantidad'];
 
                         SolicitudServicio::create([
                             'solicitud_id' => (int) $solicitud->id,
                             'servicio_id' => (int) $item['servicio']->id,
-                            'descripcion' => $this->detalleDescripcion($tipoPedido, $indiceUnidad),
+                            'descripcion' => (string) $item['servicio']->nombre,
                             'tipo_cobro' => $tipoCobro,
-                            'cantidad' => (int) $item['detalle']['piezas'],
+                            'cantidad' => $cantidadUnidades,
                             'precio_unitario' => $precioUnitario,
-                            'subtotal' => round($precioUnitario * (int) $item['detalle']['piezas'], 2),
+                            'subtotal' => round($precioUnitario * $cantidadUnidades, 2),
                             'service_assignment_status' => 'assigned',
                         ]);
                     }
@@ -486,27 +486,31 @@ class EtiquetasCvaGdlSolicitudController extends Controller
 
     private function resolveServiciosFromDetalles(array $detalles, string $tipoPedido): array
     {
-        $resolved = [];
+        $grouped = [];
 
         foreach ($detalles as $detalle) {
             $tipoEmbalaje = $detalle['tipo_embalaje'] ?? null;
             $serviceName = $this->mapTipoEmbalajeToServiceName($tipoEmbalaje, $tipoPedido);
 
-            $servicio = ServicioEmpresa::query()
-                ->where('nombre', $serviceName)
-                ->first();
+            if (!isset($grouped[$serviceName])) {
+                $servicio = ServicioEmpresa::query()
+                    ->where('nombre', $serviceName)
+                    ->first();
 
-            if (!$servicio) {
-                throw new DomainException('No existe el servicio configurado para tipo_embalaje ' . $this->rawTipoEmbalaje($tipoEmbalaje) . ': ' . $serviceName);
+                if (!$servicio) {
+                    throw new DomainException('No existe el servicio configurado para tipo_embalaje ' . $this->rawTipoEmbalaje($tipoEmbalaje) . ': ' . $serviceName);
+                }
+
+                $grouped[$serviceName] = [
+                    'servicio' => $servicio,
+                    'cantidad' => 0,
+                ];
             }
 
-            $resolved[] = [
-                'detalle' => $detalle,
-                'servicio' => $servicio,
-            ];
+            $grouped[$serviceName]['cantidad']++;
         }
 
-        return $resolved;
+        return array_values($grouped);
     }
 
     private function mapTipoEmbalajeToServiceName($tipoEmbalaje, string $tipoPedido): string
