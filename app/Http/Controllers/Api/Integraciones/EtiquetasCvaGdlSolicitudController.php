@@ -24,6 +24,21 @@ class EtiquetasCvaGdlSolicitudController extends Controller
 {
     public function __invoke(StoreEtiquetasCvaGdlSolicitudRequest $request): JsonResponse
     {
+        // Verificar bloqueo manual del usuario para generar solicitudes
+        $usuario = $request->user();
+        if ($usuario && $usuario->bloqueado_solicitudes) {
+            $motivo = $usuario->motivo_bloqueo_solicitudes ?? 'Sin motivo especificado.';
+            Log::warning('Integracion bloqueada: usuario bloqueado para generar solicitudes', [
+                'user_id' => $usuario->id,
+                'motivo'  => $motivo,
+            ]);
+            return response()->json([
+                'ok'      => false,
+                'mensaje' => 'Este usuario está bloqueado para generar nuevas solicitudes.',
+                'motivo'  => $motivo,
+            ], 403);
+        }
+
         Log::info('TEMP DEBUG etiquetas: peticion recibida en endpoint de integracion', [
             'route' => $request->path(),
             'method' => $request->method(),

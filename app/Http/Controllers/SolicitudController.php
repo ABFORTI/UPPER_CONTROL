@@ -371,7 +371,21 @@ class SolicitudController extends Controller
                 'bloqueo' => $bloqueo['mensaje']
             ])->withInput();
         }
-        
+
+        // Verificar bloqueo manual de usuario para generar solicitudes
+        if ($u && $u->hasAnyRole(['Cliente_Supervisor', 'Cliente_Gerente', 'integracion_api']) && $u->bloqueado_solicitudes) {
+            $motivo = $u->motivo_bloqueo_solicitudes ?? 'Sin motivo especificado.';
+            if ($req->wantsJson()) {
+                return response()->json([
+                    'message' => 'Tu usuario está bloqueado para generar nuevas solicitudes.',
+                    'motivo'  => $motivo,
+                ], 403);
+            }
+            return back()->withErrors([
+                'bloqueo' => 'Tu usuario está bloqueado para generar nuevas solicitudes. Motivo: ' . $motivo,
+            ])->withInput();
+        }
+
         // NUEVO: Detectar si viene con múltiples servicios
         $esMultipleServicios = $req->has('servicios') && is_array($req->servicios);
         
