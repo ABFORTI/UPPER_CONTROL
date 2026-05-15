@@ -29,7 +29,8 @@ use App\Http\Controllers\Admin\{
     CentroController,
     BackupController,
     CentroFeatureController,
-    AnnouncementController as AdminAnnouncementController
+    AnnouncementController as AdminAnnouncementController,
+    UsuarioBloqueoSolicitudesController
 };
 
 // Home -> Redirige a dashboard (o login si no está autenticado)
@@ -424,6 +425,16 @@ Route::middleware(['auth','role:admin'])->prefix('admin')->name('admin.')->group
     Route::get('/announcements/{announcement}/edit', [AdminAnnouncementController::class, 'edit'])->name('announcements.edit');
     Route::patch('/announcements/{announcement}', [AdminAnnouncementController::class, 'update'])->name('announcements.update');
     Route::delete('/announcements/{announcement}', [AdminAnnouncementController::class, 'destroy'])->name('announcements.destroy');
+});
+
+// Bloqueo de solicitudes por usuario (admin + facturacion)
+Route::middleware(['auth', 'role:admin|facturacion'])->prefix('admin')->name('admin.')->group(function () {
+    Route::get('/usuarios-bloqueo-solicitudes', [UsuarioBloqueoSolicitudesController::class, 'index'])
+        ->name('usuarios-bloqueo-solicitudes.index');
+    Route::post('/usuarios-bloqueo-solicitudes/{user}/bloquear', [UsuarioBloqueoSolicitudesController::class, 'bloquear'])
+        ->name('usuarios-bloqueo-solicitudes.bloquear');
+    Route::post('/usuarios-bloqueo-solicitudes/{user}/desbloquear', [UsuarioBloqueoSolicitudesController::class, 'desbloquear'])
+        ->name('usuarios-bloqueo-solicitudes.desbloquear');
 });
 
 // Arranque de impersonación (solo admin)

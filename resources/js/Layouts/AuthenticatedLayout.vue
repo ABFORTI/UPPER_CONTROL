@@ -38,6 +38,7 @@ function hasFeature(key) {
 }
 
 const isAdmin  = computed(() => roles.value.includes('admin'))
+const isFacturacion = computed(() => roles.value.includes('facturacion'))
 const isTeamLeader = computed(() => roles.value.includes('team_leader'))
 const isCoord  = computed(() => roles.value.includes('coordinador'))
 const isCalidad = computed(() => roles.value.includes('calidad'))
@@ -394,6 +395,16 @@ watch(() => Number(user.value?.id || 0), (newUserId, oldUserId) => {
               ]">
                 <Icon name="document" :size="24" />
                 <span :class="['overflow-hidden transition-all duration-200', labelVisibilityClasses]">Anuncios</span>
+              </Link>
+            </li>
+            <li v-if="isAdmin || isFacturacion">
+              <Link :href="route('admin.usuarios-bloqueo-solicitudes.index')" :class="[
+                'flex items-center p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all',
+                navArrangementClasses,
+                { 'bg-blue-50 text-blue-700 dark:bg-slate-800': url.includes('/admin/usuarios-bloqueo-solicitudes') }
+              ]">
+                <Icon name="lock" :size="24" />
+                <span :class="['overflow-hidden transition-all duration-200', labelVisibilityClasses]">Bloqueo de usuarios</span>
               </Link>
             </li>
           </ul>

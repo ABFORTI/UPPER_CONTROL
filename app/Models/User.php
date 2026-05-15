@@ -30,7 +30,10 @@ class User extends Authenticatable
         'phone',
         'centro_trabajo_id',
         'activo',
-        // ...otros campos relevantes...
+        'bloqueado_solicitudes',
+        'motivo_bloqueo_solicitudes',
+        'bloqueado_solicitudes_en',
+        'bloqueado_solicitudes_por',
     ];
 
     /**
@@ -51,8 +54,10 @@ class User extends Authenticatable
     protected function casts(): array
     {
         return [
-            'email_verified_at' => 'datetime',
-            'password' => 'hashed',
+            'email_verified_at'        => 'datetime',
+            'password'                 => 'hashed',
+            'bloqueado_solicitudes'    => 'boolean',
+            'bloqueado_solicitudes_en' => 'datetime',
         ];
     }
 
@@ -73,6 +78,16 @@ class User extends Authenticatable
     public function announcementViews()
     {
         return $this->hasMany(\App\Models\AnnouncementView::class);
+    }
+
+    public function bloqueadoSolicitudesPor()
+    {
+        return $this->belongsTo(User::class, 'bloqueado_solicitudes_por');
+    }
+
+    public function estaBloqueadoParaSolicitudes(): bool
+    {
+        return (bool) $this->bloqueado_solicitudes;
     }
 
     public function getActivitylogOptions(): LogOptions

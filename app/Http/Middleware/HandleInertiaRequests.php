@@ -91,6 +91,12 @@ class HandleInertiaRequests extends Middleware
                     // Forzamos array para que Vue pueda usar .includes()
                     'roles'              => $u->getRoleNames()->values(),
                     'unread_count'       => $u->unreadNotifications()->count(),
+                    'bloqueo_solicitudes' => [
+                        'bloqueado'    => (bool) $u->bloqueado_solicitudes,
+                        'motivo'       => $u->bloqueado_solicitudes ? ($u->motivo_bloqueo_solicitudes ?? null) : null,
+                        'bloqueado_en' => $u->bloqueado_solicitudes ? ($u->bloqueado_solicitudes_en?->toISOString() ?? null) : null,
+                        'bloqueado_por' => $u->bloqueado_solicitudes ? $u->bloqueado_solicitudes_por : null,
+                    ],
                 ] : null,
                 'features' => $enabledFeatureKeys,
             ],
@@ -115,6 +121,12 @@ class HandleInertiaRequests extends Middleware
 
             // Alertas de validación pendiente
             'pending_validation' => $pendingValidation,
+
+            // Mensajes flash de sesión (back()->with('ok',...) / with('error',...))
+            'flash' => [
+                'ok'    => fn () => $request->session()->get('ok'),
+                'error' => fn () => $request->session()->get('error'),
+            ],
 
             // (opcional) errores compartidos
             'errors' => fn () => (object) ($request->session()->get('errors')?->getBag('default')?->toArray() ?? []),

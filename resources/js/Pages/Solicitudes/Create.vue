@@ -8,6 +8,7 @@ const page = usePage()
 const enabledFeatures = computed(() => page.props.auth?.features ?? [])
 const canUploadExcel = computed(() => (enabledFeatures.value || []).includes('subir_excel'))
 const canServiceCustomsFields = computed(() => (enabledFeatures.value || []).includes('service_customs_fields'))
+const bloqueo = computed(() => page.props.auth?.user?.bloqueo_solicitudes ?? { bloqueado: false, motivo: null })
 
 
 const props = defineProps({
@@ -566,13 +567,25 @@ function handlePrefillLoaded({ prefill, archivo, servicios, is_multi, warnings =
         </div>
       </div>
 
+      <!-- Alerta de bloqueo de solicitudes -->
+      <div v-if="bloqueo.bloqueado" class="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 flex gap-3 shadow-sm">
+        <svg class="w-6 h-6 text-red-500 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+        </svg>
+        <div>
+          <p class="font-semibold text-red-700">Tu usuario está bloqueado para generar nuevas solicitudes.</p>
+          <p v-if="bloqueo.motivo" class="text-red-600 text-sm mt-1">Motivo: {{ bloqueo.motivo }}</p>
+          <p class="text-red-600 text-sm mt-1">Comunícate con administración para reactivar la generación de solicitudes.</p>
+        </div>
+      </div>
+
       <div class="grid lg:grid-cols-3 gap-6">
         <!-- Formulario Principal -->
         <div class="lg:col-span-2 space-y-6">
 
           <!-- Cargar desde Excel (Opcional) -->
           <UploadSolicitudExcel
-            v-if="canUploadExcel"
+            v-if="canUploadExcel && !bloqueo.bloqueado"
             compact
             @prefill-loaded="handlePrefillLoaded"
           />
@@ -1262,10 +1275,18 @@ function handlePrefillLoaded({ prefill, archivo, servicios, is_multi, warnings =
               </div>
             </div>
 
+            <!-- Error de bloqueo devuelto por backend -->
+            <div v-if="form.errors.bloqueo" class="mb-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 flex gap-2">
+              <svg class="w-4 h-4 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+              </svg>
+              {{ form.errors.bloqueo }}
+            </div>
+
             <!-- Botón de Guardar -->
             <button 
               @click="guardar" 
-              :disabled="form.processing"
+              :disabled="form.processing || bloqueo.bloqueado"
               class="w-full py-4 px-6 rounded-xl font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 focus:ring-4 focus:ring-blue-300 shadow-lg shadow-blue-500/50 hover:shadow-xl hover:shadow-blue-600/50 transition-all duration-200 transform hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center justify-center gap-2"
             >
               <svg v-if="!form.processing" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

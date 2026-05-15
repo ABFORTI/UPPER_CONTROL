@@ -145,6 +145,7 @@ const page = usePage()
 const roles = computed(() => page.props.auth?.user?.roles ?? [])
 const isGerente = computed(() => roles.value.includes('gerente_upper'))
 const isCoordinador = computed(() => roles.value.includes('coordinador'))
+const bloqueo = computed(() => page.props.auth?.user?.bloqueo_solicitudes ?? { bloqueado: false, motivo: null })
 
 // ── Selección masiva para coordinador ─────────────────────────────────
 const canCoordMasivo = computed(() => !!props.can?.puede_masivo_coordinador)
@@ -231,11 +232,28 @@ function isoWeekNumber(dateStr){
             <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-white/25 text-xs font-bold">{{ coordSelectedCount }}</span>
           </button>
 
-          <a v-if="!isGerente && !isCoordinador"
+          <a v-if="!isGerente && !isCoordinador && !bloqueo.bloqueado"
              href="./solicitudes/create"
              class="inline-flex h-9 items-center justify-center rounded-lg px-4 text-sm font-semibold text-white bg-[#1A73E8] hover:bg-[#1557b0] transition-colors">
             AGREGAR +
           </a>
+          <span v-else-if="!isGerente && !isCoordinador && bloqueo.bloqueado"
+                class="inline-flex h-9 items-center justify-center rounded-lg px-4 text-sm font-semibold text-white bg-slate-400 cursor-not-allowed opacity-60"
+                title="Tu usuario está bloqueado para generar nuevas solicitudes">
+            AGREGAR +
+          </span>
+        </div>
+      </div>
+
+      <!-- Alerta de bloqueo de solicitudes -->
+      <div v-if="bloqueo.bloqueado" class="mt-2 rounded-lg border border-red-200 bg-red-50 dark:bg-red-950/20 dark:border-red-800 p-3 flex gap-3">
+        <svg class="w-5 h-5 text-red-500 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+        </svg>
+        <div class="text-sm">
+          <p class="font-semibold text-red-700 dark:text-red-400">Tu usuario está bloqueado para generar nuevas solicitudes.</p>
+          <p v-if="bloqueo.motivo" class="text-red-600 dark:text-red-500 mt-0.5">Motivo: {{ bloqueo.motivo }}</p>
+          <p class="text-red-600 dark:text-red-500 mt-0.5">Comunícate con administración para reactivar la generación de solicitudes.</p>
         </div>
       </div>
 
