@@ -55,7 +55,11 @@ class SolicitudPolicy
         }
         // Supervisor (antes 'cliente'): sólo sus propias solicitudes
         if ($u->hasRole('Cliente_Supervisor')) return $s->id_cliente === $u->id;
-        // resto por centro
+        // Coordinador, calidad, team_leader: centros asignados (principal + pivot)
+        if ($u->hasAnyRole(['coordinador','calidad','team_leader'])) {
+            return in_array((int)$s->id_centrotrabajo, $this->userCentroIds($u), true);
+        }
+        // resto por centro principal
         return (int)$u->centro_trabajo_id === (int)$s->id_centrotrabajo;
     }
 
@@ -63,10 +67,10 @@ class SolicitudPolicy
         return $u->hasAnyRole(['admin','Cliente_Supervisor','Cliente_Gerente']);
     }
 
-    // aprobar / rechazar por coordinador o admin del mismo centro
+    // aprobar / rechazar por coordinador o admin del mismo centro (principal + pivot)
     public function aprobar(User $u, Solicitud $s): bool {
         return $u->hasRole('admin') ||
-               ($u->hasRole('coordinador') && (int)$u->centro_trabajo_id === (int)$s->id_centrotrabajo);
+               ($u->hasRole('coordinador') && in_array((int)$s->id_centrotrabajo, $this->userCentroIds($u), true));
     }
     public function rechazar(User $u, Solicitud $s): bool {
         return $this->aprobar($u,$s);
