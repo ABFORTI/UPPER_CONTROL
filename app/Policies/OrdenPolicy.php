@@ -233,14 +233,14 @@ class OrdenPolicy
     public function createFromSolicitud(User $u, int $centroId): bool
     {
         return $u->hasRole('admin') ||
-            ($u->hasRole('coordinador') && (int)$u->centro_trabajo_id === $centroId);
+            ($u->hasRole('coordinador') && in_array($centroId, $this->userCentroIds($u), true));
     }
 
     // Definir desglose por tamaños (coordinador, admin o team_leader asignado)
     public function definirTamanos(User $u, Orden $o): bool
     {
         if ($u->hasRole('admin')) return true;
-        if ($u->hasRole('coordinador') && (int)$u->centro_trabajo_id === (int)$o->id_centrotrabajo) return true;
+        if ($u->hasRole('coordinador') && in_array((int)$o->id_centrotrabajo, $this->userCentroIds($u), true)) return true;
         // Team leader asignado a la OT también puede definir tamaños
         if ($u->hasRole('team_leader') && (int)$o->team_leader_id === (int)$u->id) return true;
         return false;
