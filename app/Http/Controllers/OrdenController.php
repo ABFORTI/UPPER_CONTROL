@@ -25,6 +25,7 @@ use App\Services\Notifier;
 use App\Jobs\GenerateOrdenPdf;
 use App\Exports\OrdenesIndexExport;
 use App\Exports\OrdenesFacturacionExport;
+use App\Exports\OrdenesAvancesExport;
 use Maatwebsite\Excel\Facades\Excel;
 use Spatie\Activitylog\Models\Activity;
 
@@ -2340,6 +2341,7 @@ class OrdenController extends Controller
                 'export_facturacion' => $u->hasAnyRole(['admin', 'facturacion', 'gerente_upper'])
                     ? route('ordenes.exportFacturacion')
                     : null,
+                'export_avances' => route('ordenes.exportAvances'),
                 'facturas_batch' => route('facturas.batch'),
                 'facturas_batch_create' => route('facturas.batch.create'),
                 'autorizar_masivo_cliente' => (
@@ -2449,6 +2451,38 @@ class OrdenController extends Controller
         $file = 'ordenes_trabajo_' . now()->format('Ymd_His') . '.' . $format;
 
         return Excel::download(new OrdenesIndexExport($filters, $req->user()), $file);
+    }
+
+    /**
+     * Exportar Excel de avances reales (corte/parcial).
+     * Usa los mismos filtros que el Excel completo, pero exporta únicamente
+     * la cantidad avanzada real por servicio, omitiendo servicios sin avance.
+     * Si se filtra por fecha/periodo, el corte aplica también a los avances.
+     */
+    public function exportAvances(Request $req)
+    {
+        $filters = $req->only([
+            'id',
+            'estatus',
+            'calidad',
+            'servicio',
+            'centro',
+            'centro_costo',
+            'facturacion',
+            'desde',
+            'hasta',
+            'year',
+            'week',
+        ]);
+
+        if (!empty($filters['week']) && empty($filters['year'])) {
+            $filters['year'] = (int) now()->year;
+        }
+
+        $format = $req->get('format', 'xlsx');
+        $file   = 'corte_avances_' . now()->format('Ymd_His') . '.' . $format;
+
+        return Excel::download(new OrdenesAvancesExport($filters, $req->user()), $file);
     }
 
     /** Exportar Excel de facturación con el mismo filtro del listado (formato por item) */

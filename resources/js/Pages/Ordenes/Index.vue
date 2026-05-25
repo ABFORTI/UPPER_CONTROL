@@ -312,6 +312,14 @@ const exportFacturacionUrl = computed(() => {
   return route('ordenes.exportFacturacion', exportParams.value)
 })
 
+// Excel de avances/corte: mismos filtros que el Excel completo,
+// pero exporta solo servicios con cantidad avanzada > 0 en el periodo seleccionado.
+const exportAvancesUrl = computed(() => {
+  const url = props.urls?.export_avances
+  if (!url) return '#'
+  return route('ordenes.exportAvances', exportParams.value)
+})
+
 function factBadgeClass(v){
   const e = String(v || '').toLowerCase()
   if (e === 'pagado') return 'bg-green-100 text-green-700'
@@ -421,6 +429,12 @@ function isoWeekNumber(dateStr){
           <a v-if="props.urls?.export_facturacion" :href="exportFacturacionUrl"
              class="inline-flex h-9 items-center justify-center rounded-md px-3 text-sm font-semibold text-white bg-teal-600 hover:bg-teal-700 transition-colors xl:col-span-1">
             Excel facturación
+          </a>
+
+          <a :href="exportAvancesUrl"
+             class="inline-flex h-9 items-center justify-center rounded-md px-3 text-sm font-semibold text-white bg-amber-600 hover:bg-amber-700 transition-colors xl:col-span-1"
+             title="Exporta solo servicios con avances reales. Si hay filtro de fecha, aplica como corte del periodo.">
+            Excel avances
           </a>
 
           <button v-if="canFacturar && anySelected" @click="openBatch" class="inline-flex h-9 items-center justify-center rounded-md px-3 text-sm font-semibold text-white bg-[#1A73E8] hover:bg-[#1557b0] transition-colors xl:col-span-1">

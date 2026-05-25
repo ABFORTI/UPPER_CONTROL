@@ -225,6 +225,7 @@ Route::middleware('auth')->group(function () {
 Route::middleware('auth')->group(function () {
     Route::get('/ordenes', [OrdenController::class,'index'])->name('ordenes.index');
     Route::get('/ordenes/export', [OrdenController::class,'export'])->name('ordenes.export');
+    Route::get('/ordenes/export-avances', [OrdenController::class,'exportAvances'])->name('ordenes.exportAvances');
     Route::get('/ordenes/export-facturacion', [OrdenController::class,'exportFacturacion'])
         ->middleware('role:admin|facturacion|gerente_upper')
         ->name('ordenes.exportFacturacion');
