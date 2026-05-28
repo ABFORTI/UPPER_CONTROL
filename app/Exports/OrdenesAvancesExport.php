@@ -201,6 +201,7 @@ class OrdenesAvancesExport implements FromCollection, WithHeadings, ShouldAutoSi
                         }
 
                         $serviceName  = $s->servicio?->nombre ?? null;
+                        $producto     = $o->descripcion_general ?: ($o->solicitud?->descripcion ?? null);
                         $marca        = $o->solicitud?->marca?->nombre ?? null;
                         $departamento = trim((string) ($o->solicitud?->centroCosto?->nombre ?? '')) ?: null;
                         $areaSolicita = $o->area?->nombre ?? null;
@@ -219,6 +220,7 @@ class OrdenesAvancesExport implements FromCollection, WithHeadings, ShouldAutoSi
                             $fechaOt,
                             $cantidadAvanzada,
                             $serviceName,
+                            $producto,
                             null, // Tamaño: avances son a nivel servicio, sin desglose por talla
                             $marca,
                             $costoUnitario,
@@ -236,6 +238,7 @@ class OrdenesAvancesExport implements FromCollection, WithHeadings, ShouldAutoSi
 
                 // ── Tradicional ─────────────────────────────────────────────────────────
                 $proceso      = $o->servicio?->nombre ?? null;
+                $producto     = $o->descripcion_general ?: ($o->solicitud?->descripcion ?? null);
                 $marca        = $o->solicitud?->marca?->nombre ?? null;
                 $departamento = trim((string) ($o->solicitud?->centroCosto?->nombre ?? '')) ?: null;
                 $areaSolicita = $o->area?->nombre ?? null;
@@ -279,6 +282,7 @@ class OrdenesAvancesExport implements FromCollection, WithHeadings, ShouldAutoSi
                             $fechaOt,
                             $cantidadAvanzada,
                             $proceso,
+                            $producto,
                             $tamano,
                             $marca,
                             $costoUnitarioItem,
@@ -319,6 +323,7 @@ class OrdenesAvancesExport implements FromCollection, WithHeadings, ShouldAutoSi
                     $fechaOt,
                     $cantidadAvanzada,
                     $proceso,
+                    $producto,
                     null,
                     $marca,
                     $costoUnitario,
@@ -348,6 +353,7 @@ class OrdenesAvancesExport implements FromCollection, WithHeadings, ShouldAutoSi
             'Fecha',
             'Ctd piezas',
             'Proceso',
+            'PRODUCTO',
             'Tamaño',
             'Marca',
             'Costo unitario (MxN)',
@@ -365,14 +371,14 @@ class OrdenesAvancesExport implements FromCollection, WithHeadings, ShouldAutoSi
     public function columnFormats(): array
     {
         return [
-            'K' => '"$" #,##0.00',
             'L' => '"$" #,##0.00',
+            'M' => '"$" #,##0.00',
         ];
     }
 
     public function styles(Worksheet $sheet)
     {
-        $sheet->getStyle('A1:Q1')->applyFromArray([
+        $sheet->getStyle('A1:R1')->applyFromArray([
             'font' => [
                 'bold'  => true,
                 'color' => ['rgb' => 'FFFFFF'],
@@ -389,12 +395,13 @@ class OrdenesAvancesExport implements FromCollection, WithHeadings, ShouldAutoSi
             ],
         ]);
 
-        $sheet->getStyle('H:H')->getAlignment()->setWrapText(true);
-        $sheet->getStyle('I:I')->getAlignment()->setWrapText(true);
-        $sheet->getStyle('N:N')->getAlignment()->setWrapText(true);
-        $sheet->getStyle('O:O')->getAlignment()->setWrapText(true);
-        $sheet->getStyle('P:P')->getAlignment()->setWrapText(true);
-        $sheet->getStyle('Q:Q')->getAlignment()->setWrapText(true);
+        $sheet->getStyle('H:H')->getAlignment()->setWrapText(true); // Proceso
+        $sheet->getStyle('I:I')->getAlignment()->setWrapText(true); // PRODUCTO
+        $sheet->getStyle('J:J')->getAlignment()->setWrapText(true); // Tamaño
+        $sheet->getStyle('O:O')->getAlignment()->setWrapText(true); // DEPARTAMENTO
+        $sheet->getStyle('P:P')->getAlignment()->setWrapText(true); // AREA QUE SOLICITA
+        $sheet->getStyle('Q:Q')->getAlignment()->setWrapText(true); // SOLICITANTE
+        $sheet->getStyle('R:R')->getAlignment()->setWrapText(true); // Comentarios
 
         return [];
     }
@@ -407,7 +414,7 @@ class OrdenesAvancesExport implements FromCollection, WithHeadings, ShouldAutoSi
                 $sheet->freezePane('A2');
 
                 $highestRow = $sheet->getHighestRow();
-                $range      = 'A1:Q' . $highestRow;
+                $range      = 'A1:R' . $highestRow;
 
                 $sheet->getStyle($range)->applyFromArray([
                     'borders' => [
