@@ -31,6 +31,8 @@ class RestrictCalidadOnly
                 'ordenes.show',
                 // Notificaciones
                 'notificaciones.index','notificaciones.read_all',
+                // Manuales
+                'manuales.index','manuales.pdf',
                 // Perfil / logout
                 'profile.edit','profile.update','profile.destroy','logout',
                 // Impersonación (por si estaba impersonado y debe salir)

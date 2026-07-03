@@ -252,6 +252,16 @@ watch(() => Number(user.value?.id || 0), (newUserId, oldUserId) => {
                 <span :class="['overflow-hidden transition-all duration-200', labelVisibilityClasses]">Dashboard</span>
               </Link>
             </li>
+            <li>
+              <Link :href="route('manuales.index')" :class="[
+                'flex items-center p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all',
+                navArrangementClasses,
+                { 'bg-blue-50 text-blue-700 dark:bg-slate-800': url.includes('/manuales') }
+              ]">
+                <Icon name="document" :size="24" />
+                <span :class="['overflow-hidden transition-all duration-200', labelVisibilityClasses]">Manuales</span>
+              </Link>
+            </li>
             <li v-if="!isOnlyCalidad && !isOnlyControlOrComercial && !isOnlyTeamLeader">
               <Link :href="route('solicitudes.index')" :class="[
                 'flex items-center p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all',

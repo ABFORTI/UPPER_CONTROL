@@ -17,6 +17,7 @@ use App\Http\Controllers\{
     PrecioController,
     EvidenciaController,
     HomeController,
+    ManualController,
     AnnouncementController
 };
 
@@ -57,6 +58,18 @@ Route::middleware('auth')->group(function () {
 
     Route::post('/notificaciones/{notification}/read', [\App\Http\Controllers\SupportController::class, 'notificacionesRead'])
         ->name('notificaciones.read');
+
+    Route::get('/manuales', [ManualController::class, 'index'])->name('manuales.index');
+    Route::get('/manuales/{manual}/pdf', [ManualController::class, 'pdf'])->name('manuales.pdf');
+    Route::get('/manuales/create', [ManualController::class, 'create'])
+        ->middleware('role:admin')
+        ->name('manuales.create');
+    Route::post('/manuales', [ManualController::class, 'store'])
+        ->middleware('role:admin')
+        ->name('manuales.store');
+    Route::delete('/manuales/{manual}', [ManualController::class, 'destroy'])
+        ->middleware('role:admin')
+        ->name('manuales.destroy');
 });
 
 /* =====================
