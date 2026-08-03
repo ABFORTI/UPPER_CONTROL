@@ -28,10 +28,17 @@ class CheckFeature
             abort(403, 'No tienes un centro de trabajo asignado.');
         }
 
-        if (!$centro->hasFeature($featureKey)) {
-            abort(403, 'No tienes acceso a esta funcionalidad.');
+        $featureKeys = array_filter(array_map('trim', preg_split('/[|,]+/', $featureKey)));
+        foreach ($featureKeys as $key) {
+            if ($centro->hasFeature($key)) {
+                return $next($request);
+            }
+
+            if ($user && method_exists($user, 'hasPermissionTo') && $user->hasPermissionTo($key)) {
+                return $next($request);
+            }
         }
 
-        return $next($request);
+        abort(403, 'No tienes acceso a esta funcionalidad.');
     }
 }

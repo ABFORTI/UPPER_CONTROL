@@ -82,10 +82,13 @@ class ExcelOtParser
             'solicitante' => ['solicitante', 'cliente'],
             'cantidad' => ['cantidad', 'pzs', 'piezas'],
             'upc' => ['upc', 'codigo barras', 'código de barras'],
-            'numero_parte' => ['n/p', 'np', 'numero de parte', 'número de parte'],
+            'numero_parte' => ['n/p', 'np', 'numero de parte', 'número de parte', 'vpn'],
             'sku' => ['sku'],
             'origen' => ['origen', 'pais de origen', 'país de origen'],
             'pedimento' => ['pedimento', 'numero de pedimento', 'número de pedimento'],
+            'pedido' => ['po', 'pedido', 'orden de compra', 'purchase order'],
+            'referencia_externa' => ['referencia externa', 'referencia_externa', 'vpn', 'numero de parte', 'número de parte'],
+            'notas' => ['notas', 'comentarios', 'observaciones', 'observación'],
         ];
         
         // Buscar etiquetas en las primeras filas
@@ -213,6 +216,10 @@ class ExcelOtParser
         $skuCol = null;
         $origenCol = null;
         $pedimentoCol = null;
+        $notasCol = null;
+        $vpnCol = null;
+        $poCol = null;
+        $marcaCol = null;
         $headerRow = null;
 
         // Buscar encabezados en primeras filas
@@ -224,6 +231,10 @@ class ExcelOtParser
             $foundSku = null;
             $foundOrigen = null;
             $foundPedimento = null;
+            $foundNotas = null;
+            $foundVpn = null;
+            $foundPo = null;
+            $foundMarca = null;
 
             for ($col = 1; $col <= min($highestColumnIndex, 40); $col++) {
                 $v = $sheet->getCellByColumnAndRow($col, $row)->getValue();
@@ -251,9 +262,21 @@ class ExcelOtParser
                 if ($foundPedimento === null && (Str::contains($n, 'pedimento') || Str::contains($n, 'numero de pedimento') || Str::contains($n, 'número de pedimento'))) {
                     $foundPedimento = $col;
                 }
+                if ($foundNotas === null && (Str::contains($n, 'notas') || Str::contains($n, 'comentarios') || Str::contains($n, 'observaciones') || Str::contains($n, 'observación'))) {
+                    $foundNotas = $col;
+                }
+                if ($foundVpn === null && (Str::contains($n, 'vpn') || Str::contains($n, 'numero de parte') || Str::contains($n, 'número de parte') || Str::contains($n, 'referencia externa'))) {
+                    $foundVpn = $col;
+                }
+                if ($foundPo === null && ($n === 'po' || Str::contains($n, 'orden de compra') || Str::contains($n, 'purchase order') || Str::contains($n, 'pedido'))) {
+                    $foundPo = $col;
+                }
+                if ($foundMarca === null && Str::contains($n, 'marca')) {
+                    $foundMarca = $col;
+                }
             }
 
-            if ($foundService !== null) {
+            if ($foundService !== null || ($foundSku !== null && $foundQty !== null)) {
                 $headerRow = $row;
                 $serviceCol = $foundService;
                 $qtyCol = $foundQty;
@@ -262,18 +285,22 @@ class ExcelOtParser
                 $skuCol = $foundSku;
                 $origenCol = $foundOrigen;
                 $pedimentoCol = $foundPedimento;
+                $notasCol = $foundNotas;
+                $vpnCol = $foundVpn;
+                $poCol = $foundPo;
+                $marcaCol = $foundMarca;
                 break;
             }
         }
 
-        if ($headerRow === null || $serviceCol === null) {
+        if ($headerRow === null || $qtyCol === null || $skuCol === null) {
             return [];
         }
 
         $servicios = [];
         $emptyStreak = 0;
         for ($row = $headerRow + 1; $row <= $highestRow; $row++) {
-            $sv = $sheet->getCellByColumnAndRow($serviceCol, $row)->getValue();
+            $sv = $serviceCol ? $sheet->getCellByColumnAndRow($serviceCol, $row)->getValue() : null;
             $svStr = trim((string) $sv);
             $qv = $qtyCol ? $sheet->getCellByColumnAndRow($qtyCol, $row)->getValue() : null;
             $pv = $priceCol ? $sheet->getCellByColumnAndRow($priceCol, $row)->getValue() : null;
@@ -281,22 +308,36 @@ class ExcelOtParser
             $skuv = $skuCol ? $sheet->getCellByColumnAndRow($skuCol, $row)->getValue() : null;
             $origenv = $origenCol ? $sheet->getCellByColumnAndRow($origenCol, $row)->getValue() : null;
             $pedimentov = $pedimentoCol ? $sheet->getCellByColumnAndRow($pedimentoCol, $row)->getValue() : null;
+            $notasv = $notasCol ? $sheet->getCellByColumnAndRow($notasCol, $row)->getValue() : null;
+            $vpnv = $vpnCol ? $sheet->getCellByColumnAndRow($vpnCol, $row)->getValue() : null;
+            $pov = $poCol ? $sheet->getCellByColumnAndRow($poCol, $row)->getValue() : null;
+            $marcav = $marcaCol ? $sheet->getCellByColumnAndRow($marcaCol, $row)->getValue() : null;
 
             $skuStr = trim((string) $skuv);
             $origenStr = trim((string) $origenv);
             $pedimentoStr = trim((string) $pedimentov);
             $qtyStr = trim((string) $qv);
+            $notasStr = trim((string) $notasv);
+            $vpnStr = trim((string) $vpnv);
+            $poStr = trim((string) $pov);
+            $marcaStr = trim((string) $marcav);
 
             // Fila realmente vacía: cortar después de varios renglones vacíos seguidos.
-            if ($svStr === '' && $skuStr === '' && $origenStr === '' && $pedimentoStr === '' && $qtyStr === '') {
+            if ($svStr === '' && $skuStr === '' && $origenStr === '' && $pedimentoStr === '' && $qtyStr === '' && $notasStr === '' && $vpnStr === '' && $poStr === '' && $marcaStr === '') {
                 $emptyStreak++;
                 if ($emptyStreak >= 5) break;
                 continue;
             }
             $emptyStreak = 0;
 
-            // Si no trae servicio pero sí SKU/origen/pedimento/cantidad, conservar la fila
-            // para crear un detalle pendiente de asignación en el controlador.
+            $descriptionParts = array_filter([
+                $poStr ? "PO: {$poStr}" : null,
+                $vpnStr ? "VPN: {$vpnStr}" : null,
+                $notasStr ?: null,
+            ]);
+            $description = count($descriptionParts) > 0 ? implode(' | ', $descriptionParts) : null;
+
+            // Si no trae servicio pero sí SKU/cantidad, conservar la fila como pendiente.
             if ($svStr === '') {
                 $servicios[] = [
                     'row_number' => $row,
@@ -307,6 +348,8 @@ class ExcelOtParser
                     'pedimento' => $pedimentov,
                     'tipo_tarifa' => $tv ? trim((string) $tv) : 'NORMAL',
                     'precio_unitario' => $pv,
+                    'descripcion' => $description,
+                    'marca' => $marcaStr !== '' ? $marcaStr : null,
                 ];
                 continue;
             }
@@ -328,6 +371,8 @@ class ExcelOtParser
                     'pedimento' => $pedimentov,
                     'tipo_tarifa' => $tv ? trim((string) $tv) : 'NORMAL',
                     'precio_unitario' => $priceLines[$i] ?? $pv,
+                    'descripcion' => $description,
+                    'marca' => $marcaStr !== '' ? $marcaStr : null,
                 ];
             }
         }

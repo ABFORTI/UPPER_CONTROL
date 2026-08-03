@@ -11,7 +11,9 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 use Inertia\Inertia;
+use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 
 class UserController extends Controller
@@ -55,10 +57,13 @@ class UserController extends Controller
 
     public function create()
     {
+        $this->ensureExcelProductosPermission();
+
         return Inertia::render('Admin/Users/Edit', [
             'user' => null,
             'centros' => DB::table('centros_trabajo')->select('id', 'nombre')->orderBy('nombre')->get(),
             'roles' => Role::query()->orderBy('name')->pluck('name'),
+            'permissionsCatalog' => ['subir_excel_productos'],
         ]);
     }
 
@@ -77,6 +82,8 @@ class UserController extends Controller
 
         $roles = $data['roles'];
         $u->syncRoles($roles);
+        $this->ensureExcelProductosPermission();
+        $u->syncPermissions($data['direct_permissions'] ?? []);
 
         // Asignaciones múltiples (opcional)
         if (!empty($data['centros_ids']) && is_array($data['centros_ids'])) {
@@ -92,6 +99,8 @@ class UserController extends Controller
 
     public function edit(User $user)
     {
+        $this->ensureExcelProductosPermission();
+
         return Inertia::render('Admin/Users/Edit', [
             'user' => [
                 'id' => $user->id,
@@ -102,9 +111,11 @@ class UserController extends Controller
                 'roles' => $user->getRoleNames()->values()->toArray(),
                 'activo' => $user->activo,
                 'centros_ids' => $user->centros()->pluck('centros_trabajo.id')->toArray(),
+                'direct_permissions' => $user->getDirectPermissions()->pluck('name')->values()->toArray(),
             ],
             'centros' => DB::table('centros_trabajo')->select('id', 'nombre')->orderBy('nombre')->get(),
             'roles' => Role::query()->orderBy('name')->pluck('name'),
+            'permissionsCatalog' => ['subir_excel_productos'],
         ]);
     }
 
@@ -128,6 +139,8 @@ class UserController extends Controller
         }
         $user->update($update);
         $user->syncRoles($data['roles']);
+        $this->ensureExcelProductosPermission();
+        $user->syncPermissions($data['direct_permissions'] ?? []);
 
         if (!empty($data['centros_ids']) && is_array($data['centros_ids'])) {
             $user->centros()->sync($data['centros_ids']);
@@ -171,5 +184,13 @@ class UserController extends Controller
     {
         return app(\Spatie\Activitylog\ActivityLogger::class)->useLog($log);
     }
-}
 
+    private function ensureExcelProductosPermission(): void
+    {
+        if (!Schema::hasTable('permissions')) {
+            return;
+        }
+
+        Permission::findOrCreate('subir_excel_productos', 'web');
+    }
+}

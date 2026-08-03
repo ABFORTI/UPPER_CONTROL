@@ -17,11 +17,10 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 use Barryvdh\DomPDF\Facade\Pdf as PDF;
 use App\Notifications\OtAsignada;
-use App\Notifications\OtListaParaCalidad;
-use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use App\Services\Notifier;
+use App\Services\OrdenCalidadFlowService;
 use App\Jobs\GenerateOrdenPdf;
 use App\Exports\OrdenesIndexExport;
 use App\Exports\OrdenesFacturacionExport;
@@ -213,12 +212,15 @@ class OrdenController extends Controller
                         'precio_unitario'  => $solServicio->precio_unitario,
                         'subtotal'         => $solServicio->subtotal,
                         'marca'            => $solicitud->marca?->nombre,
+                        'nota'             => $solServicio->descripcion ?? null,
                     ]);
                     
                     // Crear item por defecto para este servicio
                     \App\Models\OTServicioItem::create([
                         'ot_servicio_id'   => $otServicio->id,
-                        'descripcion_item' => $solServicio->servicio->nombre ?? 'Item',
+                        'descripcion_item' => $solServicio->descripcion
+                            ? $solServicio->descripcion
+                            : ($solServicio->servicio->nombre ?? 'Item'),
                         'planeado'         => $solServicio->cantidad,
                         'completado'       => 0,
                     ]);
@@ -266,9 +268,31 @@ class OrdenController extends Controller
             }
         }
 
-        // Modo per-centro: detectar tamaños configurados en el centro de la solicitud
+        // El coordinador puede editar el servicio y la marca antes de generar la OT.
+        // Se permite previsualizar con ?id_servicio=&id_marca= (validados contra el centro).
+        $serviciosCentro = \App\Models\ServicioCentro::with('servicio:id,nombre')
+            ->where('id_centrotrabajo', $solicitud->id_centrotrabajo)
+            ->get();
+        $serviciosCentroIds = $serviciosCentro->pluck('id_servicio')->map(fn($v) => (int)$v)->all();
+
+        $servicioIdActivo = (int) request()->query('id_servicio', $solicitud->id_servicio);
+        if (!in_array($servicioIdActivo, $serviciosCentroIds, true)) {
+            $servicioIdActivo = (int) $solicitud->id_servicio;
+        }
+
+        $marcasCentro = \App\Models\Marca::where('id_centrotrabajo', $solicitud->id_centrotrabajo)
+            ->activas()->orderBy('nombre')->get(['id','nombre']);
+        $marcaIdActivo = request()->query('id_marca', $solicitud->id_marca);
+        $marcaIdActivo = $marcaIdActivo !== null && $marcaIdActivo !== ''
+            ? (int) $marcaIdActivo
+            : null;
+        if ($marcaIdActivo && !$marcasCentro->contains('id', $marcaIdActivo)) {
+            $marcaIdActivo = $solicitud->id_marca ? (int)$solicitud->id_marca : null;
+        }
+
+        // Modo per-centro: detectar tamaños configurados en el centro de la solicitud (según servicio activo)
         $usaTamanos = \App\Models\ServicioCentro::where('id_centrotrabajo',$solicitud->id_centrotrabajo)
-            ->where('id_servicio',$solicitud->id_servicio)
+            ->where('id_servicio',$servicioIdActivo)
             ->whereHas('tamanos')
             ->exists();
         $prefill = [];
@@ -301,14 +325,14 @@ class OrdenController extends Controller
                 $tam = (string)($t->tamano ?? '');
                 $cant = (int)($t->cantidad ?? 0);
                 if ($cant <= 0) continue;
-                $pu = (float)$pricing->precioUnitario($solicitud->id_centrotrabajo, $solicitud->id_servicio, $tam);
+                $pu = (float)$pricing->precioUnitario($solicitud->id_centrotrabajo, $servicioIdActivo, $tam);
                 $lineSub = $pu * $cant; $sub += $lineSub;
                 $cotLines[] = ['label'=>ucfirst($tam), 'cantidad'=>$cant, 'pu'=>$pu, 'subtotal'=>$lineSub];
             }
         } elseif ($usaTamanos) {
             $cotLines[] = ['label'=>'Item', 'cantidad'=>(int)($solicitud->cantidad ?? 0), 'pu'=>0.0, 'subtotal'=>0.0];
         } else {
-            $pu = (float)$pricing->precioUnitario($solicitud->id_centrotrabajo, $solicitud->id_servicio, null);
+            $pu = (float)$pricing->precioUnitario($solicitud->id_centrotrabajo, $servicioIdActivo, null);
             $sub = $pu * (int)($solicitud->cantidad ?? 0);
             $cotLines[] = ['label'=>'Item', 'cantidad'=>(int)($solicitud->cantidad ?? 0), 'pu'=>$pu, 'subtotal'=>$sub];
         }
@@ -338,6 +362,13 @@ class OrdenController extends Controller
             'cantidadTotal'       => (int)($solicitud->cantidad ?? 1),
             'descripcionGeneral'  => $solicitud->descripcion ?? '',
             'cotizacion'          => $cot,
+            'servicios'           => $serviciosCentro->map(fn($sc) => [
+                'id'     => (int)$sc->id_servicio,
+                'nombre' => $sc->servicio->nombre ?? $sc->nombre,
+            ])->unique('id')->values(),
+            'marcas'              => $marcasCentro,
+            'servicioIdActivo'    => $servicioIdActivo,
+            'marcaIdActivo'       => $marcaIdActivo,
             'urls'                => [ 'store' => route('ordenes.storeFromSolicitud', $solicitud) ],
             'areas'               => \App\Models\Area::where('id_centrotrabajo', $solicitud->id_centrotrabajo)->activas()->orderBy('nombre')->get(),
         ]);
@@ -358,22 +389,51 @@ class OrdenController extends Controller
         
         // NUEVO: Detectar si es multi-servicio
         $esMultiServicio = $solicitud->servicios()->exists();
-        
-        $usaTamanos = \App\Models\ServicioCentro::where('id_centrotrabajo',$solicitud->id_centrotrabajo)
-            ->where('id_servicio',$solicitud->id_servicio)
-            ->whereHas('tamanos')
-            ->exists();
 
         // Validación base
         $data = $req->validate([
             'team_leader_id' => ['nullable','integer','exists:users,id'],
             'id_area' => ['nullable','integer','exists:areas,id'],
+            'id_servicio' => ['nullable','integer','exists:servicios_empresa,id'],
+            'id_marca' => ['nullable','integer','exists:marcas,id'],
             'separar_items'  => ['nullable','boolean'],
             'items'          => ['required','array','min:1'],
             'items.*.cantidad' => ['required','integer','min:1'],
             'items.*.descripcion' => ['nullable','string','max:255'],
             'items.*.tamano' => ['nullable','string'],
         ]);
+
+        // El coordinador puede editar el servicio y la marca antes de generar la OT (solo flujo simple).
+        $idServicioFinal = (int) ($data['id_servicio'] ?? $solicitud->id_servicio);
+        if (!$esMultiServicio) {
+            $perteneceCentro = \App\Models\ServicioCentro::where('id_centrotrabajo', $solicitud->id_centrotrabajo)
+                ->where('id_servicio', $idServicioFinal)
+                ->exists();
+            if (!$perteneceCentro) {
+                return back()->withErrors([
+                    'id_servicio' => 'El servicio seleccionado no está disponible en el centro de la solicitud.'
+                ])->withInput();
+            }
+        } else {
+            $idServicioFinal = (int) $solicitud->id_servicio;
+        }
+
+        $idMarcaFinal = $data['id_marca'] ?? $solicitud->id_marca;
+        $marcaFinal = null;
+        if ($idMarcaFinal) {
+            $marcaFinal = \App\Models\Marca::where('id_centrotrabajo', $solicitud->id_centrotrabajo)
+                ->find($idMarcaFinal);
+            if (!$marcaFinal) {
+                return back()->withErrors([
+                    'id_marca' => 'La marca seleccionada no pertenece al centro de la solicitud.'
+                ])->withInput();
+            }
+        }
+
+        $usaTamanos = \App\Models\ServicioCentro::where('id_centrotrabajo',$solicitud->id_centrotrabajo)
+            ->where('id_servicio',$idServicioFinal)
+            ->whereHas('tamanos')
+            ->exists();
 
         // Si el cliente ya seleccionó área en la solicitud, el coordinador NO puede cambiarla
         $requestedAreaId = $data['id_area'] ?? null;
@@ -448,14 +508,14 @@ class OrdenController extends Controller
             }
         }
 
-        $orden = DB::transaction(function () use ($solicitud, $data, $usaTamanos, $separarItems, $esMultiServicio) {
+        $orden = DB::transaction(function () use ($solicitud, $data, $usaTamanos, $separarItems, $esMultiServicio, $idServicioFinal, $marcaFinal) {
             $totalPlan = collect($data['items'])->sum(fn($i) => (int)($i['cantidad'] ?? 0));
 
             $orden = Orden::create([
                 'folio'            => $this->buildFolioOT($solicitud->id_centrotrabajo),
                 'id_solicitud'     => $solicitud->id,
                 'id_centrotrabajo' => $solicitud->id_centrotrabajo,
-                'id_servicio'      => $solicitud->id_servicio,
+                'id_servicio'      => $idServicioFinal,
                 'id_area'          => $data['id_area'] ?? null,
                 'team_leader_id'   => $data['team_leader_id'] ?? null,
                 'descripcion_general' => $solicitud->descripcion ?? '',
@@ -480,21 +540,24 @@ class OrdenController extends Controller
                         'sku'              => $solServicio->sku,
                         'origen_customs'   => $solServicio->origen,
                         'pedimento'        => $solServicio->pedimento,
-                        'marca'            => $solicitud->marca?->nombre,
+                        'marca'            => $marcaFinal?->nombre ?? $solicitud->marca?->nombre,
+                        'nota'             => $solServicio->descripcion ?? null,
                         'service_assignment_status' => $isPending ? 'pending' : 'assigned',
                         'service_locked'   => !$isPending,
                     ]);
 
                     // Auto-crear item por defecto
                     \App\Models\OTServicioItem::create([
-                        'ot_servicio_id' => $otServ->id,
-                        'descripcion_item' => $isPending
-                            ? ($solicitud->descripcion ?? 'Pendiente de asignación de servicio')
-                            : ($solServicio->servicio->nombre ?? $solicitud->descripcion ?? 'Sin descripción'),
-                        'planeado'    => $solServicio->cantidad,
-                        'completado'  => 0,
-                        'precio_unitario' => $isPending ? 0 : $solServicio->precio_unitario,
-                        'subtotal'    => $isPending ? 0 : $solServicio->subtotal,
+                       'ot_servicio_id' => $otServ->id,
+                       'descripcion_item' => $solServicio->descripcion
+                           ? $solServicio->descripcion
+                           : ($isPending
+                               ? ($solicitud->descripcion ?? 'Pendiente de asignación de servicio')
+                               : ($solServicio->servicio->nombre ?? $solicitud->descripcion ?? 'Sin descripción')),
+                       'planeado'    => $solServicio->cantidad,
+                       'completado'  => 0,
+                       'precio_unitario' => $isPending ? 0 : $solServicio->precio_unitario,
+                       'subtotal'    => $isPending ? 0 : $solServicio->subtotal,
                     ]);
                 }
                 // Recalcular totales de la orden desde servicios
@@ -517,7 +580,7 @@ class OrdenController extends Controller
                     // Flujo diferido (usa_tamanos sin desglose): PU = 0 hasta finalizar OT
                     $pu = ($usaTamanos && $solicitud->tamanos->count() === 0)
                         ? 0.0
-                        : (float)$pricing->precioUnitario($solicitud->id_centrotrabajo, $solicitud->id_servicio, $tamano);
+                        : (float)$pricing->precioUnitario($solicitud->id_centrotrabajo, $idServicioFinal, $tamano);
 
                     OrdenItem::create([
                         'id_orden'          => $orden->id,
@@ -526,6 +589,7 @@ class OrdenController extends Controller
                         'cantidad_planeada' => (int)$it['cantidad'],
                         'precio_unitario'   => $pu,
                         'subtotal'          => $pu * (int)$it['cantidad'],
+                        'marca'             => $marcaFinal?->nombre,
                     ]);
                     $sub += $pu * (int)$it['cantidad'];
                 }
@@ -848,7 +912,10 @@ class OrdenController extends Controller
                 
                 if ($todosServiciosCompletos && $orden->estatus !== 'completada') {
                     $orden->estatus = 'completada';
-                    $orden->calidad_resultado = 'pendiente';
+                    app(OrdenCalidadFlowService::class)->applyCompletionRouting(
+                        $orden,
+                        $req->user()
+                    );
                     if (Schema::hasColumn('ordenes_trabajo', 'fecha_completada')) {
                         $orden->fecha_completada = now();
                     }
@@ -977,36 +1044,15 @@ class OrdenController extends Controller
             $justCompleted = ($orden->estatus !== 'completada') && ($sumReal >= $sumObjetivo && $sumObjetivo > 0);
             if ($justCompleted) {
                 $orden->estatus = 'completada';
-                // Cuando la OT se completa de nuevo, reiniciar el marcador de calidad a 'pendiente'
-                $orden->calidad_resultado = 'pendiente';
+                app(OrdenCalidadFlowService::class)->applyCompletionRouting(
+                    $orden,
+                    $req->user()
+                );
                 // Persistir fecha de completado para estabilidad en reportes y PDFs
                 if (Schema::hasColumn('ordenes_trabajo', 'fecha_completada')) {
                     $orden->fecha_completada = now();
                 }
                 $orden->save();
-
-                // Notificar a calidad del centro con notificación específica
-                // Buscar usuarios con rol 'calidad' que tengan asignado este centro
-                // Ya sea como centro principal O en centros adicionales
-                $usuariosCalidad = User::role('calidad')
-                    ->where(function($query) use ($orden) {
-                        $query->where('centro_trabajo_id', $orden->id_centrotrabajo)
-                              ->orWhereHas('centros', function($q) use ($orden) {
-                                  $q->where('centro_trabajo_id', $orden->id_centrotrabajo);
-                              });
-                    })
-                    ->get();
-                
-                if ($usuariosCalidad->isNotEmpty()) {
-                    try {
-                        Notification::send($usuariosCalidad, new OtListaParaCalidad($orden));
-                    } catch (\Throwable $e) {
-                        Log::warning('RegistrarAvance: fallo al notificar calidad (ignorado)', [
-                            'orden_id' => $orden->id,
-                            'error' => $e->getMessage(),
-                        ]);
-                    }
-                }
             } else {
                 $orden->save();
             }
@@ -1095,6 +1141,7 @@ class OrdenController extends Controller
 
         // Encolar PDF si se completó
         if ($justCompleted) {
+            app(OrdenCalidadFlowService::class)->notifyCompletionRouting($orden->fresh(['centro', 'servicio']));
             GenerateOrdenPdf::dispatch($orden->id);
         }
 
@@ -1119,8 +1166,9 @@ class OrdenController extends Controller
         ]);
 
         $resumen = [];
+        $justCompleted = false;
 
-    DB::transaction(function () use ($orden, $data, &$resumen) {
+    DB::transaction(function () use ($orden, $data, &$resumen, &$justCompleted, $req) {
             foreach ($data['items'] as $d) {
                 $item = \App\Models\OrdenItem::where('id', $d['id_item'])
                     ->where('id_orden', $orden->id)
@@ -1197,10 +1245,14 @@ class OrdenController extends Controller
             if ($sumObjetivo > 0 && $sumReal >= $sumObjetivo) {
                 if ($orden->estatus !== 'completada') {
                     $orden->estatus = 'completada';
-                    $orden->calidad_resultado = 'pendiente';
+                    app(OrdenCalidadFlowService::class)->applyCompletionRouting(
+                        $orden,
+                        $req->user()
+                    );
                     if (Schema::hasColumn('ordenes_trabajo', 'fecha_completada')) {
                         $orden->fecha_completada = now();
                     }
+                    $justCompleted = true;
                 }
             }
             $orden->save();
@@ -1252,6 +1304,11 @@ class OrdenController extends Controller
             }
         }
 
+        if ($justCompleted) {
+            app(OrdenCalidadFlowService::class)->notifyCompletionRouting($orden->fresh(['centro', 'servicio']));
+            GenerateOrdenPdf::dispatch($orden->id);
+        }
+
         return back()->with('ok','Faltantes aplicados');
     }
 
@@ -1268,6 +1325,7 @@ class OrdenController extends Controller
             'items.segmentosProduccion' => fn($q) => $q->with('usuario')->orderBy('created_at'),
             'avances' => fn($q) => $q->with(['usuario', 'item'])->orderByDesc('created_at'),
             'evidencias' => fn($q)=>$q->with(['usuario','avance.usuario','avance.item'])->orderByDesc('id'),
+            'archivos' => fn($q) => $q->where('subtipo', 'like', 'revision_cliente:%')->orderByDesc('created_at'),
             'otServicios.servicio',
             'otServicios.items.ajustes.user',
             'otServicios.avances' => fn($q) => $q->with('createdBy')->orderBy('created_at'),
@@ -1321,6 +1379,28 @@ class OrdenController extends Controller
 
         // Obtener usuario autenticado ANTES de usarlo en cualquier condición/log
         $authUser = Auth::user();
+        $qualityFlow = app(OrdenCalidadFlowService::class);
+        $qualityBypassed = $qualityFlow->shouldBypassQuality($orden);
+        $hideQualityForViewer = $authUser instanceof \App\Models\User
+            ? $qualityFlow->shouldHideQualityStatusForUser($orden, $authUser)
+            : $qualityBypassed;
+        $qualityStatusKind = (string) $orden->calidad_resultado;
+        $qualityStatusLabel = (string) $orden->calidad_resultado;
+        if ($hideQualityForViewer) {
+            if ((string) $orden->estatus === 'completada') {
+                $qualityStatusKind = 'cliente_autorizacion';
+                $qualityStatusLabel = 'lista_para_autorizacion';
+            } elseif (
+                in_array((string) $orden->estatus, ['autorizada_cliente', 'facturada', 'entregada'], true)
+                || !empty($orden->cliente_autorizada_at)
+            ) {
+                $qualityStatusKind = 'cliente_autorizada';
+                $qualityStatusLabel = 'autorizada_por_cliente';
+            }
+        }
+        $orden->setAttribute('quality_bypassed', $qualityBypassed);
+        $orden->setAttribute('quality_status_kind', $qualityStatusKind);
+        $orden->setAttribute('quality_status_label', $qualityStatusLabel);
         $canReportar = Gate::allows('reportarAvance', $orden);
         // Diagnóstico adicional: si es Team Leader y no puede reportar, registrar contexto
         if (!$canReportar && $authUser && $authUser->hasRole('team_leader')) {
@@ -1357,6 +1437,7 @@ class OrdenController extends Controller
 
         // Permisos específicos adicionales
         $canCalidad = false; $canClienteAutorizar = false; $canFacturar = false;
+        $canClienteSolicitarRevision = false;
         if ($authUser instanceof \App\Models\User) {
             // Calidad: admin o rol calidad con centro permitido (pivot + principal)
             // NUEVA REGLA: Habilitar cuando todos los servicios estén al 100% (progreso = 100)
@@ -1379,6 +1460,8 @@ class OrdenController extends Controller
             $idsPermitidosCliente = $this->allowedCentroIds($authUser);
             $mismoCentroCliente = in_array((int)$orden->id_centrotrabajo, array_map('intval', $idsPermitidosCliente), true);
             $canClienteAutorizar = Gate::allows('autorizarCliente', $orden);
+            $canClienteSolicitarRevision = $canClienteAutorizar
+                && (bool) ($authUser->centro?->hasFeature('revision_cliente_no_autoriza') ?? false);
             // Motivos de bloqueo para diagnóstico front-end
             $bloqueosCliente = [];
             if (!$authUser->hasRole('admin') && !$esDueno && !($authUser->hasRole('Cliente_Gerente') && $mismoCentroCliente)) {
@@ -1484,6 +1567,41 @@ class OrdenController extends Controller
                 return $it;
             }));
         }
+
+        $clienteRevisiones = $orden->aprobaciones()
+            ->with('usuario:id,name')
+            ->where('tipo', 'cliente')
+            ->where('resultado', 'rechazado')
+            ->latest('created_at')
+            ->get()
+            ->map(function ($aprobacion) use ($orden) {
+                $subtipo = 'revision_cliente:' . $aprobacion->id;
+                $archivos = $orden->archivos
+                    ->where('subtipo', $subtipo)
+                    ->values()
+                    ->map(function ($archivo) {
+                        return [
+                            'id' => (int) $archivo->id,
+                            'nombre' => $archivo->nombre_original ?: basename((string) $archivo->path),
+                            'url' => $archivo->url,
+                            'mime' => $archivo->mime,
+                            'size' => (int) ($archivo->size ?? 0),
+                        ];
+                    })
+                    ->values();
+
+                return [
+                    'id' => (int) $aprobacion->id,
+                    'comentario' => (string) ($aprobacion->observaciones ?? ''),
+                    'created_at' => $aprobacion->created_at,
+                    'usuario' => $aprobacion->usuario ? [
+                        'id' => (int) $aprobacion->usuario->id,
+                        'name' => (string) $aprobacion->usuario->name,
+                    ] : null,
+                    'archivos' => $archivos,
+                ];
+            })
+            ->values();
 
         // Resumen de unidades: planeado original, completado, faltante y total vigente
         $planeadoOriginal = (int)$orden->items->sum(fn($i)=> (int)$i->cantidad_planeada + (int)($i->faltantes ?? 0));
@@ -1595,7 +1713,7 @@ class OrdenController extends Controller
         if ($orden->otServicios()->exists()) {
             $eventosCalidad = $orden->avances
                 ->filter(function ($avance) {
-                    return in_array((string)($avance->tipo ?? ''), ['CALIDAD_VALIDADA', 'CALIDAD_RECHAZADA'], true);
+                    return in_array((string)($avance->tipo ?? ''), ['CALIDAD_VALIDADA', 'CALIDAD_RECHAZADA', 'CALIDAD_OMITIDA'], true);
                 })
                 ->map(function ($avance) {
                     return [
@@ -1754,7 +1872,12 @@ class OrdenController extends Controller
             $estatusQueNoSobrescribir = ['autorizada_cliente', 'facturada', 'entregada'];
             if ($todosServiciosCompletos && !in_array($orden->estatus, $estatusQueNoSobrescribir) && $orden->estatus !== 'completada') {
                 $orden->estatus = 'completada';
+                app(OrdenCalidadFlowService::class)->applyCompletionRouting(
+                    $orden,
+                    null
+                );
                 $orden->save();
+                app(OrdenCalidadFlowService::class)->notifyCompletionRouting($orden->fresh(['centro', 'servicio']));
                 \Log::info("Orden {$orden->id} actualizada a COMPLETADA automáticamente (todos los servicios al 100%)");
             }
         }
@@ -1768,6 +1891,7 @@ class OrdenController extends Controller
                 'asignar_tl'         => $canAsignar,
                 'calidad_validar'    => $canCalidad,
                 'cliente_autorizar'  => $canClienteAutorizar,
+                'cliente_solicitar_revision' => $canClienteSolicitarRevision,
                 'facturar'           => $canFacturar,
                 'definir_tamanos'    => Gate::allows('definirTamanos', $orden),
                 'agregar_servicio_adicional' => $authUser instanceof \App\Models\User
@@ -1793,6 +1917,7 @@ class OrdenController extends Controller
                 'auth_roles' => $authUser?->roles?->pluck('name')?->all() ?? [],
             ],
             'bloqueos_cliente_autorizar' => $bloqueosCliente ?? [],
+            'cliente_revisiones' => $clienteRevisiones,
             'teamLeaders' => $teamLeaders,
             'cotizacion'  => $cot,
             'unidades'    => [
@@ -1811,6 +1936,7 @@ class OrdenController extends Controller
                 'calidad_validar'   => route('calidad.validar', $orden),
                 'calidad_rechazar'  => route('calidad.rechazar', $orden),
                 'cliente_autorizar' => route('cliente.autorizar', $orden),
+                'cliente_solicitar_revision' => route('cliente.solicitarRevision', $orden),
                 'facturar'          => route('facturas.createFromOrden', $orden),
                 'pdf'               => route('ordenes.pdf', $orden),
                 'excel_origen'      => ($orden->solicitud && $orden->solicitud->archivo_excel_stored_name)
@@ -2097,11 +2223,23 @@ class OrdenController extends Controller
     $isTL = $u && method_exists($u, 'hasRole') ? $u->hasRole('team_leader') : false;
     // Si además de TL tiene otros roles con mayor alcance, no restringir el listado a sus OTs
     $isTLStrict = $u && method_exists($u, 'hasAnyRole')
-        ? ($isTL && !$u->hasAnyRole(['admin','coordinador','calidad','facturacion','gerente_upper','Cliente_Supervisor','Cliente_Gerente','Cliente_Autorizador_Integraciones']))
+        ? ($isTL && !$u->hasAnyRole(['admin','coordinador','coordinador_equipo','calidad','facturacion','gerente_upper','Cliente_Supervisor','Cliente_Gerente','Cliente_Autorizador_Integraciones']))
         : $isTL;
     $isCliente = $u && method_exists($u, 'hasRole') ? $u->hasRole('Cliente_Supervisor') : false;
     $isClienteCentro = $u && method_exists($u, 'hasRole') ? $u->hasRole('Cliente_Gerente') : false;
     $isAutorizadorIntegraciones = $u && method_exists($u, 'hasRole') ? $u->hasRole('Cliente_Autorizador_Integraciones') : false;
+    // Coordinador de equipo: ve solo OTs de los usuarios que le fueron asignados
+    $isCoordEquipo = $u && method_exists($u, 'hasRole')
+        ? ($u->hasRole('coordinador_equipo') && !$u->hasAnyRole(['admin','coordinador','gerente_upper','facturacion']))
+        : false;
+    $coordEquipoUserIds = [];
+    if ($isCoordEquipo) {
+        $coordEquipoUserIds = \Illuminate\Support\Facades\DB::table('coordinador_usuarios')
+            ->where('coordinador_id', (int) $u->id)
+            ->pluck('usuario_id')
+            ->map(fn($v) => (int) $v)
+            ->all();
+    }
 
     $filters = [
             'estatus'          => $req->string('estatus')->toString(),
@@ -2115,12 +2253,20 @@ class OrdenController extends Controller
             'id'               => $req->integer('id') ?: null,
             'year'             => $req->integer('year') ?: null,
             'week'             => $req->integer('week') ?: null,
+            'month'            => $req->integer('month') ?: null,
             'show_deleted'     => $req->boolean('show_deleted'),
             'origen_etiquetas' => $req->boolean('origen_etiquetas') ?: null,
         ];
 
+    if (!empty($filters['month']) && ($filters['month'] < 1 || $filters['month'] > 12)) {
+        $filters['month'] = null;
+    }
+
     // Si se selecciona periodo sin anio, asumir el anio actual para que el filtro aplique.
     if (!empty($filters['week']) && empty($filters['year'])) {
+        $filters['year'] = (int) now()->year;
+    }
+    if (!empty($filters['month']) && empty($filters['year'])) {
         $filters['year'] = (int) now()->year;
     }
 
@@ -2137,7 +2283,7 @@ class OrdenController extends Controller
             $filters['centro_costo'] = null;
         }
     }
-    $q = Orden::with(['servicio','centro','teamLeader','solicitud.cliente','solicitud.centroCosto','solicitud.marca','factura','facturas','area'])
+    $q = Orden::with(['servicio','centro','teamLeader','solicitud.cliente','solicitud.centroCosto','solicitud.marca','items','otServicios','factura','facturas','area'])
         ->when($canSeeDeleted && $filters['show_deleted'], fn($qq) => $qq->withTrashed())
         ->when(!$isPrivilegedViewer, function($qq) use ($centrosPermitidos, $isAutorizadorIntegraciones, $u){
             if (!empty($centrosPermitidos)) {
@@ -2165,6 +2311,9 @@ class OrdenController extends Controller
             }
         })
         ->when($isTLStrict, fn($qq)=>$qq->where('team_leader_id',$u->id))
+        ->when($isCoordEquipo, fn($qq) =>
+            $qq->whereHas('solicitud', fn($w) => $w->whereIn('id_cliente', $coordEquipoUserIds))
+        )
         ->when($isCliente && !$isClienteCentro && !$isAutorizadorIntegraciones, fn($qq)=>$qq->whereHas('solicitud', fn($w)=>$w->where('id_cliente',$u->id)))
             ->when($filters['id'], fn($qq,$v)=>$qq->where('id',$v))
             ->when($filters['estatus'], fn($qq,$v)=>$qq->where('estatus',$v))
@@ -2187,10 +2336,14 @@ class OrdenController extends Controller
             ->when($filters['desde'] && $filters['hasta'], fn($qq)=>$qq->whereBetween('created_at', [
                 request()->date('desde')->startOfDay(), request()->date('hasta')->endOfDay(),
             ]))
-            ->when($filters['year'] && $filters['week'], function($qq) use ($filters) {
+            ->when($filters['month'], function($qq) use ($filters) {
+                $qq->whereYear('created_at', $filters['year'] ?: (int) now()->year)
+                   ->whereMonth('created_at', $filters['month']);
+            })
+            ->when(!$filters['month'] && $filters['year'] && $filters['week'], function($qq) use ($filters) {
                 $qq->whereRaw('YEAR(created_at) = ? AND WEEK(created_at, 1) = ?', [$filters['year'], $filters['week']]);
             })
-            ->when($filters['year'] && !$filters['week'], function($qq) use ($filters) {
+            ->when(!$filters['month'] && $filters['year'] && !$filters['week'], function($qq) use ($filters) {
                 $qq->whereYear('created_at', $filters['year']);
             })
             ->when($filters['origen_etiquetas'], function($qq) {
@@ -2210,11 +2363,13 @@ class OrdenController extends Controller
         || !empty($filters['hasta'])
         || !empty($filters['year'])
         || !empty($filters['week'])
+        || !empty($filters['month'])
         || !empty($filters['show_deleted'])
         || !empty($filters['origen_etiquetas']);
 
         // Reutilizamos el mismo mapeo para paginado o listado completo
-        $transform = function ($o) use ($u, $centrosPermitidos) {
+        $qualityFlow = app(OrdenCalidadFlowService::class);
+        $transform = function ($o) use ($u, $centrosPermitidos, $qualityFlow) {
             // Estatus de facturación real priorizando la factura en pivot (única por integridad)
             // Orden de prioridad: pivot -> directa -> fallback por estatus de OT
             $factStatus = 'sin_factura';
@@ -2243,6 +2398,29 @@ class OrdenController extends Controller
                 'id_solicitud' => $o->solicitud?->id ?? $o->id_solicitud,
                 'estatus' => $o->estatus,
                 'calidad_resultado' => $o->calidad_resultado,
+                'quality_bypassed' => $qualityFlow->shouldBypassQuality($o),
+                'quality_status_kind' => (function () use ($o, $u, $qualityFlow) {
+                    if (!$qualityFlow->shouldHideQualityStatusForUser($o, $u)) return (string) $o->calidad_resultado;
+                    if ((string) $o->estatus === 'completada') return 'cliente_autorizacion';
+                    if (
+                        in_array((string) $o->estatus, ['autorizada_cliente', 'facturada', 'entregada'], true)
+                        || !empty($o->cliente_autorizada_at)
+                    ) {
+                        return 'cliente_autorizada';
+                    }
+                    return (string) $o->calidad_resultado;
+                })(),
+                'quality_status_label' => (function () use ($o, $u, $qualityFlow) {
+                    if (!$qualityFlow->shouldHideQualityStatusForUser($o, $u)) return (string) $o->calidad_resultado;
+                    if ((string) $o->estatus === 'completada') return 'lista_para_autorizacion';
+                    if (
+                        in_array((string) $o->estatus, ['autorizada_cliente', 'facturada', 'entregada'], true)
+                        || !empty($o->cliente_autorizada_at)
+                    ) {
+                        return 'autorizada_por_cliente';
+                    }
+                    return (string) $o->calidad_resultado;
+                })(),
                 'facturacion' => $factStatus,
                 'fecha' => $fecha,
                 'deleted_at' => optional($o->deleted_at)?->toIso8601String(),
@@ -2252,7 +2430,9 @@ class OrdenController extends Controller
                 'area'     => ['nombre' => $o->area?->nombre],
                 'solicitante' => $o->solicitud?->cliente?->name,
                 'centro_costo' => ['nombre' => optional($o->solicitud?->centroCosto)->nombre],
-                'marca'        => ['nombre' => optional($o->solicitud?->marca)->nombre],
+                'marca'        => ['nombre' => $o->items->pluck('marca')->first(fn($m) => !empty($m))
+                    ?? $o->otServicios->pluck('marca')->first(fn($m) => !empty($m))
+                    ?? optional($o->solicitud?->marca)->nombre],
                 'team_leader' => ['name' => $o->teamLeader?->name],
                 'urls' => [
                     'show'     => route('ordenes.show', $o),
@@ -2322,7 +2502,7 @@ class OrdenController extends Controller
             ? \App\Models\CentroTrabajo::select('id','nombre')->orderBy('nombre')->get()
             : \App\Models\CentroTrabajo::whereIn('id', $centrosPermitidos)->select('id','nombre')->orderBy('nombre')->get();
 
-        $responseFilters = $req->only(['id','estatus','calidad','servicio','centro','centro_costo','facturacion','desde','hasta','year','week','show_deleted','origen_etiquetas']);
+        $responseFilters = $req->only(['id','estatus','calidad','servicio','centro','centro_costo','facturacion','desde','hasta','year','week','month','show_deleted','origen_etiquetas']);
         if (!empty($filters['week']) && empty($responseFilters['year']) && !empty($filters['year'])) {
             $responseFilters['year'] = $filters['year'];
         }
@@ -2441,9 +2621,13 @@ class OrdenController extends Controller
             'hasta',
             'year',
             'week',
+            'month',
         ]);
 
         if (!empty($filters['week']) && empty($filters['year'])) {
+            $filters['year'] = (int) now()->year;
+        }
+        if (!empty($filters['month']) && empty($filters['year'])) {
             $filters['year'] = (int) now()->year;
         }
 
@@ -2473,9 +2657,13 @@ class OrdenController extends Controller
             'hasta',
             'year',
             'week',
+            'month',
         ]);
 
         if (!empty($filters['week']) && empty($filters['year'])) {
+            $filters['year'] = (int) now()->year;
+        }
+        if (!empty($filters['month']) && empty($filters['year'])) {
             $filters['year'] = (int) now()->year;
         }
 
@@ -2500,9 +2688,13 @@ class OrdenController extends Controller
             'hasta',
             'year',
             'week',
+            'month',
         ]);
 
         if (!empty($filters['week']) && empty($filters['year'])) {
+            $filters['year'] = (int) now()->year;
+        }
+        if (!empty($filters['month']) && empty($filters['year'])) {
             $filters['year'] = (int) now()->year;
         }
 

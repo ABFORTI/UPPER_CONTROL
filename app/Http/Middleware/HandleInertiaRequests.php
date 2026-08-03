@@ -55,6 +55,7 @@ class HandleInertiaRequests extends Middleware
         // Features habilitadas por centro (para UI: menú, botones, etc.)
         // Importante: la seguridad real se aplica en backend con middleware `feature:*`.
         $enabledFeatureKeys = [];
+        $directPermissions = [];
         if ($u) {
             // Si las migraciones de features aún no corren, no tumbar toda la app.
             // En ese caso, el front verá cero features (oculta menú) y el backend seguirá protegido.
@@ -65,6 +66,13 @@ class HandleInertiaRequests extends Middleware
                     ?->pluck('key')
                     ?->values()
                     ?->all() ?? [];
+            }
+
+            if (Schema::hasTable('permissions')) {
+                $directPermissions = $u->getDirectPermissions()
+                    ->pluck('name')
+                    ->values()
+                    ->all();
             }
         }
 
@@ -99,6 +107,7 @@ class HandleInertiaRequests extends Middleware
                     ],
                 ] : null,
                 'features' => $enabledFeatureKeys,
+                'permissions' => $directPermissions,
             ],
 
             'impersonation' => [

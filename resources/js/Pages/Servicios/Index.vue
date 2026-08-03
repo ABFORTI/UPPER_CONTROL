@@ -14,6 +14,10 @@ function changeCentro(){
   const q = new URLSearchParams({ centro: String(selCentro.value) })
   router.get(`${props.urls.index}?${q.toString()}`, {}, { preserveState: false, replace: true })
 }
+function exportCsv(){
+  const q = new URLSearchParams({ centro: String(selCentro.value) })
+  window.location.href = `${props.urls.export_csv}?${q.toString()}`
+}
 
 const flashOk = computed(()=> usePage().props?.flash?.ok ?? null)
 
@@ -172,13 +176,23 @@ function editRow(r){
                 <option v-for="c in centros" :key="c.id" :value="c.id">{{ c.nombre }}</option>
               </select>
 
-              <button @click="openCreateModal"
-                      class="px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 font-bold text-white hover:shadow-xl transition-all duration-200 transform hover:scale-105 flex items-center justify-center gap-2">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
-                </svg>
-                Agregar servicio
-              </button>
+              <div class="flex items-center gap-2">
+                <button @click="exportCsv"
+                        class="px-6 py-3 rounded-xl bg-white font-bold text-emerald-700 border-2 border-emerald-100 hover:bg-emerald-50 hover:shadow-xl transition-all duration-200 transform hover:scale-105 flex items-center justify-center gap-2">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 16v-8m0 8l-3-3m3 3l3-3M5 16v2a1 1 0 001 1h12a1 1 0 001-1v-2"/>
+                  </svg>
+                  Exportar CSV
+                </button>
+
+                <button @click="openCreateModal"
+                        class="px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 font-bold text-white hover:shadow-xl transition-all duration-200 transform hover:scale-105 flex items-center justify-center gap-2">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+                  </svg>
+                  Agregar servicio
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -27,12 +27,15 @@ const desdeSel = ref(props.filters?.desde || '')
 const hastaSel = ref(props.filters?.hasta || '')
 const yearSel = ref(props.filters?.year || '')
 const weekSel = ref(props.filters?.week || '')
+const monthSel = ref(props.filters?.month || '')
 const showDeleted = ref(!!props.filters?.show_deleted)
+const pendienteOtSel = ref(!!props.filters?.pendiente_ot)
 const availableYears = computed(() => {
   const y = new Date().getFullYear()
   return [y - 2, y - 1, y, y + 1]
 })
 const currentPeriod = computed(() => {
+  if (monthSel.value) return `Mes ${Number(monthSel.value)}`
   if (weekSel.value) return Number(weekSel.value)
   const now = new Date()
   const value = isoWeekNumber(now)
@@ -57,8 +60,10 @@ function applyFilter(){
   if (desdeSel.value) params.desde = desdeSel.value
   if (hastaSel.value) params.hasta = hastaSel.value
   if (yearSel.value) params.year = yearSel.value
-  if (weekSel.value) params.week = weekSel.value
+  if (monthSel.value) params.month = monthSel.value
+  else if (weekSel.value) params.week = weekSel.value
   if (showDeleted.value) params.show_deleted = 1
+  if (pendienteOtSel.value) params.pendiente_ot = 1
   router.get(props.urls.index, params, { preserveState: true, replace: true })
 }
 
@@ -73,7 +78,9 @@ function clearFilters(){
   hastaSel.value = ''
   yearSel.value = ''
   weekSel.value = ''
+  monthSel.value = ''
   showDeleted.value = false
+  pendienteOtSel.value = false
   router.get(props.urls.index, {}, { preserveState: true, replace: true })
 }
 
@@ -99,6 +106,11 @@ function cancelarSolicitud(id){
 }
 
 function toPage(link){ if(link.url){ router.get(link.url, {}, {preserveState:true}) } }
+
+function togglePendienteOt(){
+  pendienteOtSel.value = !pendienteOtSel.value
+  applyFilter()
+}
 
 // Mostramos la fecha exactamente como viene del backend (s.fecha)
 
@@ -297,6 +309,11 @@ function isoWeekNumber(dateStr){
             <option v-for="w in 53" :key="w" :value="w">Periodo {{ w }}</option>
           </select>
 
+          <select v-model="monthSel" @change="applyFilter" class="h-9 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-2.5 text-sm text-slate-800 dark:text-slate-100 xl:col-span-1">
+            <option value="">Meses</option>
+            <option v-for="m in 12" :key="m" :value="m">Mes {{ m }}</option>
+          </select>
+
           <input
             v-model="desdeSel"
             type="date"
@@ -318,6 +335,19 @@ function isoWeekNumber(dateStr){
           <div class="flex flex-wrap items-center gap-1.5">
             <button @click="sel=''; applyFilter()" :class="['px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors', sel==='' ? 'text-white border-[#1A73E8]' : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-700']" :style="sel==='' ? 'background-color: #1A73E8' : ''">Todos</button>
             <button v-for="e in estatuses" :key="e" @click="sel=e; applyFilter()" :class="['px-3 py-1.5 rounded-full text-xs font-semibold border capitalize transition-colors', sel===e ? 'text-white border-[#1A73E8]' : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-700']" :style="sel===e ? 'background-color: #1A73E8' : ''">{{ e }}</button>
+            <button
+              v-if="can?.puede_masivo_coordinador"
+              type="button"
+              @click="togglePendienteOt"
+              :class="['inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors', pendienteOtSel ? 'text-white border-amber-600' : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-700']"
+              :style="pendienteOtSel ? 'background-color: #d97706' : ''"
+              title="Solicitudes aprobadas a las que aún les falta generar la Orden de Trabajo"
+            >
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+              </svg>
+              Falta generar OT
+            </button>
           </div>
 
           <div class="flex flex-wrap items-center justify-end gap-2 ml-auto">

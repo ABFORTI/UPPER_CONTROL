@@ -22,6 +22,8 @@ class UpdateUserRequest extends FormRequest {
             'password' => ['nullable','string','min:8','confirmed'],
             'centros_ids'   => ['sometimes','array'],
             'centros_ids.*' => ['integer','exists:centros_trabajo,id'],
+            'direct_permissions' => ['sometimes', 'array'],
+            'direct_permissions.*' => ['string', Rule::exists('permissions','name')->where('guard_name','web')],
         ];
     }
 }

@@ -20,6 +20,12 @@ use Spatie\Activitylog\Models\Activity;
 
 class SolicitudController extends Controller
 {
+    private const FEATURE_SOLO_SERVICIO_EN_SOLICITUD = 'solicitud_formulario_solo_servicio';
+    private const FEATURE_OCULTAR_CENTRO_COSTO_EN_SOLICITUD = 'solicitud_ocultar_centro_costo';
+    private const FEATURE_OCULTAR_MARCA_EN_SOLICITUD = 'solicitud_ocultar_marca';
+    private const FEATURE_OCULTAR_DESCRIPCION_EN_SOLICITUD = 'solicitud_ocultar_descripcion';
+    private const FEATURE_OCULTAR_AREA_EN_SOLICITUD = 'solicitud_ocultar_area';
+
     public function index(Request $req)
     {
         $u = $req->user();
@@ -33,6 +39,19 @@ class SolicitudController extends Controller
             ? $u->hasRole('Cliente_Autorizador_Integraciones')
             : false;
 
+        // Coordinador de equipo: ve solo solicitudes de los usuarios que tiene asignados
+        $isCoordEquipo = method_exists($u, 'hasRole')
+            ? ($u->hasRole('coordinador_equipo') && !$u->hasAnyRole(['admin','coordinador','gerente_upper','facturacion']))
+            : false;
+        $coordEquipoUserIds = [];
+        if ($isCoordEquipo) {
+            $coordEquipoUserIds = DB::table('coordinador_usuarios')
+                ->where('coordinador_id', (int) $u->id)
+                ->pluck('usuario_id')
+                ->map(fn($v) => (int) $v)
+                ->all();
+        }
+
         $filters = [
             'estatus'  => $req->string('estatus')->toString(),
             'servicio' => $req->integer('servicio') ?: null,
@@ -44,11 +63,20 @@ class SolicitudController extends Controller
             'hasta'    => $req->date('hasta'),
             'year'     => $req->integer('year') ?: null,
             'week'     => $req->integer('week') ?: null,
+            'month'    => $req->integer('month') ?: null,
             'show_deleted' => $req->boolean('show_deleted'),
+            'pendiente_ot' => $req->boolean('pendiente_ot'),
         ];
+
+        if (!empty($filters['month']) && ($filters['month'] < 1 || $filters['month'] > 12)) {
+            $filters['month'] = null;
+        }
 
         // Si se selecciona periodo sin anio, asumir el anio actual para que el filtro aplique.
         if (!empty($filters['week']) && empty($filters['year'])) {
+            $filters['year'] = (int) now()->year;
+        }
+        if (!empty($filters['month']) && empty($filters['year'])) {
             $filters['year'] = (int) now()->year;
         }
 
@@ -96,6 +124,10 @@ class SolicitudController extends Controller
                           ->orWhere('origen_solicitud', 'python_etiquetas');
                 });
             })
+            // Coordinador de equipo: solo solicitudes de sus usuarios asignados
+            ->when($isCoordEquipo, fn($qq) =>
+                $qq->whereIn('id_cliente', $coordEquipoUserIds)
+            )
             ->when($filters['estatus'],  fn($qq,$v)=>$qq->where('estatus',$v))
             ->when($filters['servicio'], fn($qq,$v)=>$qq->where('id_servicio',$v))
             ->when($filters['marca'], fn($qq,$v)=>$qq->where('id_marca',$v))
@@ -106,12 +138,18 @@ class SolicitudController extends Controller
             ->when($filters['desde'] && $filters['hasta'], fn($qq)=>$qq->whereBetween(
                 'created_at', [$filters['desde']->startOfDay(), $filters['hasta']->endOfDay()]
             ))
-            ->when($filters['year'] && $filters['week'], function($qq) use ($filters) {
+            ->when($filters['month'], function($qq) use ($filters) {
+                $qq->whereYear('created_at', $filters['year'] ?: (int) now()->year)
+                   ->whereMonth('created_at', $filters['month']);
+            })
+            ->when(!$filters['month'] && $filters['year'] && $filters['week'], function($qq) use ($filters) {
                 $qq->whereRaw('YEAR(created_at) = ? AND WEEK(created_at, 1) = ?', [$filters['year'], $filters['week']]);
             })
-            ->when($filters['year'] && !$filters['week'], function($qq) use ($filters) {
+            ->when(!$filters['month'] && $filters['year'] && !$filters['week'], function($qq) use ($filters) {
                 $qq->whereYear('created_at', $filters['year']);
             })
+            // Solicitudes aprobadas a las que aún les falta generar la Orden de Trabajo
+            ->when($filters['pendiente_ot'], fn($qq) => $qq->where('estatus', 'aprobada')->whereDoesntHave('ordenes'))
             ->orderByDesc('id');
 
         $hasAnyFilter =
@@ -125,10 +163,12 @@ class SolicitudController extends Controller
             || !empty($filters['hasta'])
             || !empty($filters['year'])
             || !empty($filters['week'])
-            || !empty($filters['show_deleted']);
+            || !empty($filters['month'])
+            || !empty($filters['show_deleted'])
+            || !empty($filters['pendiente_ot']);
 
         $isCoordinadorOrAdmin = $u && method_exists($u, 'hasAnyRole')
-            ? $u->hasAnyRole(['coordinador', 'admin'])
+            ? $u->hasAnyRole(['coordinador', 'coordinador_equipo', 'admin'])
             : false;
 
         $transform = function($s) use ($u, $centrosPermitidos, $isCoordinadorOrAdmin) {
@@ -204,7 +244,7 @@ class SolicitudController extends Controller
             ? \App\Models\Marca::select('id','nombre','id_centrotrabajo')->orderBy('nombre')->get()
             : \App\Models\Marca::whereIn('id_centrotrabajo', $centrosPermitidos)->select('id','nombre','id_centrotrabajo')->orderBy('nombre')->get();
 
-        $responseFilters = $req->only(['estatus','servicio','marca','centro','centro_costo','folio','desde','hasta','year','week','show_deleted']);
+        $responseFilters = $req->only(['estatus','servicio','marca','centro','centro_costo','folio','desde','hasta','year','week','month','show_deleted','pendiente_ot']);
         if (!empty($filters['week']) && empty($responseFilters['year']) && !empty($filters['year'])) {
             $responseFilters['year'] = $filters['year'];
         }
@@ -235,7 +275,7 @@ class SolicitudController extends Controller
         /** @var \App\Models\User $u */
         $u = \Illuminate\Support\Facades\Auth::user();
 
-        // La pantalla de crear solicitud es sólo para clientes (y admin). Evitar que gerente_upper u otros roles creen.
+        // La pantalla de crear solicitud es para clientes, admin y coordinador_equipo. Evitar que gerente_upper u otros roles creen.
         $this->authorize('create', \App\Models\Solicitud::class);
         
         // Verificar bloqueo por OTs vencidas sin autorizar
@@ -316,17 +356,49 @@ class SolicitudController extends Controller
             }
         }
 
-    // Cargar catálogos adicionales (centrados en existencia de tablas para evitar fallos si faltan migraciones)
-    $hasCC = Schema::hasTable('centros_costos');
-    $hasMarcas = Schema::hasTable('marcas');
+        // Cargar catálogos adicionales (centrados en existencia de tablas para evitar fallos si faltan migraciones)
+        $hasCC = Schema::hasTable('centros_costos');
+        $hasMarcas = Schema::hasTable('marcas');
+        $centrosParaFeature = collect();
+        if ($canChooseCentro) {
+            $centrosParaFeature = \App\Models\CentroTrabajo::with('features')
+                ->whereIn('id', $centros->pluck('id')->all())
+                ->get();
+        } elseif ($selectedCentroId) {
+            $centrosParaFeature = \App\Models\CentroTrabajo::with('features')
+                ->where('id', $selectedCentroId)
+                ->get();
+        }
+        $solicitudSimpleFormByCentro = $centrosParaFeature
+            ->mapWithKeys(function (\App\Models\CentroTrabajo $centro) {
+                return [
+                    (int) $centro->id => $centro->hasFeature(self::FEATURE_SOLO_SERVICIO_EN_SOLICITUD),
+                ];
+            })
+            ->all();
+        $solicitudFormFieldsByCentro = $centrosParaFeature
+            ->mapWithKeys(function (\App\Models\CentroTrabajo $centro) {
+                $soloServicio = $centro->hasFeature(self::FEATURE_SOLO_SERVICIO_EN_SOLICITUD);
+                return [
+                    (int) $centro->id => [
+                        'centro_costo' => !$soloServicio && !$centro->hasFeature(self::FEATURE_OCULTAR_CENTRO_COSTO_EN_SOLICITUD),
+                        'marca' => !$soloServicio && !$centro->hasFeature(self::FEATURE_OCULTAR_MARCA_EN_SOLICITUD),
+                        'descripcion' => !$soloServicio && !$centro->hasFeature(self::FEATURE_OCULTAR_DESCRIPCION_EN_SOLICITUD),
+                        'area' => !$soloServicio && !$centro->hasFeature(self::FEATURE_OCULTAR_AREA_EN_SOLICITUD),
+                    ],
+                ];
+            })
+            ->all();
 
-    return Inertia::render('Solicitudes/Create', [
+        return Inertia::render('Solicitudes/Create', [
             'servicios'         => $servicios,
             'precios'           => $precios,
             'preciosPorCentro'  => $preciosPorCentro,
             'centros'           => $centros,
             'canChooseCentro'   => $canChooseCentro,
             'selectedCentroId'  => $selectedCentroId,
+            'solicitudSimpleFormByCentro' => $solicitudSimpleFormByCentro,
+            'solicitudFormFieldsByCentro' => $solicitudFormFieldsByCentro,
             'iva'               => 0.16,
             'urls' => ['store' => route('solicitudes.store')],
             'areas'             => $u->centro_trabajo_id 
@@ -405,10 +477,13 @@ class SolicitudController extends Controller
                 'servicios.*.sku' => ['nullable', 'string', 'max:255'],
                 'servicios.*.origen' => ['nullable', 'string', 'max:255'],
                 'servicios.*.pedimento' => ['nullable', 'string', 'max:255'],
+                'servicios.*.descripcion' => ['nullable', 'string', 'max:255'],
                 // Mantener globales como fallback
                 'sku' => ['nullable', 'string', 'max:255'],
                 'origen' => ['nullable', 'string', 'max:255'],
                 'pedimento' => ['nullable', 'string', 'max:255'],
+                'pedido' => ['nullable', 'string', 'max:255'],
+                'referencia_externa' => ['nullable', 'string', 'max:255'],
             ]);
         } else {
             $req->validate([
@@ -416,6 +491,8 @@ class SolicitudController extends Controller
                 'sku' => ['nullable', 'string', 'max:255'],
                 'origen' => ['nullable', 'string', 'max:255'],
                 'pedimento' => ['nullable', 'string', 'max:255'],
+                'pedido' => ['nullable', 'string', 'max:255'],
+                'referencia_externa' => ['nullable', 'string', 'max:255'],
             ]);
         }
         
@@ -495,32 +572,60 @@ class SolicitudController extends Controller
             ])->withInput();
         }
 
-        // Validaciones de centro de costo (obligatorio) y marca (opcional) según el centro elegido
-        $req->validate([
-            'id_centrocosto' => ['required','integer','exists:centros_costos,id'],
-            'id_marca' => ['nullable','integer','exists:marcas,id'],
-            'id_area' => ['nullable','integer','exists:areas,id'],
-        ]);
-        $cc = \App\Models\CentroCosto::find($req->id_centrocosto);
-        if (!$cc || (int)$cc->id_centrotrabajo !== (int)$centroId) {
-            return back()->withErrors(['id_centrocosto' => 'El centro de costos no pertenece al centro seleccionado.'])->withInput();
+        $simpleRequestFormEnabled = (bool) ($centro?->hasFeature(self::FEATURE_SOLO_SERVICIO_EN_SOLICITUD) ?? false);
+        $showCentroCostoField = !$simpleRequestFormEnabled
+            && !(bool) ($centro?->hasFeature(self::FEATURE_OCULTAR_CENTRO_COSTO_EN_SOLICITUD) ?? false);
+        $showMarcaField = !$simpleRequestFormEnabled
+            && !(bool) ($centro?->hasFeature(self::FEATURE_OCULTAR_MARCA_EN_SOLICITUD) ?? false);
+        $showDescripcionField = !$simpleRequestFormEnabled
+            && !(bool) ($centro?->hasFeature(self::FEATURE_OCULTAR_DESCRIPCION_EN_SOLICITUD) ?? false);
+        $showAreaField = !$simpleRequestFormEnabled
+            && !(bool) ($centro?->hasFeature(self::FEATURE_OCULTAR_AREA_EN_SOLICITUD) ?? false);
+        $centroCostoId = null;
+        $marcaId = null;
+        $areaId = null;
+
+        if ($showCentroCostoField) {
+            // Validación de centro de costo (obligatorio) según el centro elegido
+            $req->validate([
+                'id_centrocosto' => ['required','integer','exists:centros_costos,id'],
+            ]);
+            $cc = \App\Models\CentroCosto::find($req->id_centrocosto);
+            if (!$cc || (int)$cc->id_centrotrabajo !== (int)$centroId) {
+                return back()->withErrors(['id_centrocosto' => 'El centro de costos no pertenece al centro seleccionado.'])->withInput();
+            }
+            $centroCostoId = (int) $req->id_centrocosto;
         }
-        $marca = null;
-        if ($req->filled('id_marca')) {
-            $marca = \App\Models\Marca::find($req->id_marca);
-            if (!$marca || (int)$marca->id_centrotrabajo !== (int)$centroId) {
-                return back()->withErrors(['id_marca' => 'La marca seleccionada no pertenece al centro seleccionado.'])->withInput();
+
+        if ($showMarcaField) {
+            $req->validate([
+                'id_marca' => ['nullable','integer','exists:marcas,id'],
+            ]);
+            if ($req->filled('id_marca')) {
+                $marca = \App\Models\Marca::find($req->id_marca);
+                if (!$marca || (int)$marca->id_centrotrabajo !== (int)$centroId) {
+                    return back()->withErrors(['id_marca' => 'La marca seleccionada no pertenece al centro seleccionado.'])->withInput();
+                }
+                $marcaId = (int) $req->id_marca;
             }
         }
 
-        $areaId = null;
-        if ($req->filled('id_area')) {
-            $area = \App\Models\Area::find($req->id_area);
-            if (!$area || (int)$area->id_centrotrabajo !== (int)$centroId) {
-                return back()->withErrors(['id_area' => 'El área seleccionada no pertenece al centro seleccionado.'])->withInput();
+        if ($showAreaField) {
+            $req->validate([
+                'id_area' => ['nullable','integer','exists:areas,id'],
+            ]);
+            if ($req->filled('id_area')) {
+                $area = \App\Models\Area::find($req->id_area);
+                if (!$area || (int)$area->id_centrotrabajo !== (int)$centroId) {
+                    return back()->withErrors(['id_area' => 'El área seleccionada no pertenece al centro seleccionado.'])->withInput();
+                }
+                $areaId = (int) $area->id;
             }
-            $areaId = (int)$area->id;
         }
+
+        $descripcionSolicitud = $showDescripcionField
+            ? ($normalizeCustomField($req->input('descripcion')) ?? null)
+            : null;
 
         // Excel origen (subido previamente para precarga): guardar referencia si viene
         $excelStoredName = trim((string) $req->input('excel_stored_name', ''));
@@ -563,13 +668,15 @@ class SolicitudController extends Controller
                         'id_cliente'       => $u->id,
                         'id_centrotrabajo' => $centroId,
                         'id_servicio'      => null, // Ya no usamos este campo para múltiples
-                        'descripcion'      => $req->descripcion,
-                        'id_centrocosto'   => (int)$req->id_centrocosto,
-                        'id_marca'         => $req->filled('id_marca') ? (int)$req->id_marca : null,
+                        'descripcion'      => $descripcionSolicitud,
+                        'id_centrocosto'   => $centroCostoId,
+                        'id_marca'         => $marcaId,
                         'id_area'          => $areaId,
                         'sku'              => $skuGlobal,
                         'origen'           => $origenGlobal,
                         'pedimento'        => $pedimentoGlobal,
+                        'pedido'           => $req->pedido,
+                        'referencia_externa' => $req->referencia_externa,
                         'cantidad'         => (int)$cantidadTotalServicios,
                         'subtotal'         => 0, // Se calculará después
                         'iva'              => 0,
@@ -629,6 +736,7 @@ class SolicitudController extends Controller
                             'sku'              => $skuItem,
                             'origen'           => $origenItem,
                             'pedimento'        => $pedimentoItem,
+                            'descripcion'      => $showDescripcionField ? (trim((string)($servicioData['descripcion'] ?? '')) ?: null) : null,
                             'service_assignment_status' => $assignmentStatus,
                             'tipo_cobro'       => $tipoCobro,
                             'cantidad'         => $cantidadServicio,
@@ -723,12 +831,14 @@ class SolicitudController extends Controller
                         'id_cliente'       => $u->id,
                         'id_centrotrabajo' => $centroId,
                         'id_servicio'      => $serv->id,
-                        'descripcion'      => $req->descripcion,
+                        'descripcion'      => $descripcionSolicitud,
                         'sku'              => $sku,
                         'origen'           => $origen,
                         'pedimento'        => $pedimento,
-                        'id_centrocosto'   => (int)$req->id_centrocosto,
-                        'id_marca'         => $req->filled('id_marca') ? (int)$req->id_marca : null,
+                        'pedido'           => $req->pedido,
+                        'referencia_externa' => $req->referencia_externa,
+                        'id_centrocosto'   => $centroCostoId,
+                        'id_marca'         => $marcaId,
                         'id_area'          => $areaId,
                         'cantidad'         => (int)$req->cantidad,
                         // Importes diferidos a la finalización de OT
@@ -758,13 +868,15 @@ class SolicitudController extends Controller
                         'id_cliente'       => $req->user()->id,
                         'id_centrotrabajo' => $centroId,
                         'id_servicio'      => $serv->id,
-                        'descripcion'      => $req->descripcion,
+                        'descripcion'      => $descripcionSolicitud,
                         'sku'              => $sku,
                         'origen'           => $origen,
                         'pedimento'        => $pedimento,
+                        'pedido'           => $req->pedido,
+                        'referencia_externa' => $req->referencia_externa,
                         'id_area'          => $areaId,
-                        'id_centrocosto'   => (int)$req->id_centrocosto,
-                        'id_marca'         => $req->filled('id_marca') ? (int)$req->id_marca : null,
+                        'id_centrocosto'   => $centroCostoId,
+                        'id_marca'         => $marcaId,
                         'cantidad'         => (int)$req->cantidad,
                         'subtotal'         => $subtotal,
                         'iva'              => $iva,
@@ -1339,7 +1451,7 @@ class SolicitudController extends Controller
     private function verificarBloqueoOTsVencidas($user): ?array
     {
         // Solo aplicar a usuarios tipo cliente (no admin/coordinador/etc)
-        if (!$user || $user->hasAnyRole(['admin', 'coordinador', 'facturacion', 'calidad'])) {
+        if (!$user || $user->hasAnyRole(['admin', 'coordinador', 'coordinador_equipo', 'facturacion', 'calidad'])) {
             return null;
         }
 
@@ -1364,7 +1476,7 @@ class SolicitudController extends Controller
 
         // Buscar OTs que:
         // 1. Estén en estado 'completada' (aún no autorizadas por cliente)
-        // 2. Tengan calidad_resultado = 'validado' (ya revisadas por calidad)
+        // 2. Tengan calidad_resultado = 'validado' (listas para autorización)
         // 3. No tengan autorización del cliente
         // 4. Alcance por rol:
         //    - Cliente_Supervisor: solo sus solicitudes
@@ -1394,14 +1506,14 @@ class SolicitudController extends Controller
             return null; // No hay OTs validadas pendientes
         }
 
-        // Filtrar solo las que hayan excedido el tiempo DESDE LA VALIDACIÓN DE CALIDAD
+        // Filtrar solo las que hayan excedido el tiempo desde que quedaron listas para autorización
         // NOTE: aquí usamos tiempo "efectivo" que EXCLUYE sábados y domingos (se pausa el conteo)
         $otsVencidas = $otsValidadas->filter(function($ot) use ($timeoutMinutos) {
-            // Buscar el registro de actividad cuando calidad validó
+            // Buscar el registro de actividad cuando la OT quedó lista para autorización
             $activityLog = \Spatie\Activitylog\Models\Activity::where('log_name', 'ordenes')
                 ->where('subject_type', \App\Models\Orden::class)
                 ->where('subject_id', $ot->id)
-                ->where('event', 'calidad_validar')
+                ->whereIn('event', ['calidad_validar', 'calidad_omitida'])
                 ->orderBy('created_at', 'desc')
                 ->first();
 
@@ -1428,11 +1540,11 @@ class SolicitudController extends Controller
             : $timeoutMinutos . ' minuto(s)';
 
         $ordenesDetalle = $otsVencidas->map(function($ot) use ($timeoutMinutos) {
-            // Obtener la fecha de validación de calidad
+            // Obtener la fecha en la que quedó lista para autorización
             $activityLog = \Spatie\Activitylog\Models\Activity::where('log_name', 'ordenes')
                 ->where('subject_type', \App\Models\Orden::class)
                 ->where('subject_id', $ot->id)
-                ->where('event', 'calidad_validar')
+                ->whereIn('event', ['calidad_validar', 'calidad_omitida'])
                 ->orderBy('created_at', 'desc')
                 ->first();
 
@@ -1444,12 +1556,13 @@ class SolicitudController extends Controller
                 'id' => $ot->id,
                 'folio' => $folio,
                 'validada_hace' => $this->formatearTiempo($transcurrido),
+                'estado_label' => 'Lista para autorización hace',
                 'url' => route('ordenes.show', $ot->id),
             ];
         })->toArray();
 
         $mensaje = sprintf(
-            'No puedes crear nuevas solicitudes. Hay %d orden(es) de trabajo validada(s) por Calidad hace más de %s sin autorización del cliente. Por favor, autoriza las órdenes pendientes antes de continuar.',
+            'No puedes crear nuevas solicitudes. Hay %d orden(es) de trabajo lista(s) para autorización del cliente hace más de %s sin autorización. Por favor, autoriza las órdenes pendientes antes de continuar.',
             $otsVencidas->count(),
             $tiempoTexto
         );

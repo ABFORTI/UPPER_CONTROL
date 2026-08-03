@@ -35,6 +35,13 @@ class FacturaController extends Controller
     $centroCosto = $request->integer('centro_costo') ?: null;
     $year = $request->integer('year') ?: null;
     $week = $request->integer('week') ?: null;
+    $month = $request->integer('month') ?: null;
+    if ($month !== null && ($month < 1 || $month > 12)) {
+      $month = null;
+    }
+    if ($month && !$year) {
+      $year = (int) now()->year;
+    }
 
   // 1) Facturas existentes
   $qFact = Factura::query()->with([
@@ -83,7 +90,9 @@ class FacturaController extends Controller
     $qFact->where('estatus', $estatus);
   }
   // Filtros de año y semana
-  if ($year && $week) {
+  if ($month) {
+    $qFact->whereYear('created_at', $year)->whereMonth('created_at', $month);
+  } elseif ($year && $week) {
     $qFact->whereRaw('YEAR(created_at) = ? AND WEEK(created_at, 1) = ?', [$year, $week]);
   } elseif ($year) {
     $qFact->whereYear('created_at', $year);
@@ -148,10 +157,13 @@ class FacturaController extends Controller
         }
       })
       ->whereNotIn('id', $ordenesConFactura->all())
-      ->when($year && $week, function($qq) use ($year, $week) {
+      ->when($month, function($qq) use ($year, $month) {
+        $qq->whereYear('created_at', $year)->whereMonth('created_at', $month);
+      })
+      ->when(!$month && $year && $week, function($qq) use ($year, $week) {
         $qq->whereRaw('YEAR(created_at) = ? AND WEEK(created_at, 1) = ?', [$year, $week]);
       })
-      ->when($year && !$week, function($qq) use ($year) {
+      ->when(!$month && $year && !$week, function($qq) use ($year) {
         $qq->whereYear('created_at', $year);
       })
       ->with(['servicio','centro','area','solicitud.centroCosto','solicitud.marca'])
@@ -207,7 +219,7 @@ class FacturaController extends Controller
 
   return Inertia::render('Facturas/Index', [
     'items' => $items,
-    'filtros' => [ 'estatus' => $estatus, 'centro' => $centro, 'centro_costo' => $centroCosto, 'year' => $year, 'week' => $week ],
+    'filtros' => [ 'estatus' => $estatus, 'centro' => $centro, 'centro_costo' => $centroCosto, 'year' => $year, 'week' => $week, 'month' => $month ],
     'urls' => [ 'base' => route('facturas.index') ],
     'estatuses' => ['autorizada_cliente','sin_factura','facturado','por_pagar','pagado'],
     'centros' => $centrosLista,

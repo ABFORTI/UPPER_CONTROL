@@ -14,6 +14,7 @@ class RolesSeeder extends Seeder
             'Cliente_Gerente',
             'Cliente_Autorizador_Integraciones',
             'coordinador',
+            'coordinador_equipo',
             'team_leader',
             'calidad',
             'facturacion',

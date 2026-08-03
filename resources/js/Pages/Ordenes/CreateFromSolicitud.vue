@@ -1,6 +1,6 @@
 <script setup>
-import { useForm } from '@inertiajs/vue3'
-import { computed, ref } from 'vue'
+import { useForm, router } from '@inertiajs/vue3'
+import { computed, ref, watch } from 'vue'
 
 const props = defineProps({
   solicitud: Object,
@@ -13,6 +13,10 @@ const props = defineProps({
   usaTamanos: { type: Boolean, default: false },
   cantidadTotal: { type: Number, default: 0 },
   descripcionGeneral: { type: String, default: '' },
+  servicios: { type: Array, default: () => [] },
+  marcas: { type: Array, default: () => [] },
+  servicioIdActivo: { type: Number, default: null },
+  marcaIdActivo: { type: Number, default: null },
 })
 
 // Control de separación de ítems
@@ -21,6 +25,8 @@ const separarItems = ref(false)
 const form = useForm({
   team_leader_id: null,
   id_area: props.solicitud?.id_area ?? null,
+  id_servicio: props.servicioIdActivo ?? props.solicitud?.id_servicio ?? null,
+  id_marca: props.marcaIdActivo ?? props.solicitud?.marca?.id ?? null,
   separar_items: false,
   items: props.prefill.length > 0 
     ? props.prefill.map(i => ({ 
@@ -29,6 +35,39 @@ const form = useForm({
         tamano: i.tamano ?? null 
       }))
     : [{ descripcion: '', cantidad: 1, tamano: null }]
+})
+
+const servicioSeleccionadoNombre = computed(() => {
+  return props.servicios.find(s => s.id === form.id_servicio)?.nombre
+    ?? props.solicitud?.servicio?.nombre
+    ?? '—'
+})
+const marcaSeleccionadaNombre = computed(() => {
+  return props.marcas.find(m => m.id === form.id_marca)?.nombre
+    ?? props.solicitud?.marca?.nombre
+    ?? '—'
+})
+
+// Al cambiar el servicio/marca, recargar para recalcular tamaños/cotización con el nuevo servicio
+function onServicioMarcaChange() {
+  router.get(window.location.pathname, {
+    id_servicio: form.id_servicio,
+    id_marca: form.id_marca,
+  }, {
+    preserveScroll: true,
+    preserveState: true,
+    replace: true,
+  })
+}
+
+// Si cambia el tipo de servicio (con/sin tamaños), reiniciar los ítems acorde al nuevo prefill
+watch(() => props.usaTamanos, (nuevo, viejo) => {
+  if (nuevo === viejo) return
+  separarItems.value = false
+  form.separar_items = false
+  form.items = props.prefill.length > 0
+    ? props.prefill.map(i => ({ descripcion: i.descripcion || '', cantidad: i.cantidad || 1, tamano: i.tamano ?? null }))
+    : [{ descripcion: props.descripcionGeneral || '', cantidad: props.cantidadTotal || 1, tamano: null }]
 })
 
 const areaBloqueada = computed(() => !!props.solicitud?.id_area)
@@ -122,7 +161,7 @@ function submit() {
               <svg class="w-5 h-5 text-[#1E1C8F]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
               </svg>
-              <span class="text-gray-700 dark:text-slate-200"><strong>Servicio:</strong> {{ solicitud?.servicio?.nombre || solicitud?.id_servicio }}</span>
+              <span class="text-gray-700 dark:text-slate-200"><strong>Servicio:</strong> {{ servicioSeleccionadoNombre }}</span>
             </div>
             <div class="flex items-center gap-2">
               <svg class="w-5 h-5 text-[#1E1C8F]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -140,7 +179,7 @@ function submit() {
               <svg class="w-5 h-5 text-[#1E1C8F]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l9-9h5l3 3v5l-9 9-8-8zM16 6h.01"/>
               </svg>
-              <span class="text-gray-700 dark:text-slate-200"><strong>Marca:</strong> {{ solicitud?.marca?.nombre || '—' }}</span>
+              <span class="text-gray-700 dark:text-slate-200"><strong>Marca:</strong> {{ marcaSeleccionadaNombre }}</span>
             </div>
             <div v-if="solicitud?.sku" class="flex items-center gap-2">
               <svg class="w-5 h-5 text-[#1E1C8F]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -201,7 +240,38 @@ function submit() {
           </div>
 
           <form @submit.prevent="submit" class="space-y-6">
-            
+
+            <!-- Servicio y Marca (editable por el coordinador) -->
+            <div class="bg-white rounded-2xl shadow-lg border-2 border-amber-100 overflow-hidden hover:shadow-xl transition-shadow duration-300 dark:bg-slate-900/75 dark:border-amber-500/30">
+              <div class="bg-gradient-to-r from-amber-500 to-orange-500 px-6 py-4 dark:from-amber-500 dark:to-orange-500">
+                <h2 class="text-xl font-bold text-white flex items-center gap-2">
+                  <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                  </svg>
+                  Servicio y Marca
+                </h2>
+              </div>
+              <div class="p-6 grid sm:grid-cols-2 gap-4">
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2 dark:text-slate-200">Servicio</label>
+                  <select v-model.number="form.id_servicio" @change="onServicioMarcaChange"
+                          class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-100">
+                    <option v-for="s in servicios" :key="s.id" :value="s.id">{{ s.nombre }}</option>
+                  </select>
+                  <p v-if="form.errors.id_servicio" class="text-red-600 text-sm mt-2">{{ form.errors.id_servicio }}</p>
+                </div>
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2 dark:text-slate-200">Marca</label>
+                  <select v-model.number="form.id_marca" @change="onServicioMarcaChange"
+                          class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-100">
+                    <option :value="null">— Sin marca —</option>
+                    <option v-for="m in marcas" :key="m.id" :value="m.id">{{ m.nombre }}</option>
+                  </select>
+                  <p v-if="form.errors.id_marca" class="text-red-600 text-sm mt-2">{{ form.errors.id_marca }}</p>
+                </div>
+              </div>
+            </div>
+
             <!-- Team Leader Section -->
             <div class="bg-white rounded-2xl shadow-lg border-2 border-indigo-100 overflow-hidden hover:shadow-xl transition-shadow duration-300 dark:bg-slate-900/75 dark:border-indigo-500/30">
               <div class="bg-gradient-to-r from-indigo-600 to-blue-600 px-6 py-4 dark:from-indigo-500 dark:to-blue-500">

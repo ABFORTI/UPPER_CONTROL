@@ -25,7 +25,7 @@ class CheckServiciosAccess
             'roles' => $user->roles->pluck('name')->toArray(),
             'has_control' => $user->hasRole('control'),
             'has_comercial' => $user->hasRole('comercial'),
-            'has_any_role' => $user->hasAnyRole(['admin', 'coordinador', 'control', 'comercial']),
+            'has_any_role' => $user->hasAnyRole(['admin', 'coordinador', 'coordinador_equipo', 'control', 'comercial']),
             'can_servicios_list' => $user->can('servicios.list'),
         ]);
         
@@ -40,7 +40,7 @@ class CheckServiciosAccess
         }
 
         // Permitir acceso si tiene alguno de estos roles O el permiso específico
-        if ($user->hasAnyRole(['admin', 'coordinador', 'control', 'comercial']) || 
+        if ($user->hasAnyRole(['admin', 'coordinador', 'coordinador_equipo', 'control', 'comercial']) || 
             $user->can('servicios.list')) {
             Log::info('CheckServiciosAccess: Acceso permitido');
             return $next($request);

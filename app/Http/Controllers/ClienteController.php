@@ -12,6 +12,7 @@ use App\Services\Notifier;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Str;
 
 class ClienteController extends Controller
 {
@@ -176,5 +177,78 @@ class ClienteController extends Controller
         return back()
             ->with('ok', $mensaje)
             ->with('bulk_result', ['autorizadas' => $autorizadas, 'omitidas' => $omitidas]);
+    }
+
+    public function solicitarRevision(Request $req, Orden $orden)
+    {
+        $this->authorize('autorizarCliente', $orden);
+
+        $u = $req->user();
+        $centro = $u?->centro;
+        if (!$centro || !$centro->hasFeature('revision_cliente_no_autoriza')) {
+            abort(403, 'No tienes acceso a esta funcionalidad.');
+        }
+
+        if ((string)$orden->estatus !== 'completada') {
+            abort(422, 'La OT aún no está completada.');
+        }
+
+        if ($orden->calidad_resultado !== 'validado') {
+            abort(422, 'Aún no está validada por Calidad.');
+        }
+
+        if (!empty($orden->cliente_autorizada_at) || (string)$orden->estatus === 'autorizada_cliente') {
+            abort(422, 'La OT ya fue autorizada por cliente.');
+        }
+
+        $data = $req->validate([
+            'comentario' => ['required', 'string', 'min:10', 'max:2000'],
+            'fotos' => ['nullable', 'array', 'max:8'],
+            'fotos.*' => ['file', 'mimes:jpg,jpeg,png,webp,pdf', 'max:10240'],
+        ]);
+
+        DB::transaction(function () use ($orden, $u, $data) {
+            $aprobacion = Aprobacion::create([
+                'aprobable_type' => Orden::class,
+                'aprobable_id'   => $orden->id,
+                'tipo'           => 'cliente',
+                'resultado'      => 'rechazado',
+                'observaciones'  => trim((string) $data['comentario']),
+                'id_usuario'     => $u->id,
+            ]);
+
+            foreach (($data['fotos'] ?? []) as $archivo) {
+                $storedPath = $archivo->store("cliente-revisiones/orden-{$orden->id}", 'public');
+                $orden->archivos()->create([
+                    'path'            => $storedPath,
+                    'nombre_original' => $archivo->getClientOriginalName(),
+                    'mime'            => $archivo->getClientMimeType(),
+                    'size'            => $archivo->getSize(),
+                    'subtipo'         => 'revision_cliente:' . $aprobacion->id,
+                ]);
+            }
+
+            $this->act('ordenes')
+                ->performedOn($orden)
+                ->event('cliente_solicita_revision')
+                ->causedBy($u)
+                ->withProperties([
+                    'revision_id' => (int) $aprobacion->id,
+                    'comentario'  => (string) $aprobacion->observaciones,
+                    'adjuntos'    => count($data['fotos'] ?? []),
+                ])
+                ->log("OT #{$orden->id}: cliente solicitó revisión");
+        });
+
+        $comentarioCorto = Str::limit(trim((string) $data['comentario']), 120);
+        Notifier::toRoleInCentro(
+            'coordinador',
+            (int) $orden->id_centrotrabajo,
+            'Revisión solicitada por cliente',
+            "OT #{$orden->id}: {$comentarioCorto}",
+            route('ordenes.show', $orden)
+        );
+
+        return back()->with('ok', 'Se envió la revisión al coordinador.');
     }
 }

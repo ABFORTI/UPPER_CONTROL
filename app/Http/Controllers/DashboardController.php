@@ -25,13 +25,24 @@ class DashboardController extends Controller
     $isCliente = method_exists($u, 'hasRole') ? $u->hasRole('Cliente_Supervisor') : false;
     $isClienteCentro = method_exists($u, 'hasRole') ? $u->hasRole('Cliente_Gerente') : false;
 
-        // Rango por defecto: últimos 30 días
-        // Periodo por semana ISO: week del año (no editable como fechas)
+        // Filtro de periodo: semana ISO o mes
         $year = $req->integer('year') ?: now()->year;
         $week = $req->integer('week') ?: now()->isoWeek;
-        $base = CarbonImmutable::now()->setISODate($year, $week);
-        $desde = $base->startOfWeek();
-        $hasta = $base->endOfWeek();
+        $month = $req->integer('month') ?: null;
+        if ($month !== null && ($month < 1 || $month > 12)) {
+            $month = null;
+        }
+
+        if ($month) {
+            $base = CarbonImmutable::create($year, $month, 1, 0, 0, 0);
+            $desde = $base->startOfMonth();
+            $hasta = $base->endOfMonth();
+            $week = null;
+        } else {
+            $base = CarbonImmutable::now()->setISODate($year, $week);
+            $desde = $base->startOfWeek();
+            $hasta = $base->endOfWeek();
+        }
 
         // Centro: admin/facturación pueden elegir cualquiera. Gerente Upper sólo entre sus centros asignados (principal + pivots).
         if ($u->hasAnyRole(['admin','facturacion'])) {
@@ -200,6 +211,7 @@ class DashboardController extends Controller
             'filters' => [
                 'year'   => $year,
                 'week'   => $week,
+                'month'  => $month,
                 'desde'  => $desde->toDateString(),
                 'hasta'  => $hasta->toDateString(),
                 'centro' => $centroId,

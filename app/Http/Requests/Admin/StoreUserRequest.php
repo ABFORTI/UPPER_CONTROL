@@ -20,6 +20,8 @@ class StoreUserRequest extends FormRequest {
             // Centros múltiples (solo aplica si role es calidad o facturacion, pero lo dejamos opcional)
             'centros_ids'   => ['sometimes','array'],
             'centros_ids.*' => ['integer','exists:centros_trabajo,id'],
+            'direct_permissions' => ['sometimes', 'array'],
+            'direct_permissions.*' => ['string', Rule::exists('permissions','name')->where('guard_name','web')],
         ];
     }
 }

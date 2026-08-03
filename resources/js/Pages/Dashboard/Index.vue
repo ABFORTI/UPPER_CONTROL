@@ -11,7 +11,7 @@ const props = defineProps({
   kpis: { type: Object, default: () => ({}) },
   series: { type: Object, default: () => ({ ots_por_dia: [], top_servicios: [] }) },
   distribuciones: { type: Object, default: () => ({ estatus_ots: {}, calidad: {}, facturacion: {} }) },
-  filters: { type: Object, default: () => ({ year:'', week:'', desde:'', hasta:'', centro:'' }) },
+  filters: { type: Object, default: () => ({ year:'', week:'', month:'', desde:'', hasta:'', centro:'' }) },
   centros: { type: Array, default: () => [] },
   usuarios_centro: { type: Array, default: () => [] },
   urls: { type: Object, default: () => ({ index:'', export_ots:'' }) },
@@ -108,7 +108,18 @@ function nav (path) {
          class="w-full sm:w-auto min-w-0 sm:min-w-[7rem] px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm
            focus:outline-none focus:ring-2 focus:ring-[#006657]/30 focus:border-[#006657]"
       >
+        <option value="">Semanas</option>
         <option v-for="w in 53" :key="w" :value="w">Semana {{ w }}</option>
+      </select>
+
+      <select
+        name="month"
+        :value="props.filters.month || ''"
+         class="w-full sm:w-auto min-w-0 sm:min-w-[7rem] px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm
+           focus:outline-none focus:ring-2 focus:ring-[#006657]/30 focus:border-[#006657]"
+      >
+        <option value="">Meses</option>
+        <option v-for="m in 12" :key="m" :value="m">Mes {{ m }}</option>
       </select>
 
       <!-- Centro -->

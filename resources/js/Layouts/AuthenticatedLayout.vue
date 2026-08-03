@@ -41,6 +41,7 @@ const isAdmin  = computed(() => roles.value.includes('admin'))
 const isFacturacion = computed(() => roles.value.includes('facturacion'))
 const isTeamLeader = computed(() => roles.value.includes('team_leader'))
 const isCoord  = computed(() => roles.value.includes('coordinador'))
+const isCoordEquipo = computed(() => roles.value.includes('coordinador_equipo'))
 const isCalidad = computed(() => roles.value.includes('calidad'))
 const isControl = computed(() => roles.value.includes('control'))
 const isComercial = computed(() => roles.value.includes('comercial'))
@@ -284,7 +285,7 @@ watch(() => Number(user.value?.id || 0), (newUserId, oldUserId) => {
                 <span :class="['overflow-hidden transition-all duration-200', labelVisibilityClasses]">Cotizaciones</span>
               </Link>
             </li>
-            <li v-if="!isOnlyCalidad && !isOnlyControlOrComercial">
+            <li v-if="!isOnlyControlOrComercial">
               <Link :href="route('ordenes.index')" :class="[
                 'flex items-center p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all',
                 navArrangementClasses,
@@ -317,7 +318,7 @@ watch(() => Number(user.value?.id || 0), (newUserId, oldUserId) => {
               </Link>
             </li>
 
-            <li v-if="isAdmin || isCoord || isControl || isComercial || isGerente">
+            <li v-if="isAdmin || isCoord || isCoordEquipo || isControl || isComercial || isGerente">
               <Link :href="route('servicios.index')" :class="[
                 'flex items-center p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all',
                 navArrangementClasses,
@@ -325,6 +326,16 @@ watch(() => Number(user.value?.id || 0), (newUserId, oldUserId) => {
               ]">
                 <Icon name="dollar" :size="24" />
                 <span :class="['overflow-hidden transition-all duration-200', labelVisibilityClasses]">Servicios</span>
+              </Link>
+            </li>
+            <li v-if="isAdmin || isCoord || isCoordEquipo">
+              <Link :href="route('sku-servicios.index')" :class="[
+                'flex items-center p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all',
+                navArrangementClasses,
+                { 'bg-blue-50 text-blue-700 dark:bg-slate-800': url.includes('/sku-servicios') }
+              ]">
+                <Icon name="document" :size="24" />
+                <span :class="['overflow-hidden transition-all duration-200', labelVisibilityClasses]">Catálogo SKU</span>
               </Link>
             </li>
             <li v-if="isAdmin || isCoord || isControl || isComercial || isGerente">
@@ -386,6 +397,16 @@ watch(() => Number(user.value?.id || 0), (newUserId, oldUserId) => {
               ]">
                 <Icon name="checkBadge" :size="24" />
                 <span :class="['overflow-hidden transition-all duration-200', labelVisibilityClasses]">Funcionalidades</span>
+              </Link>
+            </li>
+            <li v-if="isAdmin">
+              <Link :href="route('admin.coordinadores.usuarios.index')" :class="[
+                'flex items-center p-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all',
+                navArrangementClasses,
+                { 'bg-blue-50 text-blue-700 dark:bg-slate-800': url.includes('/admin/coordinadores/usuarios') }
+              ]">
+                <Icon name="users" :size="24" />
+                <span :class="['overflow-hidden transition-all duration-200', labelVisibilityClasses]">Coord. de Equipo</span>
               </Link>
             </li>
             <li v-if="isAdmin">

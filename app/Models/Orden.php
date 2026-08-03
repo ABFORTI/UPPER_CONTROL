@@ -33,6 +33,7 @@ class Orden extends Model {
     public function teamLeader(){ return $this->belongsTo(User::class,'team_leader_id'); }
     public function archivoSubidoPor(){ return $this->belongsTo(User::class,'archivo_excel_subido_por'); }
     public function evidencias(){ return $this->hasMany(\App\Models\Evidencia::class,'id_orden'); }
+    public function archivos(){ return $this->morphMany(\App\Models\Archivo::class,'fileable'); }
     public function aprobaciones()
   
 {

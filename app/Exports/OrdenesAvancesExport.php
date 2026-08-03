@@ -53,6 +53,9 @@ class OrdenesAvancesExport implements FromCollection, WithHeadings, ShouldAutoSi
         if (!empty($f['week']) && empty($f['year'])) {
             $f['year'] = (int) now()->year;
         }
+        if (!empty($f['month']) && empty($f['year'])) {
+            $f['year'] = (int) now()->year;
+        }
 
         $isPrivilegedViewer = $u->hasAnyRole(['admin', 'facturacion', 'gerente_upper']);
         $isTLStrict = $u->hasRole('team_leader') && !$u->hasAnyRole([
@@ -133,10 +136,14 @@ class OrdenesAvancesExport implements FromCollection, WithHeadings, ShouldAutoSi
                 ]);
             })
 
-            ->when(!empty($f['year']) && !empty($f['week']), function (Builder $qq) use ($f) {
+            ->when(!empty($f['month']), function (Builder $qq) use ($f) {
+                $qq->whereYear('created_at', (int) $f['year'])
+                   ->whereMonth('created_at', (int) $f['month']);
+            })
+            ->when(empty($f['month']) && !empty($f['year']) && !empty($f['week']), function (Builder $qq) use ($f) {
                 $qq->whereRaw('YEAR(created_at) = ? AND WEEK(created_at, 1) = ?', [$f['year'], $f['week']]);
             })
-            ->when(!empty($f['year']) && empty($f['week']), fn (Builder $qq) => $qq->whereYear('created_at', $f['year']))
+            ->when(empty($f['month']) && !empty($f['year']) && empty($f['week']), fn (Builder $qq) => $qq->whereYear('created_at', $f['year']))
 
             ->orderByDesc('id');
 
@@ -461,7 +468,23 @@ class OrdenesAvancesExport implements FromCollection, WithHeadings, ShouldAutoSi
             });
         }
 
-        if (!empty($f['year']) && !empty($f['week'])) {
+        if (!empty($f['month'])) {
+            $anio = (int) ($f['year'] ?? now()->year);
+            $mes = (int) $f['month'];
+
+            return $avances->filter(function ($a) use ($anio, $mes) {
+                if (!$a->created_at) {
+                    return false;
+                }
+                $dt = $a->created_at instanceof Carbon
+                    ? $a->created_at
+                    : Carbon::parse($a->created_at);
+
+                return (int) $dt->year === $anio && (int) $dt->month === $mes;
+            });
+        }
+
+        if (empty($f['month']) && !empty($f['year']) && !empty($f['week'])) {
             $anio  = (int) $f['year'];
             $semana = (int) $f['week'];
 

@@ -18,12 +18,14 @@ const sel = ref((props.estado && props.estado !== 'todos') ? props.estado : '')
 const centroSel = ref(props.filters?.centro || '')
 const yearSel = ref(props.filters?.year || new Date().getFullYear())
 const weekSel = ref(props.filters?.week || '')
+const monthSel = ref(props.filters?.month || '')
 const estatuses = computed(() => ['pendiente', 'validado', 'rechazado'])
 function applyFilter(){
   const params = { estado: sel.value || 'todos' }
   if (centroSel.value) params.centro = centroSel.value
   if (yearSel.value) params.year = yearSel.value
-  if (weekSel.value) params.week = weekSel.value
+  if (monthSel.value) params.month = monthSel.value
+  else if (weekSel.value) params.week = weekSel.value
   router.get(props.urls.index, params, { preserveState:true, preserveScroll:true, replace:true })
 }
 
@@ -103,6 +105,10 @@ function validarMasivoCalidad() {
           <select v-model="weekSel" @change="applyFilter" class="border p-2 rounded w-full sm:w-auto sm:min-w-[130px]">
             <option value="">Periodos</option>
             <option v-for="w in 53" :key="w" :value="w">Periodo {{ w }}</option>
+          </select>
+          <select v-model="monthSel" @change="applyFilter" class="border p-2 rounded w-full sm:w-auto sm:min-w-[120px]">
+            <option value="">Meses</option>
+            <option v-for="m in 12" :key="m" :value="m">Mes {{ m }}</option>
           </select>
         </div>
 

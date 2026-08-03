@@ -2,7 +2,7 @@
 import { useForm } from '@inertiajs/vue3'
 import { computed } from 'vue'
 
-const props = defineProps({ user:Object, centros:Array, roles:Array })
+const props = defineProps({ user:Object, centros:Array, roles:Array, permissionsCatalog:Array })
 
 const form = useForm({
   name: props.user?.name || '',
@@ -10,6 +10,7 @@ const form = useForm({
   phone: props.user?.phone || '',
   centro_trabajo_id: props.user?.centro_trabajo_id || '',
   roles: props.user?.roles || ['Cliente_Supervisor'],
+  direct_permissions: props.user?.direct_permissions || [],
   centros_ids: props.user?.centros_ids || [],
   password: '',
   password_confirmation: ''
@@ -108,6 +109,34 @@ function save(){
                      type="tel"
                      placeholder="Ej: 555-123-4567"
                      class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-indigo-100 focus:border-indigo-400 transition-all duration-200">
+            </div>
+
+            <div v-if="(permissionsCatalog || []).length > 0"
+                 class="bg-gradient-to-r from-amber-50 to-orange-50 rounded-xl p-6 border-2 border-amber-200">
+              <label class="block text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                <svg class="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                </svg>
+                Funciones especiales por usuario
+              </label>
+
+              <div class="space-y-2">
+                <label
+                  v-for="p in permissionsCatalog"
+                  :key="p"
+                  class="flex items-center gap-2 text-sm text-gray-700"
+                >
+                  <input
+                    v-model="form.direct_permissions"
+                    type="checkbox"
+                    :value="p"
+                    class="h-4 w-4 rounded border-gray-300 text-amber-600 focus:ring-amber-200"
+                  />
+                  <span>{{ p === 'subir_excel_productos' ? 'Carga masiva de solicitudes por Excel' : p }}</span>
+                </label>
+              </div>
+
+              <p v-if="form.errors.direct_permissions" class="text-red-600 text-sm mt-2">{{ form.errors.direct_permissions }}</p>
             </div>
 
             <!-- Separador -->

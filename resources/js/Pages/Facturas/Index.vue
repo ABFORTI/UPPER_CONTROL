@@ -17,6 +17,7 @@ const centroSel = ref(props.filtros?.centro || '')
 const centroCostoSel = ref(props.filtros?.centro_costo || '')
 const yearSel = ref(props.filtros?.year || new Date().getFullYear())
 const weekSel = ref(props.filtros?.week || '')
+const monthSel = ref(props.filtros?.month || '')
 const estatuses = computed(() => props.estatuses || [])
 function applyFilter(){
   const params = {}
@@ -24,13 +25,15 @@ function applyFilter(){
   if (centroSel.value) params.centro = centroSel.value
   if (centroCostoSel.value) params.centro_costo = centroCostoSel.value
   if (yearSel.value) params.year = yearSel.value
-  if (weekSel.value) params.week = weekSel.value
+  if (monthSel.value) params.month = monthSel.value
+  else if (weekSel.value) params.week = weekSel.value
   currentPage.value = 1
   router.get(props.urls.base, params, { preserveState: true, replace: true })
 }
 // Nota: el buscador fue removido; para limpiar filtros usa la píldora "Todos"
 
 const currentPeriod = computed(() => {
+  if (monthSel.value) return `Mes ${Number(monthSel.value)}`
   if (weekSel.value) return Number(weekSel.value)
   const now = new Date()
   const value = isoWeekNumber(now)
@@ -127,6 +130,10 @@ function goToPage(p){
           <select v-model="weekSel" @change="applyFilter" class="border p-2 rounded w-full sm:w-auto sm:min-w-[140px]">
             <option value="">Periodos</option>
             <option v-for="w in 53" :key="w" :value="w">Periodo {{ w }}</option>
+          </select>
+          <select v-model="monthSel" @change="applyFilter" class="border p-2 rounded w-full sm:w-auto sm:min-w-[130px]">
+            <option value="">Meses</option>
+            <option v-for="m in 12" :key="m" :value="m">Mes {{ m }}</option>
           </select>
         </div>
 

@@ -35,6 +35,9 @@ class OrdenesFacturacionExport implements FromCollection, WithHeadings, ShouldAu
         if (!empty($f['week']) && empty($f['year'])) {
             $f['year'] = (int) now()->year;
         }
+        if (!empty($f['month']) && empty($f['year'])) {
+            $f['year'] = (int) now()->year;
+        }
 
         $isPrivilegedViewer = $u->hasAnyRole(['admin', 'facturacion', 'gerente_upper']);
         $isTLStrict = $u->hasRole('team_leader') && !$u->hasAnyRole([
@@ -115,10 +118,14 @@ class OrdenesFacturacionExport implements FromCollection, WithHeadings, ShouldAu
                 ]);
             })
 
-            ->when(!empty($f['year']) && !empty($f['week']), function (Builder $sub) use ($f) {
+            ->when(!empty($f['month']), function (Builder $sub) use ($f) {
+                $sub->whereYear('created_at', (int) $f['year'])
+                    ->whereMonth('created_at', (int) $f['month']);
+            })
+            ->when(empty($f['month']) && !empty($f['year']) && !empty($f['week']), function (Builder $sub) use ($f) {
                 $sub->whereRaw('YEAR(created_at) = ? AND WEEK(created_at, 1) = ?', [$f['year'], $f['week']]);
             })
-            ->when(!empty($f['year']) && empty($f['week']), fn (Builder $sub) => $sub->whereYear('created_at', $f['year']))
+            ->when(empty($f['month']) && !empty($f['year']) && empty($f['week']), fn (Builder $sub) => $sub->whereYear('created_at', $f['year']))
             ->orderByDesc('id');
 
         $rows = collect();

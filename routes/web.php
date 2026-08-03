@@ -10,6 +10,7 @@ use App\Http\Controllers\{
     OrdenController,
     OrdenExcelController,
     SolicitudExcelController,
+    SkuServicioController,
     CalidadController,
     ClienteController,
     FacturaController,
@@ -31,7 +32,8 @@ use App\Http\Controllers\Admin\{
     BackupController,
     CentroFeatureController,
     AnnouncementController as AdminAnnouncementController,
-    UsuarioBloqueoSolicitudesController
+    UsuarioBloqueoSolicitudesController,
+    CoordinadorUsuariosController,
 };
 
 // Home -> Redirige a dashboard (o login si no está autenticado)
@@ -88,6 +90,7 @@ Route::get('/client/public/quotations/{cotizacion}', ClientPublicQuotationContro
  * ========== */
 Route::middleware(['auth', 'check.servicios'])->group(function () {
     Route::get('/servicios', [PrecioController::class,'index'])->name('servicios.index');
+    Route::get('/servicios/export/csv', [PrecioController::class,'exportCsv'])->name('servicios.export.csv');
     Route::get('/servicios/create', [PrecioController::class,'create'])->name('servicios.create');
     Route::post('/servicios/guardar', [PrecioController::class,'guardar'])->name('servicios.guardar');
     Route::post('/servicios/editar', [PrecioController::class,'editar'])->name('servicios.editar');
@@ -145,16 +148,16 @@ Route::middleware('auth')->group(function () {
 
     // Excel: subir, guardar y parsear (sesión web)
     Route::post('/solicitudes/parse-excel', [SolicitudExcelController::class, 'parseExcel'])
-        ->middleware('feature:subir_excel')
+        ->middleware('feature:subir_excel|subir_excel_productos')
         ->name('solicitudes.parse-excel');
     Route::get('/solicitudes/excel/{archivo}', [SolicitudExcelController::class, 'download'])
-        ->middleware('feature:subir_excel')
+        ->middleware('feature:subir_excel|subir_excel_productos')
         ->where('archivo', '[A-Za-z0-9._-]+')
         ->name('solicitudes.excel.download');
 
     // Excel origen (ya guardado) asociado a la Solicitud
     Route::get('/solicitudes/{solicitud}/excel-origen', [SolicitudExcelController::class, 'downloadBySolicitud'])
-        ->middleware('feature:subir_excel')
+        ->middleware('feature:subir_excel|subir_excel_productos')
         ->name('solicitudes.excel.origen');
 
     Route::post('/solicitudes/{solicitud}/aprobar', [SolicitudController::class,'aprobar'])
@@ -167,6 +170,17 @@ Route::middleware('auth')->group(function () {
         ->name('ordenes.createFromSolicitud');
     Route::post('/solicitudes/{solicitud}/generar-ot', [OrdenController::class,'storeFromSolicitud'])
         ->name('ordenes.storeFromSolicitud');
+
+    // Catálogo SKU -> Servicio (coordinador mantiene qué servicio corresponde a cada SKU)
+    Route::get('/sku-servicios', [SkuServicioController::class, 'index'])
+        ->middleware('role:coordinador|coordinador_equipo|admin')
+        ->name('sku-servicios.index');
+    Route::post('/sku-servicios', [SkuServicioController::class, 'store'])
+        ->middleware('role:coordinador|coordinador_equipo|admin')
+        ->name('sku-servicios.store');
+    Route::delete('/sku-servicios/{skuServicio}', [SkuServicioController::class, 'destroy'])
+        ->middleware('role:coordinador|coordinador_equipo|admin')
+        ->name('sku-servicios.destroy');
 });
 
 /* ===============
@@ -360,6 +374,9 @@ Route::middleware('auth')->group(function () {
 
     Route::post('/ordenes/{orden}/cliente/autorizar', [ClienteController::class,'autorizar'])
         ->name('cliente.autorizar');
+    Route::post('/ordenes/{orden}/cliente/solicitar-revision', [ClienteController::class,'solicitarRevision'])
+        ->middleware('feature:revision_cliente_no_autoriza')
+        ->name('cliente.solicitarRevision');
 
     // Facturas - Supervisor (antes 'cliente') puede ver el listado de sus facturas
     // Gerente Upper puede ver listados/detalles de facturas (solo lectura)
@@ -431,6 +448,10 @@ Route::middleware(['auth','role:admin'])->prefix('admin')->name('admin.')->group
     // Funcionalidades por centro
     Route::get('/centros/features', [CentroFeatureController::class, 'index'])->name('centros.features.index');
     Route::put('/centros/{centro}/features', [CentroFeatureController::class, 'update'])->name('centros.features.update');
+
+    // Coordinador Equipo: asignación de usuarios
+    Route::get('/coordinadores/usuarios', [CoordinadorUsuariosController::class, 'index'])->name('coordinadores.usuarios.index');
+    Route::put('/coordinadores/{coordinador}/usuarios', [CoordinadorUsuariosController::class, 'update'])->name('coordinadores.usuarios.update');
 
     // Announcements
     Route::get('/announcements', [AdminAnnouncementController::class, 'index'])->name('announcements.index');

@@ -85,6 +85,26 @@ class User extends Authenticatable
         return $this->belongsTo(User::class, 'bloqueado_solicitudes_por');
     }
 
+    public function usuariosAsignados()
+    {
+        return $this->belongsToMany(
+            \App\Models\User::class,
+            'coordinador_usuarios',
+            'coordinador_id',
+            'usuario_id'
+        )->withTimestamps();
+    }
+
+    public function coordinadoresAsignados()
+    {
+        return $this->belongsToMany(
+            \App\Models\User::class,
+            'coordinador_usuarios',
+            'usuario_id',
+            'coordinador_id'
+        )->withTimestamps();
+    }
+
     public function estaBloqueadoParaSolicitudes(): bool
     {
         return (bool) $this->bloqueado_solicitudes;

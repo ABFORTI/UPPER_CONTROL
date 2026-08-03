@@ -20,6 +20,7 @@ const props = defineProps({
   cortes: { type: Array, default: () => [] },
   delete_status: { type: Object, default: () => ({}) },
   auditoria: { type: Array, default: () => [] },
+  cliente_revisiones: { type: Array, default: () => [] },
 })
 
 // Alias para acceder fácilmente en el template
@@ -30,9 +31,18 @@ const preciosPorServicio = computed(() => props.precios_por_servicio)
 const items   = computed(() => props.orden?.items   ?? [])
 const avances = computed(() => props.orden?.avances ?? [])
 const servicios = computed(() => props.orden?.ot_servicios ?? [])
+// La marca elegida al generar la OT vive en items/ot_servicios; si no se capturó ahí, usar la de la solicitud original
+const marcaOt = computed(() => {
+  const deItems = items.value.find(i => i?.marca)?.marca
+  if (deItems) return deItems
+  const deServicios = servicios.value.find(s => s?.marca)?.marca
+  if (deServicios) return deServicios
+  return props.orden?.solicitud?.marca?.nombre || null
+})
 const avancesCalidad = computed(() =>
-  (avances.value || []).filter(a => ['CALIDAD_VALIDADA', 'CALIDAD_RECHAZADA'].includes(String(a?.tipo || '').toUpperCase()))
+  (avances.value || []).filter(a => ['CALIDAD_VALIDADA', 'CALIDAD_RECHAZADA', 'CALIDAD_OMITIDA'].includes(String(a?.tipo || '').toUpperCase()))
 )
+const clienteRevisiones = computed(() => props.cliente_revisiones ?? [])
 
 // Helper para números seguros
 const toNum = (v) => {
@@ -223,7 +233,7 @@ function confirmarCalidad() {
 }
 function esEventoCalidad(avance) {
   const tipo = String(avance?.tipo || '').toUpperCase()
-  if (['CALIDAD_VALIDADA', 'CALIDAD_RECHAZADA'].includes(tipo)) return true
+  if (['CALIDAD_VALIDADA', 'CALIDAD_RECHAZADA', 'CALIDAD_OMITIDA'].includes(tipo)) return true
 
   const cantidad = Number(avance?.cantidad_registrada ?? avance?.cantidad ?? 0)
   const tarifa = String(avance?.tarifa || '').toUpperCase()
@@ -247,6 +257,7 @@ function etiquetaTipoAvance(avance) {
   const tipo = String(avance?.tipo || '').toUpperCase()
   if (tipo === 'CALIDAD_VALIDADA') return 'APROBACIÓN POR CALIDAD'
   if (tipo === 'CALIDAD_RECHAZADA') return 'CALIDAD RECHAZADA'
+  if (tipo === 'CALIDAD_OMITIDA') return 'AUTORIZACIÓN DIRECTA POR ALMACÉN'
   if (esEventoCalidad(avance)) return 'APROBACIÓN POR CALIDAD'
   return String(avance?.tarifa || 'NORMAL').toUpperCase()
 }
@@ -281,6 +292,32 @@ function avancesConEventosCalidad(servicio, idx) {
   return base.sort((a, b) => new Date(b?.created_at || 0) - new Date(a?.created_at || 0))
 }
 const autorizarCliente = () => router.post(props.urls.cliente_autorizar)
+const showClienteRevisionModal = ref(false)
+const clienteRevisionForm = useForm({
+  comentario: '',
+  fotos: [],
+})
+
+function openClienteRevisionModal() {
+  clienteRevisionForm.reset()
+  clienteRevisionForm.clearErrors()
+  showClienteRevisionModal.value = true
+}
+
+function onClienteRevisionFilesChange(event) {
+  clienteRevisionForm.fotos = Array.from(event?.target?.files || [])
+}
+
+function enviarSolicitudRevisionCliente() {
+  clienteRevisionForm.post(props.urls.cliente_solicitar_revision, {
+    forceFormData: true,
+    preserveScroll: true,
+    onSuccess: () => {
+      showClienteRevisionModal.value = false
+      clienteRevisionForm.reset()
+    },
+  })
+}
 
 const showAdminDeleteModal = ref(false)
 const adminDeleteAction = ref('delete')
@@ -836,6 +873,7 @@ function tipoAvanceLabel(a) {
   const tipo = String(a?.tipo || '').toUpperCase()
   if (tipo === 'CALIDAD_VALIDADA') return 'CALIDAD_VALIDADA'
   if (tipo === 'CALIDAD_RECHAZADA') return 'CALIDAD_RECHAZADA'
+  if (tipo === 'CALIDAD_OMITIDA') return 'AUTORIZACIÓN_DIRECTA'
   if (isRechazoComentario(a?.comentario)) return 'RECHAZO'
   if (isFaltantesComentario(a?.comentario)) return 'FALTANTES'
   if ((a?.isCorregido || a?.es_corregido)) return 'CORREGIDO'
@@ -1290,18 +1328,6 @@ function aplicarFaltantesServicio(servicioId) {
                 {{ orden?.estatus?.replace(/_/g, ' ').toUpperCase() }}
               </span>
               
-              <span class="px-3 py-1.5 rounded-lg font-semibold text-xs backdrop-blur-sm border-2"
-                    :class="{
-                      'bg-orange-500 text-white border-orange-600 dark:bg-orange-500 dark:border-orange-600': orden?.calidad_resultado === 'pendiente',
-                      'bg-emerald-600 text-white border-emerald-700 dark:bg-emerald-600 dark:border-emerald-700': orden?.calidad_resultado === 'validado',
-                      'bg-red-600 text-white border-red-700 dark:bg-red-600 dark:border-red-700': orden?.calidad_resultado === 'rechazado'
-                    }">
-                <svg class="w-3.5 h-3.5 inline-block mr-1" fill="currentColor" viewBox="0 0 20 20">
-                  <path fill-rule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
-                </svg>
-                Calidad: {{ orden?.calidad_resultado?.toUpperCase() }}
-              </span>
-
               <a :href="urls.pdf" target="_blank"
                  class="px-3 py-1.5 rounded-lg bg-white bg-opacity-20 hover:bg-opacity-30 text-white font-semibold text-xs backdrop-blur-sm border-2 border-white border-opacity-30 hover:border-opacity-50 transition-all duration-200 flex items-center gap-1.5">
                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1332,7 +1358,7 @@ function aplicarFaltantesServicio(servicioId) {
               <svg class="w-4 h-4 text-indigo-600 dark:text-indigo-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l9-9h5l3 3v5l-9 9-8-8zM16 6h.01"/>
               </svg>
-              <span class="text-gray-700 dark:text-slate-200 break-words"><strong>Marca:</strong> {{ (orden?.solicitud?.marca?.nombre) || '—' }}</span>
+              <span class="text-gray-700 dark:text-slate-200 break-words"><strong>Marca:</strong> {{ marcaOt || '—' }}</span>
             </div>
             <div class="flex items-center gap-1.5 min-w-0">
               <svg class="w-4 h-4 text-[#1E1C8F] dark:text-indigo-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1851,7 +1877,7 @@ function aplicarFaltantesServicio(servicioId) {
                         </div>
                         
                         <!-- Comentario (solo si no es faltantes) -->
-                        <div v-if="a?.comentario && !isFaltantesComentario(a?.comentario)" class="text-xs text-slate-600 dark:text-slate-400 mt-1 italic">
+                        <div v-if="a?.comentario && !isFaltantesComentario(a?.comentario) && String(a?.tipo || '').toUpperCase() !== 'CALIDAD_OMITIDA'" class="text-xs text-slate-600 dark:text-slate-400 mt-1 italic">
                           "{{ isRechazoComentario(a?.comentario) ? extractRechazoComentario(a.comentario) : a.comentario }}"
                         </div>
                         
@@ -2385,7 +2411,7 @@ function aplicarFaltantesServicio(servicioId) {
                                 [Tarifa {{ avance.tarifa }}: ${{ parseFloat(avance.precio_unitario_aplicado).toFixed(2) }}]
                               </span>
                             </div>
-                            <p v-if="avance.comentario" class="text-xs text-slate-600 mt-2 p-1.5 bg-white rounded border-l-2 border-purple-400 dark:bg-slate-900/30 dark:text-slate-400 dark:border-purple-500">
+                            <p v-if="avance.comentario && String(avance?.tipo || '').toUpperCase() !== 'CALIDAD_OMITIDA'" class="text-xs text-slate-600 mt-2 p-1.5 bg-white rounded border-l-2 border-purple-400 dark:bg-slate-900/30 dark:text-slate-400 dark:border-purple-500">
                               {{ avance.comentario }}
                             </p>
                             <p v-if="showContenedorFolioHistory && avance.contenedor_folio" class="text-xs text-slate-700 dark:text-slate-300 mt-2">
@@ -2993,6 +3019,15 @@ function aplicarFaltantesServicio(servicioId) {
                 Autorizar como Cliente
               </button>
 
+              <button v-if="can?.cliente_solicitar_revision"
+                      @click="openClienteRevisionModal"
+                      class="w-full px-5 py-3 bg-gradient-to-r from-amber-500 to-orange-600 text-white font-bold rounded-xl shadow-lg hover:shadow-xl hover:scale-105 transform transition-all duration-200 flex items-center justify-center gap-2">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-4l-4 4v-4z"/>
+                </svg>
+                Solicitar revisión
+              </button>
+
               <!-- Ir a Facturación -->
               <a v-if="can?.facturar" :href="urls.facturar"
                  class="block w-full px-5 py-3 bg-gradient-to-r from-indigo-600 to-[#1E1C8F] text-white font-bold text-center rounded-xl shadow-lg hover:shadow-xl hover:scale-105 transform transition-all duration-200 flex items-center justify-center gap-2 dark:from-indigo-500 dark:to-[#1E1C8F]">
@@ -3003,13 +3038,38 @@ function aplicarFaltantesServicio(servicioId) {
               </a>
 
               <!-- Mensaje cuando no hay acciones disponibles -->
-                <div v-if="!can?.calidad_validar && !can?.cliente_autorizar && !can?.facturar" 
+                <div v-if="!can?.calidad_validar && !can?.cliente_autorizar && !can?.cliente_solicitar_revision && !can?.facturar" 
                    class="text-center py-8 text-gray-500 dark:text-slate-400">
                  <svg class="w-16 h-16 mx-auto mb-3 text-gray-300 dark:text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
                 </svg>
                 <p class="font-semibold dark:text-slate-200">No hay acciones disponibles</p>
                 <p class="text-sm mt-1 dark:text-slate-400">Las acciones aparecerán según el estado de la OT</p>
+              </div>
+            </div>
+          </div>
+
+          <div v-if="clienteRevisiones.length" class="bg-white rounded-2xl shadow-lg border-2 border-amber-100 overflow-hidden dark:bg-slate-900/80 dark:border-amber-500/40">
+            <div class="bg-gradient-to-r from-amber-500 to-orange-600 px-4 py-2">
+              <h3 class="text-base font-bold text-white">Revisiones solicitadas por cliente</h3>
+            </div>
+            <div class="p-4 space-y-3">
+              <div v-for="revision in clienteRevisiones" :key="revision.id" class="rounded-xl border border-amber-200 p-3 dark:border-amber-500/40">
+                <div class="text-xs text-gray-600 dark:text-slate-400">
+                  {{ revision.usuario?.name || 'Cliente' }} · {{ fmtDate(revision.created_at) }}
+                </div>
+                <p class="mt-1 text-sm text-gray-800 whitespace-pre-line dark:text-slate-100">{{ revision.comentario }}</p>
+                <div v-if="revision.archivos?.length" class="mt-2 space-y-1">
+                  <a
+                    v-for="archivo in revision.archivos"
+                    :key="archivo.id"
+                    :href="archivo.url"
+                    target="_blank"
+                    class="block text-sm text-indigo-600 hover:underline dark:text-indigo-300"
+                  >
+                    {{ archivo.nombre }}
+                  </a>
+                </div>
               </div>
             </div>
           </div>
@@ -3102,6 +3162,49 @@ function aplicarFaltantesServicio(servicioId) {
 
     <div v-if="calidadToast" class="fixed top-4 right-4 z-[10000] px-4 py-2 rounded-lg bg-slate-900 text-white text-sm shadow-lg">
       {{ calidadToast }}
+    </div>
+
+    <div v-if="showClienteRevisionModal" class="fixed inset-0 z-[10001] flex items-center justify-center px-4">
+      <div class="fixed inset-0 bg-black/40 z-40" @click="showClienteRevisionModal = false"></div>
+      <div class="relative w-full max-w-2xl bg-white rounded-2xl shadow-xl p-6 z-50 dark:bg-slate-900">
+        <h3 class="text-lg font-semibold dark:text-slate-100">Solicitar revisión de la OT</h3>
+        <p class="text-sm text-gray-600 mt-1 dark:text-slate-400">Explica el problema para que el coordinador lo revise. Puedes adjuntar evidencias.</p>
+
+        <div class="mt-4">
+          <label class="text-sm font-semibold dark:text-slate-100">Comentario</label>
+          <textarea
+            v-model="clienteRevisionForm.comentario"
+            rows="4"
+            class="w-full mt-2 p-3 border rounded-md dark:bg-slate-900 dark:border-slate-700 dark:text-slate-100"
+            placeholder="Describe qué está mal o qué se debe corregir"
+          ></textarea>
+          <p v-if="clienteRevisionForm.errors.comentario" class="text-xs text-red-600 mt-1">{{ clienteRevisionForm.errors.comentario }}</p>
+        </div>
+
+        <div class="mt-4">
+          <label class="text-sm font-semibold dark:text-slate-100">Fotos o archivos (opcional)</label>
+          <input
+            type="file"
+            multiple
+            accept=".jpg,.jpeg,.png,.webp,.pdf"
+            @change="onClienteRevisionFilesChange"
+            class="w-full mt-2 text-sm dark:text-slate-100"
+          />
+          <p v-if="clienteRevisionForm.errors.fotos" class="text-xs text-red-600 mt-1">{{ clienteRevisionForm.errors.fotos }}</p>
+          <p v-if="clienteRevisionForm.errors['fotos.0']" class="text-xs text-red-600 mt-1">{{ clienteRevisionForm.errors['fotos.0'] }}</p>
+        </div>
+
+        <div class="mt-5 flex justify-end gap-3">
+          <button @click="showClienteRevisionModal = false" class="px-4 py-2 rounded bg-gray-200 dark:bg-slate-700 dark:text-slate-100">Cancelar</button>
+          <button
+            @click="enviarSolicitudRevisionCliente"
+            :disabled="clienteRevisionForm.processing"
+            class="px-4 py-2 rounded bg-amber-600 text-white"
+          >
+            {{ clienteRevisionForm.processing ? 'Enviando...' : 'Enviar revisión' }}
+          </button>
+        </div>
+      </div>
     </div>
 
     <div v-if="showAdminDeleteModal" class="fixed inset-0 z-[10001] flex items-center justify-center px-4">
@@ -3220,5 +3323,3 @@ function aplicarFaltantesServicio(servicioId) {
     </div>
   </div>
 </template>
-
-

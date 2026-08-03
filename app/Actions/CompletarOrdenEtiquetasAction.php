@@ -9,6 +9,7 @@ use App\Models\OrdenItem;
 use App\Models\OrdenItemProduccionSegmento;
 use App\Models\OTServicio;
 use App\Models\User;
+use App\Services\OrdenCalidadFlowService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
@@ -52,7 +53,10 @@ class CompletarOrdenEtiquetasAction
 
             // Marcar OT como completada
             $orden->estatus = 'completada';
-            $orden->calidad_resultado = 'pendiente';
+            app(OrdenCalidadFlowService::class)->applyCompletionRouting(
+                $orden,
+                $operador
+            );
             if (Schema::hasColumn('ordenes_trabajo', 'fecha_completada')) {
                 $orden->fecha_completada = now();
             }
@@ -71,29 +75,7 @@ class CompletarOrdenEtiquetasAction
             ]);
         });
 
-        // Notificar a usuarios de calidad del centro (fuera de la transacción)
-        try {
-            $usuariosCalidad = User::role('calidad')
-                ->where(function ($q) use ($orden) {
-                    $q->where('centro_trabajo_id', $orden->id_centrotrabajo)
-                      ->orWhereHas('centros', function ($w) use ($orden) {
-                          $w->where('centro_trabajo_id', $orden->id_centrotrabajo);
-                      });
-                })
-                ->get();
-
-            if ($usuariosCalidad->isNotEmpty()) {
-                \Illuminate\Support\Facades\Notification::send(
-                    $usuariosCalidad,
-                    new \App\Notifications\OtListaParaCalidad($orden)
-                );
-            }
-        } catch (\Throwable $e) {
-            Log::warning('CompletarOrdenEtiquetasAction: fallo al notificar calidad (ignorado)', [
-                'orden_id' => $orden->id,
-                'error'    => $e->getMessage(),
-            ]);
-        }
+        app(OrdenCalidadFlowService::class)->notifyCompletionRouting($orden->fresh(['centro', 'servicio']));
 
         // Activity log
         try {

@@ -247,7 +247,14 @@ class CalidadController extends Controller
     'centro' => $req->integer('centro') ?: null,
     'year' => $req->integer('year') ?: null,
     'week' => $req->integer('week') ?: null,
+    'month' => $req->integer('month') ?: null,
   ];
+  if (!empty($filters['month']) && ($filters['month'] < 1 || $filters['month'] > 12)) {
+    $filters['month'] = null;
+  }
+  if (!empty($filters['month']) && empty($filters['year'])) {
+    $filters['year'] = (int) now()->year;
+  }
 
   $q = \App\Models\Orden::with('servicio','centro','area','solicitud.marca','teamLeader')
     // Mostrar OTs completadas y las etapas posteriores del flujo
@@ -275,10 +282,14 @@ class CalidadController extends Controller
       $qq->where('calidad_resultado',$estadoNorm);
     })
     // Filtros de año y semana
-    ->when($filters['year'] && $filters['week'], function($qq) use ($filters) {
+    ->when($filters['month'], function($qq) use ($filters) {
+      $qq->whereYear('created_at', $filters['year'] ?: (int) now()->year)
+         ->whereMonth('created_at', $filters['month']);
+    })
+    ->when(!$filters['month'] && $filters['year'] && $filters['week'], function($qq) use ($filters) {
       $qq->whereRaw('YEAR(created_at) = ? AND WEEK(created_at, 1) = ?', [$filters['year'], $filters['week']]);
     })
-    ->when($filters['year'] && !$filters['week'], function($qq) use ($filters) {
+    ->when(!$filters['month'] && $filters['year'] && !$filters['week'], function($qq) use ($filters) {
       $qq->whereYear('created_at', $filters['year']);
     })
     ->orderByDesc('id');

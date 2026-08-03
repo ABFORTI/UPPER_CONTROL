@@ -8,8 +8,12 @@ use App\Models\Solicitud;
 use App\Models\ServicioEmpresa;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
+use PhpOffice\PhpSpreadsheet\IOFactory;
+use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
 class SolicitudExcelController extends Controller
 {
@@ -17,6 +21,7 @@ class SolicitudExcelController extends Controller
     {
         $request->validate([
             'archivo' => 'required|file|mimes:xlsx,xls|max:10240',
+            'modo' => 'nullable|string|in:normal,productos',
         ]);
 
         try {
@@ -30,10 +35,38 @@ class SolicitudExcelController extends Controller
             $storedPath = $file->storeAs('solicitudes_excel', $storedName);
 
             // Parsear desde el archivo guardado (incluye servicios detectados)
-            $parser = new ExcelOtParser();
-            $parsed = $parser->parseWithServicios(Storage::path($storedPath));
-            $datos = $parsed['datos'] ?? [];
-            $serviciosRaw = $parsed['servicios'] ?? [];
+            $modo = (string) $request->input('modo', 'normal');
+            $isProductosMode = $modo === 'productos';
+
+            $puedeProductos = false;
+            if (Schema::hasTable('permissions') && $request->user() && method_exists($request->user(), 'hasPermissionTo')) {
+                $puedeProductos = $request->user()->hasPermissionTo('subir_excel_productos');
+            }
+
+            if ($isProductosMode && !$puedeProductos) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No tienes permiso para usar la carga masiva de solicitudes por Excel.',
+                ], 403);
+            }
+
+            $datos = [];
+            $serviciosRaw = [];
+            $erroresImportacion = [];
+            $warnings = [];
+
+            if ($isProductosMode) {
+                $parsedProductos = $this->parseProductosTemplate(Storage::path($storedPath));
+                $datos = $parsedProductos['datos'] ?? [];
+                $serviciosRaw = $parsedProductos['servicios'] ?? [];
+                $erroresImportacion = $parsedProductos['errores'] ?? [];
+                $warnings = $parsedProductos['warnings'] ?? [];
+            } else {
+                $parser = new ExcelOtParser();
+                $parsed = $parser->parseWithServicios(Storage::path($storedPath));
+                $datos = $parsed['datos'] ?? [];
+                $serviciosRaw = $parsed['servicios'] ?? [];
+            }
 
             // Extraer SOLO campos solicitados (si existen)
             $prefill = [];
@@ -62,6 +95,15 @@ class SolicitudExcelController extends Controller
             if (!empty($datos['pedimento'])) {
                 $prefill['pedimento'] = trim((string) $datos['pedimento']);
             }
+            if (!empty($datos['pedido'])) {
+                $prefill['pedido'] = trim((string) $datos['pedido']);
+            }
+            if (!empty($datos['referencia_externa'])) {
+                $prefill['referencia_externa'] = trim((string) $datos['referencia_externa']);
+            }
+            if (!empty($datos['notas'])) {
+                $prefill['notas'] = trim((string) $datos['notas']);
+            }
 
             // Adicional: cantidad (para precargar el formulario)
             if (!empty($datos['cantidad'])) {
@@ -70,9 +112,11 @@ class SolicitudExcelController extends Controller
 
             // Resolver servicios contra BD
             $servicios = [];
-            $erroresImportacion = [];
             $conServicioAsignado = 0;
             $pendienteAsignacion = 0;
+            $conServicioAutomatico = 0;
+            // Centro del cliente que sube el archivo: se usa para consultar el catálogo SKU->Servicio del coordinador
+            $centroIdCatalogoSku = (int) ($request->user()?->centro_trabajo_id ?? 0);
             foreach ($serviciosRaw as $s) {
                 $filaExcel = isset($s['row_number']) ? (int) $s['row_number'] : null;
                 $nombre = $this->parseTexto($s['nombre_servicio'] ?? null);
@@ -93,6 +137,34 @@ class SolicitudExcelController extends Controller
                         continue;
                     }
 
+                    // Catálogo del coordinador: si este SKU ya tiene un servicio asignado, autoasignarlo.
+                    $idServicioAuto = $centroIdCatalogoSku
+                        ? \App\Models\SkuServicio::resolverServicioId($centroIdCatalogoSku, $skuFila)
+                        : null;
+                    $servAuto = $idServicioAuto ? ServicioEmpresa::find($idServicioAuto) : null;
+
+                    if ($servAuto) {
+                        $servicios[] = [
+                            'id_servicio' => (int) $servAuto->id,
+                            'nombre_servicio' => (string) $servAuto->nombre,
+                            'service_assignment_status' => 'assigned',
+                            'cantidad' => $cantidadFila,
+                            'sku' => $skuFila,
+                            'origen' => $origenFila,
+                            'pedimento' => $pedimentoFila,
+                            'tipo_tarifa' => $tipoTarifaFila,
+                            'precio_unitario' => $precioUnitarioFila,
+                            'descripcion' => $this->parseTexto($s['descripcion'] ?? null),
+                            'po'    => $this->parseTexto($s['po'] ?? null),
+                            'vpn'   => $this->parseTexto($s['vpn'] ?? null),
+                            'marca' => $this->parseTexto($s['marca'] ?? null),
+                            'notas' => $this->parseTexto($s['notas'] ?? null),
+                        ];
+                        $conServicioAsignado++;
+                        $conServicioAutomatico++;
+                        continue;
+                    }
+
                     $servicios[] = [
                         'id_servicio' => null,
                         'nombre_servicio' => 'Pendiente de asignación',
@@ -103,6 +175,12 @@ class SolicitudExcelController extends Controller
                         'pedimento' => $pedimentoFila,
                         'tipo_tarifa' => $tipoTarifaFila,
                         'precio_unitario' => $precioUnitarioFila,
+                        'descripcion' => $this->parseTexto($s['descripcion'] ?? null),
+                        // Campos específicos del template de productos
+                        'po'    => $this->parseTexto($s['po'] ?? null),
+                        'vpn'   => $this->parseTexto($s['vpn'] ?? null),
+                        'marca' => $this->parseTexto($s['marca'] ?? null),
+                        'notas' => $this->parseTexto($s['notas'] ?? null),
                     ];
                     $pendienteAsignacion++;
                     continue;
@@ -127,6 +205,7 @@ class SolicitudExcelController extends Controller
                     'pedimento' => $pedimentoFila,
                     'tipo_tarifa' => $tipoTarifaFila,
                     'precio_unitario' => $precioUnitarioFila,
+                    'descripcion' => $this->parseTexto($s['descripcion'] ?? null),
                 ];
                 $conServicioAsignado++;
             }
@@ -147,6 +226,7 @@ class SolicitudExcelController extends Controller
                         'pedimento' => $this->parseTexto($prefill['pedimento'] ?? null),
                         'tipo_tarifa' => 'NORMAL',
                         'precio_unitario' => null,
+                        'descripcion' => null,
                     ];
                     $conServicioAsignado++;
                 } else {
@@ -171,6 +251,7 @@ class SolicitudExcelController extends Controller
                         'pedimento' => $this->parseTexto($prefill['pedimento'] ?? null),
                         'tipo_tarifa' => 'NORMAL',
                         'precio_unitario' => null,
+                        'descripcion' => null,
                     ];
                     $pendienteAsignacion++;
                 }
@@ -180,6 +261,7 @@ class SolicitudExcelController extends Controller
             $totalProcesadas = $conServicioAsignado + $pendienteAsignacion + $fallidas;
             $resumenImportacion = [
                 'con_servicio_asignado' => $conServicioAsignado,
+                'con_servicio_automatico' => $conServicioAutomatico,
                 'pendiente_asignacion' => $pendienteAsignacion,
                 'fallidas' => $fallidas,
                 'total_procesadas' => $totalProcesadas,
@@ -215,15 +297,29 @@ class SolicitudExcelController extends Controller
                 'is_multi' => $isMulti,
                 'resumen_importacion' => $resumenImportacion,
                 'errores_importacion' => $erroresImportacion,
-                'warnings' => $fallidas > 0
-                    ? [
+                'warnings' => array_values(array_filter(array_merge(
+                    $warnings,
+                    $conServicioAutomatico > 0 ? [
+                        "Servicio asignado automáticamente por SKU en {$conServicioAutomatico} fila(s), según el catálogo del coordinador.",
+                    ] : [],
+                    $fallidas > 0 ? [
                         "Filas con servicio asignado: {$conServicioAsignado}",
                         "Filas pendientes de asignación: {$pendienteAsignacion}",
                         "Filas fallidas: {$fallidas}",
-                    ]
-                    : [],
+                    ] : []
+                ))),
             ]);
         } catch (\Exception $e) {
+            if (str_contains((string) $e->getMessage(), 'Faltan columnas obligatorias')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $e->getMessage(),
+                    'errores_importacion' => [
+                        ['fila' => null, 'motivo' => $e->getMessage()],
+                    ],
+                ], 422);
+            }
+
             Log::error('Error al parsear Excel de solicitud (web): ' . $e->getMessage(), [
                 'trace' => $e->getTraceAsString(),
             ]);
@@ -233,6 +329,190 @@ class SolicitudExcelController extends Controller
                 'message' => 'Error al procesar el archivo: ' . $e->getMessage(),
             ], 500);
         }
+    }
+
+    private function parseProductosTemplate(string $filePath): array
+    {
+        $spreadsheet = IOFactory::load($filePath);
+        $sheet = $spreadsheet->getActiveSheet();
+
+        $requiredColumns = [
+            'po',
+            'sku',
+            'vpn',
+            'marca',
+            'qty',
+            'pedimento',
+            'notas',
+        ];
+
+        [$headerRow, $headerMap] = $this->findProductosHeader($sheet);
+        $missing = array_values(array_filter($requiredColumns, fn ($key) => !isset($headerMap[$key])));
+
+        if (!empty($missing)) {
+            throw new \RuntimeException(
+                'Faltan columnas obligatorias en el Excel: ' . implode(', ', $missing) . '.'
+            );
+        }
+
+        $highestRow = min($sheet->getHighestRow(), 5000);
+        $servicios = [];
+        $errores = [];
+        $emptyStreak = 0;
+        $firstMarca = null;
+        $firstPo = null;
+        $firstVpn = null;
+
+        for ($row = $headerRow + 1; $row <= $highestRow; $row++) {
+            $po = $this->cellText($sheet, $headerMap['po'], $row);
+            $sku = $this->cellText($sheet, $headerMap['sku'], $row);
+            $vpn = $this->cellText($sheet, $headerMap['vpn'], $row);
+            $marca = $this->cellText($sheet, $headerMap['marca'], $row);
+            $qtyRaw = $this->cellRaw($sheet, $headerMap['qty'], $row);
+            $pedimento = $this->cellText($sheet, $headerMap['pedimento'], $row);
+            $notas = $this->cellText($sheet, $headerMap['notas'], $row);
+
+            $isEmpty = $po === '' && $sku === '' && $vpn === '' && $marca === '' && $pedimento === '' && $notas === '' && trim((string) $qtyRaw) === '';
+            if ($isEmpty) {
+                $emptyStreak++;
+                if ($emptyStreak >= 5) {
+                    break;
+                }
+                continue;
+            }
+            $emptyStreak = 0;
+
+            if ($sku === '') {
+                $errores[] = ['fila' => $row, 'motivo' => 'SKU es obligatorio.'];
+                continue;
+            }
+
+            $qty = $this->parseCantidad($qtyRaw);
+            if ($qty === null || !is_numeric($qty)) {
+                $errores[] = ['fila' => $row, 'motivo' => 'QTY debe ser numérico.'];
+                continue;
+            }
+
+            if ($firstMarca === null && $marca !== '') {
+                $firstMarca = $marca;
+            }
+            if ($firstPo === null && $po !== '') {
+                $firstPo = $po;
+            }
+            if ($firstVpn === null && $vpn !== '') {
+                $firstVpn = $vpn;
+            }
+
+            $descripcionPartes = array_filter([
+                $po !== '' ? "PO: {$po}" : null,
+                $vpn !== '' ? "VPN: {$vpn}" : null,
+                $marca !== '' ? "Marca: {$marca}" : null,
+                $notas !== '' ? "Notas: {$notas}" : null,
+            ]);
+
+            $servicios[] = [
+                'row_number' => $row,
+                'nombre_servicio' => null,
+                'cantidad' => $qty,
+                'sku' => $sku,
+                'origen' => null,
+                'pedimento' => $pedimento !== '' ? $pedimento : null,
+                'tipo_tarifa' => 'NORMAL',
+                'precio_unitario' => null,
+                'descripcion' => !empty($descripcionPartes) ? implode(' | ', $descripcionPartes) : null,
+                // Campos individuales para vista previa en frontend
+                'po' => $po !== '' ? $po : null,
+                'vpn' => $vpn !== '' ? $vpn : null,
+                'marca' => $marca !== '' ? $marca : null,
+                'notas' => $notas !== '' ? $notas : null,
+            ];
+        }
+
+        $datos = [
+            'marca' => $firstMarca,
+            'pedido' => $firstPo,
+            'referencia_externa' => $firstVpn,
+        ];
+
+        return [
+            'datos' => array_filter($datos, fn ($v) => $v !== null && $v !== ''),
+            'servicios' => $servicios,
+            'errores' => $errores,
+            'warnings' => [
+                'Se cargó plantilla de productos. Asigna servicio a cada fila antes de crear la solicitud.',
+            ],
+        ];
+    }
+
+    private function findProductosHeader(Worksheet $sheet): array
+    {
+        $highestRow = min($sheet->getHighestRow(), 50);
+        $highestColumnIndex = Coordinate::columnIndexFromString($sheet->getHighestColumn());
+
+        $aliases = [
+            'po' => ['po', 'pedido', 'orden de compra', 'purchase order'],
+            'sku' => ['sku'],
+            'vpn' => ['vpn', 'numero de parte', 'número de parte', 'np', 'n/p', 'referencia externa'],
+            'marca' => ['marca'],
+            'qty' => ['qty', 'qty(pz', 'qty (pz', 'cantidad', 'pzs', 'piezas'],
+            'pedimento' => ['pedimento', 'numero de pedimento', 'número de pedimento'],
+            'notas' => ['notas', 'comentarios', 'observaciones', 'observación'],
+        ];
+
+        $bestRow = 1;
+        $bestMap = [];
+        $bestCount = -1;
+
+        for ($row = 1; $row <= $highestRow; $row++) {
+            $map = [];
+            for ($col = 1; $col <= min($highestColumnIndex, 60); $col++) {
+                $raw = $sheet->getCellByColumnAndRow($col, $row)->getValue();
+                if ($raw === null || trim((string) $raw) === '') {
+                    continue;
+                }
+                $norm = $this->normalizarEtiqueta((string) $raw);
+                foreach ($aliases as $key => $labels) {
+                    foreach ($labels as $label) {
+                        if (str_contains($norm, $this->normalizarEtiqueta($label))) {
+                            if (!isset($map[$key])) {
+                                $map[$key] = $col;
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (count($map) > $bestCount) {
+                $bestCount = count($map);
+                $bestMap = $map;
+                $bestRow = $row;
+            }
+        }
+
+        return [$bestRow, $bestMap];
+    }
+
+    private function normalizarEtiqueta(string $value): string
+    {
+        $value = mb_strtolower(trim($value), 'UTF-8');
+        $value = str_replace(
+            ['á', 'é', 'í', 'ó', 'ú', 'ñ', 'ü', '(', ')', '.', ','],
+            ['a', 'e', 'i', 'o', 'u', 'n', 'u', ' ', ' ', ' ', ' '],
+            $value
+        );
+        return preg_replace('/\s+/', ' ', $value) ?? '';
+    }
+
+    private function cellText(Worksheet $sheet, int $col, int $row): string
+    {
+        $v = $sheet->getCellByColumnAndRow($col, $row)->getValue();
+        return trim((string) $v);
+    }
+
+    private function cellRaw(Worksheet $sheet, int $col, int $row)
+    {
+        return $sheet->getCellByColumnAndRow($col, $row)->getValue();
     }
 
     private function parseCantidad($value)

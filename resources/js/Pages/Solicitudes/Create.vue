@@ -1,14 +1,42 @@
 <script setup>
-import { computed, watch, ref } from 'vue'
+import { computed, watch, ref, onMounted, nextTick } from 'vue'
 import { useForm, usePage } from '@inertiajs/vue3'
 import UploadSolicitudExcel from '@/Components/UploadSolicitudExcel.vue'
 import SearchableSelect from '@/Components/ui/SearchableSelect.vue'
 
 const page = usePage()
 const enabledFeatures = computed(() => page.props.auth?.features ?? [])
-const canUploadExcel = computed(() => (enabledFeatures.value || []).includes('subir_excel'))
+const userPermissions = computed(() => page.props.auth?.permissions ?? [])
+const canUploadExcelNormal = computed(() => (enabledFeatures.value || []).includes('subir_excel'))
+const canUploadExcelProductos = computed(() => (userPermissions.value || []).includes('subir_excel_productos'))
+const canUploadExcel = computed(() => canUploadExcelNormal.value || canUploadExcelProductos.value)
 const canServiceCustomsFields = computed(() => (enabledFeatures.value || []).includes('service_customs_fields'))
 const bloqueo = computed(() => page.props.auth?.user?.bloqueo_solicitudes ?? { bloqueado: false, motivo: null })
+const excelMode = ref('normal')
+const esModoproductos = computed(() => excelMode.value === 'productos' && multipleServicios.value)
+
+function autoSelectProductosDefaults() {
+  if (excelMode.value === 'productos' && canUploadExcelProductos.value) {
+    const tsId = findMatchId(filteredCentrosCostos.value, 'TS', (cc) => cc.nombre)
+    if (tsId) form.id_centrocosto = tsId
+    const reciboId = findMatchId(filteredAreas.value, 'Recibo', (a) => a.nombre)
+    if (reciboId) form.id_area = reciboId
+  }
+}
+
+watch([canUploadExcelNormal, canUploadExcelProductos], ([normal, productos]) => {
+  if (!normal && productos) {
+    excelMode.value = 'productos'
+  }
+}, { immediate: true })
+
+watch(excelMode, () => {
+  autoSelectProductosDefaults()
+})
+
+onMounted(() => {
+  nextTick(() => autoSelectProductosDefaults())
+})
 
 
 const props = defineProps({
@@ -26,6 +54,8 @@ const props = defineProps({
   centrosCostosPorCentro: { type: Object, required: false, default: () => ({}) },
   marcas: { type: Array, required: false, default: () => ([]) },
   marcasPorCentro: { type: Object, required: false, default: () => ({}) },
+  solicitudSimpleFormByCentro: { type: Object, required: false, default: () => ({}) },
+  solicitudFormFieldsByCentro: { type: Object, required: false, default: () => ({}) },
 })
 
 // Control para múltiples servicios
@@ -37,6 +67,11 @@ function servicioMultipleVacio() {
     cantidad: 1,
     tipo_tarifa: 'NORMAL',
     precio_unitario: null,
+    descripcion: '',
+    po: '',
+    vpn: '',
+    marca: '',
+    notas_item: '',
   }
 }
 
@@ -47,6 +82,8 @@ descripcion: '',
 sku: '',
 origen: '',
 pedimento: '',
+referencia_externa: '',
+pedido: '',
 id_area: null,
 cantidad: 1,
 excel_stored_name: null,
@@ -64,6 +101,7 @@ serviciosMultiples: [
     cantidad: 1,
     tipo_tarifa: 'NORMAL',
     precio_unitario: null,
+    descripcion: '',
   }
 ],
 })
@@ -155,6 +193,24 @@ const areasOptions = computed(() => {
   }))
 })
 
+const currentFormFieldConfig = computed(() => {
+  const centroId = Number(form.id_centrotrabajo || props.selectedCentroId || 0)
+  const defaults = { centro_costo: true, marca: true, descripcion: true, area: true }
+  if (!centroId) return defaults
+  const config = props.solicitudFormFieldsByCentro?.[centroId]
+  if (!config || typeof config !== 'object') return defaults
+  return {
+    centro_costo: config.centro_costo !== false,
+    marca: config.marca !== false,
+    descripcion: config.descripcion !== false,
+    area: config.area !== false,
+  }
+})
+const showCentroCostoField = computed(() => currentFormFieldConfig.value.centro_costo)
+const showMarcaField = computed(() => currentFormFieldConfig.value.marca)
+const showDescripcionField = computed(() => currentFormFieldConfig.value.descripcion)
+const showAreaField = computed(() => currentFormFieldConfig.value.area)
+
 const servicio = computed(() => filteredServicios.value.find(s => s.id === Number(form.id_servicio)) || null)
 // MODO PER-CENTRO: detectar si para el centro elegido existen precios por tamaño
 function serviceUsesSizesInCentro(serviceId){
@@ -224,6 +280,17 @@ const total = computed(() => subtotal.value + ivaMonto.value)
 
 // En el nuevo flujo diferido: si usa tamaños, seguimos capturando 'cantidad'
 watch(usaTamanos, v => { if (!v) form.tamanos = {chico:0,mediano:0,grande:0,jumbo:0} })
+watch([showCentroCostoField, showMarcaField, showAreaField, showDescripcionField], ([showCentroCosto, showMarca, showArea, showDescripcion]) => {
+  if (!showCentroCosto) form.id_centrocosto = null
+  if (!showMarca) form.id_marca = null
+  if (!showArea) form.id_area = null
+  if (!showDescripcion) {
+    form.descripcion = ''
+    if (Array.isArray(form.serviciosMultiples)) {
+      form.serviciosMultiples = form.serviciosMultiples.map((s) => ({ ...s, descripcion: '' }))
+    }
+  }
+}, { immediate: true })
 
 // Funciones para múltiples servicios
 function toggleMultipleServicios() {
@@ -303,23 +370,40 @@ const totalesMultiples = computed(() => {
 function guardar(){
 const payload = {
 id_centrotrabajo: form.id_centrotrabajo,
-descripcion: form.descripcion,
+referencia_externa: form.referencia_externa,
+pedido: form.pedido,
 notas: form.notas,
-id_centrocosto: form.id_centrocosto,
-id_marca: form.id_marca,
-id_area: form.id_area,
 excel_stored_name: form.excel_stored_name,
 excel_nombre_original: form.excel_nombre_original,
+}
+
+if (showDescripcionField.value) {
+  payload.descripcion = form.descripcion
+}
+if (showCentroCostoField.value) {
+  payload.id_centrocosto = form.id_centrocosto
+}
+if (showMarcaField.value) {
+  payload.id_marca = form.id_marca
+}
+if (showAreaField.value) {
+  payload.id_area = form.id_area
 }
 
 // Si es modo múltiple, enviar array de servicios con cantidad independiente por servicio
 if (multipleServicios.value) {
   payload.servicios = form.serviciosMultiples.map(s => {
+    const esProducto = excelMode.value === 'productos'
+    const desc = esProducto
+      ? [s.po ? `PO: ${s.po}` : '', s.vpn ? `VPN: ${s.vpn}` : '', s.marca ? `Marca: ${s.marca}` : '', s.notas_item ? `Notas: ${s.notas_item}` : '']
+          .filter(Boolean).join(' | ')
+      : (showDescripcionField.value ? (s.descripcion ?? '') : '')
     const item = {
       id_servicio: s.id_servicio || null,
       cantidad: Math.max(1, Number(s.cantidad) || 1),
+      descripcion: desc,
     }
-    if (canServiceCustomsFields.value) {
+    if (canServiceCustomsFields.value || esProducto) {
       item.sku = s.sku ?? ''
       item.origen = s.origen ?? ''
       item.pedimento = s.pedimento ?? ''
@@ -359,6 +443,7 @@ for (const [key, value] of Object.entries(payload)) {
         formData.append(`servicios[${index}][id_servicio]`, servicio.id_servicio)
       }
       formData.append(`servicios[${index}][cantidad]`, servicio.cantidad)
+      if (servicio.descripcion !== undefined) formData.append(`servicios[${index}][descripcion]`, servicio.descripcion || '')
       if (servicio.sku !== undefined) formData.append(`servicios[${index}][sku]`, servicio.sku || '')
       if (servicio.origen !== undefined) formData.append(`servicios[${index}][origen]`, servicio.origen || '')
       if (servicio.pedimento !== undefined) formData.append(`servicios[${index}][pedimento]`, servicio.pedimento || '')
@@ -452,12 +537,21 @@ function handlePrefillLoaded({ prefill, archivo, servicios, is_multi, warnings =
     if (centroId) form.id_centrotrabajo = centroId
   }
 
-  if (prefill.centro_costos) {
+  if (showCentroCostoField.value && prefill.centro_costos) {
     const ccId = findMatchId(filteredCentrosCostos.value, prefill.centro_costos, (cc) => cc.nombre)
     if (ccId) form.id_centrocosto = ccId
   }
 
-  if (prefill.marca) {
+  // Modo productos: forzar Centro de Costos = TS y Área = Recibo
+  if (excelMode.value === 'productos' && canUploadExcelProductos.value) {
+    const tsId = findMatchId(filteredCentrosCostos.value, 'TS', (cc) => cc.nombre)
+    if (tsId) form.id_centrocosto = tsId
+
+    const reciboId = findMatchId(filteredAreas.value, 'Recibo', (a) => a.nombre)
+    if (reciboId) form.id_area = reciboId
+  }
+
+  if (showMarcaField.value && prefill.marca) {
     const marcaId = findMatchId(filteredMarcas.value, prefill.marca, (m) => m.nombre)
     if (marcaId) form.id_marca = marcaId
   }
@@ -467,12 +561,12 @@ function handlePrefillLoaded({ prefill, archivo, servicios, is_multi, warnings =
     if (servicioId) form.id_servicio = servicioId
   }
 
-  if (prefill.area) {
+  if (showAreaField.value && prefill.area) {
     const areaId = findMatchId(filteredAreas.value, prefill.area, (a) => a.nombre)
     if (areaId) form.id_area = areaId
   }
 
-  if (prefill.descripcion_producto) {
+  if (showDescripcionField.value && prefill.descripcion_producto) {
     form.descripcion = prefill.descripcion_producto
   }
 
@@ -488,6 +582,16 @@ function handlePrefillLoaded({ prefill, archivo, servicios, is_multi, warnings =
     }
   }
 
+  if (prefill.pedido !== undefined && prefill.pedido !== null) {
+    form.pedido = String(prefill.pedido)
+  }
+  if (prefill.referencia_externa !== undefined && prefill.referencia_externa !== null) {
+    form.referencia_externa = String(prefill.referencia_externa)
+  }
+  if (prefill.notas !== undefined && prefill.notas !== null) {
+    form.notas = String(prefill.notas)
+  }
+ 
   if (prefill.cantidad !== undefined && prefill.cantidad !== null) {
     const n = Number(prefill.cantidad)
     if (Number.isFinite(n) && n > 0) form.cantidad = n
@@ -523,9 +627,16 @@ function handlePrefillLoaded({ prefill, archivo, servicios, is_multi, warnings =
         sku: s.sku ? String(s.sku) : '',
         origen: s.origen ? String(s.origen) : '',
         pedimento: s.pedimento ? String(s.pedimento) : '',
+        descripcion: s.descripcion ? String(s.descripcion) : '',
+        po: s.po ? String(s.po) : '',
+        vpn: s.vpn ? String(s.vpn) : '',
+        marca: s.marca ? String(s.marca) : '',
+        notas_item: s.notas ? String(s.notas) : '',
       }))
 
-      alert(`Se detectaron ${list.length} servicios en el Excel. Se activó Múltiples Servicios.`)
+      if (excelMode.value !== 'productos') {
+        alert(`Se detectaron ${list.length} servicios en el Excel. Se activó Múltiples Servicios.`)
+      }
     } else {
       // Modo tradicional
       multipleServicios.value = false
@@ -536,6 +647,9 @@ function handlePrefillLoaded({ prefill, archivo, servicios, is_multi, warnings =
         form.sku = s0?.sku ? String(s0.sku) : (prefill?.sku ? String(prefill.sku) : '')
         form.origen = s0?.origen ? String(s0.origen) : (prefill?.origen ? String(prefill.origen) : '')
         form.pedimento = s0?.pedimento ? String(s0.pedimento) : (prefill?.pedimento ? String(prefill.pedimento) : '')
+      }
+      if (s0?.descripcion) {
+        form.descripcion = String(s0.descripcion)
       }
       if (s0?.cantidad) {
         const n = Number(s0.cantidad)
@@ -584,11 +698,32 @@ function handlePrefillLoaded({ prefill, archivo, servicios, is_multi, warnings =
         <div class="lg:col-span-2 space-y-6">
 
           <!-- Cargar desde Excel (Opcional) -->
-          <UploadSolicitudExcel
-            v-if="canUploadExcel && !bloqueo.bloqueado"
-            compact
-            @prefill-loaded="handlePrefillLoaded"
-          />
+          <div v-if="canUploadExcel && !bloqueo.bloqueado" class="space-y-2">
+            <div v-if="canUploadExcelProductos" class="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                class="px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors"
+                :class="excelMode === 'normal' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-blue-700 border-blue-200'"
+                @click="excelMode = 'normal'"
+              >
+                Excel normal
+              </button>
+              <button
+                type="button"
+                class="px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors"
+                :class="excelMode === 'productos' ? 'bg-amber-600 text-white border-amber-600' : 'bg-white text-amber-700 border-amber-200'"
+                @click="excelMode = 'productos'"
+              >
+                Carga masiva de solicitudes por Excel
+              </button>
+            </div>
+
+            <UploadSolicitudExcel
+              compact
+              :excel-mode="excelMode"
+              @prefill-loaded="handlePrefillLoaded"
+            />
+          </div>
           
           <!-- Sección: Información del Servicio -->
           <div class="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-visible">
@@ -628,8 +763,8 @@ function handlePrefillLoaded({ prefill, archivo, servicios, is_multi, warnings =
               </div>
 
               <!-- Centro de Costos (Obligatorio) y Marca (Opcional) -->
-              <div class="grid md:grid-cols-2 gap-5">
-                <div class="form-group">
+              <div v-if="showCentroCostoField || showMarcaField" class="grid md:grid-cols-2 gap-5">
+                <div v-if="showCentroCostoField" class="form-group">
                   <label class="block text-sm font-semibold text-gray-700 mb-2">
                     <span class="flex items-center gap-2">
                       <svg class="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -658,7 +793,7 @@ function handlePrefillLoaded({ prefill, archivo, servicios, is_multi, warnings =
                   </p>
                 </div>
 
-                <div class="form-group">
+                <div v-if="showMarcaField" class="form-group">
                   <label class="block text-sm font-semibold text-gray-700 mb-2">
                     <span class="flex items-center gap-2">
                       <svg class="w-4 h-4 text-fuchsia-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -795,8 +930,8 @@ function handlePrefillLoaded({ prefill, archivo, servicios, is_multi, warnings =
 
                 <!-- Modo Múltiple: Varios servicios -->
                 <div v-else class="space-y-4">
-                  <!-- Botón para desactivar múltiples servicios -->
-                  <div class="flex justify-end">
+                  <!-- Botón para desactivar múltiples servicios (solo en modo normal) -->
+                  <div v-if="!esModoproductos" class="flex justify-end">
                     <button type="button" @click="toggleMultipleServicios"
                             class="px-6 py-3 rounded-xl font-bold text-white transition-all duration-200 transform hover:scale-105 shadow-lg bg-gradient-to-r from-red-500 to-pink-500 hover:from-red-600 hover:to-pink-600">
                       <span class="flex items-center gap-2">
@@ -808,8 +943,8 @@ function handlePrefillLoaded({ prefill, archivo, servicios, is_multi, warnings =
                     </button>
                   </div>
 
-                  <!-- Descripción general (una sola vez) -->
-                  <div class="form-group">
+                  <!-- Descripción general (solo en modo normal) -->
+                  <div v-if="!esModoproductos && showDescripcionField" class="form-group">
                     <label class="block text-sm font-semibold text-gray-700 mb-2">
                       <span class="flex items-center gap-2">
                         <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -825,8 +960,110 @@ function handlePrefillLoaded({ prefill, archivo, servicios, is_multi, warnings =
                     />
                   </div>
 
-                  <!-- Lista de servicios -->
-                  <div class="space-y-3">
+                  <!-- Lista de servicios: MODO PRODUCTOS (tarjetas sin selector de servicio) -->
+                  <div v-if="esModoproductos" class="space-y-3">
+
+                    <!-- Aviso informativo -->
+                    <div class="flex items-center gap-2 px-4 py-3 bg-amber-50 border border-amber-300 rounded-xl text-xs text-amber-900 font-medium">
+                      <svg class="w-5 h-5 shrink-0 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                      </svg>
+                      <span>El coordinador o team leader asignará el <strong>tipo de servicio</strong> a cada registro desde la Orden de Trabajo.</span>
+                    </div>
+
+                    <!-- Tarjeta por cada fila del Excel -->
+                    <div v-for="(servicio, index) in form.serviciosMultiples" :key="index"
+                         class="bg-gradient-to-br from-amber-50 to-white border-2 border-amber-200 rounded-xl p-4 shadow-sm">
+
+                      <!-- Cabecera de tarjeta -->
+                      <div class="flex items-center justify-between mb-3">
+                        <div class="flex items-center gap-2">
+                          <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-amber-500 text-white text-xs font-bold shrink-0">{{ index + 1 }}</span>
+                          <h4 class="text-sm font-bold text-gray-800">Registro #{{ index + 1 }}</h4>
+                        </div>
+                        <button v-if="form.serviciosMultiples.length > 1"
+                                type="button"
+                                @click="eliminarServicio(index)"
+                                class="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors">
+                          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                          </svg>
+                        </button>
+                      </div>
+
+                      <!-- Datos del Excel (solo lectura) -->
+                      <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
+                        <div class="bg-white rounded-lg p-2 border border-gray-100">
+                          <p class="text-[10px] text-gray-500 font-semibold uppercase tracking-wide">SKU</p>
+                          <p class="text-sm font-bold text-gray-800 mt-0.5 truncate">{{ servicio.sku || '—' }}</p>
+                        </div>
+                        <div class="bg-white rounded-lg p-2 border border-gray-100">
+                          <p class="text-[10px] text-gray-500 font-semibold uppercase tracking-wide">VPN</p>
+                          <p class="text-sm font-bold text-gray-800 mt-0.5 truncate">{{ servicio.vpn || '—' }}</p>
+                        </div>
+                        <div class="bg-white rounded-lg p-2 border border-gray-100">
+                          <p class="text-[10px] text-gray-500 font-semibold uppercase tracking-wide">Marca</p>
+                          <p class="text-sm font-bold text-gray-800 mt-0.5 truncate">{{ servicio.marca || '—' }}</p>
+                        </div>
+                        <div class="bg-white rounded-lg p-2 border border-gray-100">
+                          <p class="text-[10px] text-gray-500 font-semibold uppercase tracking-wide">PO</p>
+                          <p class="text-sm font-bold text-gray-800 mt-0.5 truncate">{{ servicio.po || '—' }}</p>
+                        </div>
+                      </div>
+
+                      <!-- Campos editables -->
+                      <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div>
+                          <label class="block text-xs font-semibold text-gray-600 mb-1">
+                            QTY (Piezas) <span class="text-red-500">*</span>
+                          </label>
+                          <input
+                            type="number" min="1"
+                            v-model.number="servicio.cantidad"
+                            class="w-full px-3 py-2 rounded-lg border border-gray-300 focus:border-amber-500 focus:ring-2 focus:ring-amber-100 outline-none bg-white text-sm"
+                          />
+                          <p v-if="form.errors[`servicios.${index}.cantidad`]" class="text-red-600 text-xs mt-1">
+                            {{ form.errors[`servicios.${index}.cantidad`] }}
+                          </p>
+                        </div>
+                        <div>
+                          <label class="block text-xs font-semibold text-gray-600 mb-1">Pedimento</label>
+                          <input
+                            v-model="servicio.pedimento"
+                            class="w-full px-3 py-2 rounded-lg border border-gray-300 focus:border-amber-500 focus:ring-2 focus:ring-amber-100 outline-none bg-white text-sm"
+                            placeholder="Número de pedimento"
+                          />
+                        </div>
+                        <div>
+                          <label class="block text-xs font-semibold text-gray-600 mb-1">Notas</label>
+                          <input
+                            v-model="servicio.notas_item"
+                            class="w-full px-3 py-2 rounded-lg border border-gray-300 focus:border-amber-500 focus:ring-2 focus:ring-amber-100 outline-none bg-white text-sm"
+                            placeholder="Notas u observaciones"
+                          />
+                        </div>
+                      </div>
+
+                      <!-- Badge: servicio pendiente -->
+                      <div class="mt-3 flex items-center gap-2 px-3 py-2 bg-amber-100 rounded-lg border border-amber-300">
+                        <svg class="w-4 h-4 text-amber-700 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        <p class="text-xs font-semibold text-amber-800">Servicio: Pendiente — el coordinador / team leader lo asignará en la OT</p>
+                      </div>
+                    </div>
+
+                    <!-- Resumen total registros -->
+                    <div class="flex items-center gap-2 px-4 py-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-800">
+                      <svg class="w-4 h-4 shrink-0 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                      </svg>
+                      <span><strong>{{ form.serviciosMultiples.length }} registro(s)</strong> listos para crear la solicitud.</span>
+                    </div>
+                  </div>
+
+                  <!-- Lista de servicios: MODO NORMAL (con selector de servicio) -->
+                  <div v-else class="space-y-3">
                     <div v-for="(servicio, index) in form.serviciosMultiples" :key="index"
                          class="bg-gradient-to-br from-gray-50 to-white border-2 border-gray-200 rounded-xl p-4">
                       
@@ -880,6 +1117,20 @@ function handlePrefillLoaded({ prefill, archivo, servicios, is_multi, warnings =
                           />
                           <p v-if="form.errors[`servicios.${index}.cantidad`]" class="text-red-600 text-xs mt-1">
                             {{ form.errors[`servicios.${index}.cantidad`] }}
+                          </p>
+                        </div>
+
+                        <div v-if="showDescripcionField" class="md:col-span-2">
+                          <label class="block text-xs font-semibold text-gray-600 mb-1">
+                            Descripción / Notas
+                          </label>
+                          <input
+                            v-model="servicio.descripcion"
+                            class="w-full px-3 py-2 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none bg-white text-sm"
+                            placeholder="VPN, PO, notas u observaciones"
+                          />
+                          <p v-if="form.errors[`servicios.${index}.descripcion`]" class="text-red-600 text-xs mt-1">
+                            {{ form.errors[`servicios.${index}.descripcion`] }}
                           </p>
                         </div>
 
@@ -940,7 +1191,7 @@ function handlePrefillLoaded({ prefill, archivo, servicios, is_multi, warnings =
               </div>
 
               <!-- Área (Opcional): el cliente puede pre-seleccionarla -->
-              <div class="form-group">
+              <div v-if="showAreaField" class="form-group">
                 <label class="block text-sm font-semibold text-gray-700 mb-2">
                   <span class="flex items-center gap-2">
                     <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1127,7 +1378,6 @@ function handlePrefillLoaded({ prefill, archivo, servicios, is_multi, warnings =
                 </div>
               </div>
 
-              <!-- Notas -->
               <div class="form-group">
                 <label class="block text-sm font-semibold text-gray-700 mb-2">
                   <span class="flex items-center gap-2">
@@ -1296,7 +1546,7 @@ function handlePrefillLoaded({ prefill, archivo, servicios, is_multi, warnings =
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
-              <span>{{ form.processing ? 'Creando Solicitud...' : 'Crear Solicitud' }}</span>
+              <span>{{ form.processing ? 'Creando Solicitud...' : (esModoproductos ? `Crear Solicitud (${form.serviciosMultiples.length} registros)` : 'Crear Solicitud') }}</span>
             </button>
 
             <!-- Ayuda -->

@@ -78,6 +78,7 @@ class PrecioController extends Controller
       'rows'     => $rows,
       'urls'     => [
         'index'   => route('servicios.index'),
+        'export_csv' => route('servicios.export.csv'),
         'guardar' => route('servicios.guardar'),
         'editar'  => route('servicios.editar'),
         'crear'   => route('servicios.crear'), // POST
@@ -85,6 +86,72 @@ class PrecioController extends Controller
         'clonar'  => route('servicios.clonar'),
         'eliminar'=> route('servicios.eliminar'),
       ],
+    ]);
+  }
+
+  // Exportar servicios a CSV por centro de trabajo
+  public function exportCsv(Request $req)
+  {
+    $this->authorizeAdminOrCoord();
+
+    $centros = CentroTrabajo::select('id', 'nombre')->orderBy('nombre')->get();
+    $idCentro = (int)($req->integer('centro') ?: ($req->user()->centro_trabajo_id ?? ($centros->first()->id ?? 1)));
+    $centro = $centros->firstWhere('id', $idCentro);
+
+    $hasNombreCol = Schema::hasColumn('servicios_centro', 'nombre');
+    $hasUsaTamanosCol = Schema::hasColumn('servicios_centro', 'usa_tamanos');
+
+    $scRows = ServicioCentro::with(['tamanos', 'servicio:id,nombre,usa_tamanos'])
+      ->where('id_centrotrabajo', $idCentro)
+      ->orderBy('id')
+      ->get();
+
+    $fileName = 'servicios_centro_' . $idCentro . '_' . now()->format('Ymd_His') . '.csv';
+
+    return response()->streamDownload(function () use ($scRows, $hasNombreCol, $hasUsaTamanosCol, $centro) {
+      $handle = fopen('php://output', 'w');
+      if ($handle === false) {
+        return;
+      }
+
+      // BOM UTF-8 para Excel
+      fwrite($handle, "\xEF\xBB\xBF");
+
+      fputcsv($handle, [
+        'Centro de trabajo',
+        'Servicio',
+        'Tipo',
+        'Precio unitario',
+        'Precio chico',
+        'Precio mediano',
+        'Precio grande',
+        'Precio jumbo',
+      ]);
+
+      foreach ($scRows as $sc) {
+        $servicio = $sc->servicio;
+        if (!$servicio) {
+          continue;
+        }
+
+        $usaTamanos = $hasUsaTamanosCol ? (bool)$sc->usa_tamanos : (bool)$servicio->usa_tamanos;
+        $nombreServicio = $hasNombreCol ? ($sc->nombre ?: $servicio->nombre) : $servicio->nombre;
+
+        fputcsv($handle, [
+          $centro?->nombre ?? ('Centro #' . $sc->id_centrotrabajo),
+          $nombreServicio,
+          $usaTamanos ? 'Por tamaños' : 'Unitario',
+          $usaTamanos ? '' : (string)$sc->precio_base,
+          $usaTamanos ? (string)(optional($sc->tamanos->firstWhere('tamano', 'chico'))->precio ?? '') : '',
+          $usaTamanos ? (string)(optional($sc->tamanos->firstWhere('tamano', 'mediano'))->precio ?? '') : '',
+          $usaTamanos ? (string)(optional($sc->tamanos->firstWhere('tamano', 'grande'))->precio ?? '') : '',
+          $usaTamanos ? (string)(optional($sc->tamanos->firstWhere('tamano', 'jumbo'))->precio ?? '') : '',
+        ]);
+      }
+
+      fclose($handle);
+    }, $fileName, [
+      'Content-Type' => 'text/csv; charset=UTF-8',
     ]);
   }
 
@@ -442,7 +509,7 @@ class PrecioController extends Controller
     /** @var User|null $u */
     $u = Auth::user();
     if (!$u) abort(403);
-    if ($u->hasAnyRole(['admin', 'coordinador', 'control', 'comercial'])) return;
+    if ($u->hasAnyRole(['admin', 'coordinador', 'coordinador_equipo', 'control', 'comercial'])) return;
     // Gerente Upper: permitir solo lectura (GET/HEAD/OPTIONS)
     if ($u->hasRole('gerente_upper')) {
       $m = strtoupper(request()->method());

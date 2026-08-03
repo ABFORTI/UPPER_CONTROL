@@ -12,6 +12,7 @@ use App\Models\CentroTrabajo;
 use App\Models\Area;
 use App\Models\User;
 use App\Services\Notifier;
+use App\Services\OrdenCalidadFlowService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
@@ -219,6 +220,8 @@ class OTMultiServicioController extends Controller
                 'sku' => $otServicio->sku,
                 'origen_customs' => $otServicio->origen_customs,
                 'pedimento' => $otServicio->pedimento,
+                'nota' => $otServicio->nota,
+                'descripcion_item' => $otServicio->items->first()?->descripcion_item,
                 'service_assignment_status' => $otServicio->service_assignment_status,
                 'service_locked' => $otServicio->isServiceLocked(),
                 'service_assigned_at' => $otServicio->service_assigned_at?->toIso8601String(),
@@ -277,7 +280,12 @@ class OTMultiServicioController extends Controller
         $estatusQueNoSobrescribir = ['autorizada_cliente', 'facturada', 'entregada'];
         if ($todosServiciosCompletos && !in_array($orden->estatus, $estatusQueNoSobrescribir) && $orden->estatus !== 'completada') {
             $orden->estatus = 'completada';
+            app(OrdenCalidadFlowService::class)->applyCompletionRouting(
+                $orden,
+                null
+            );
             $orden->save();
+            app(OrdenCalidadFlowService::class)->notifyCompletionRouting($orden->fresh(['centro', 'servicio']));
             \Log::info("Orden {$orden->id} actualizada a COMPLETADA automáticamente (todos los servicios al 100%)");
         }
 

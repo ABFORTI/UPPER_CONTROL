@@ -186,6 +186,7 @@ const desdeSel = ref(props.filters?.desde || '')
 const hastaSel = ref(props.filters?.hasta || '')
 const yearSel = ref(props.filters?.year || '')
 const weekSel = ref(props.filters?.week || '')
+const monthSel = ref(props.filters?.month || '')
 const showDeleted = ref(!!props.filters?.show_deleted)
 const origenEtiquetasSel = ref(!!props.filters?.origen_etiquetas)
 const availableYears = computed(() => {
@@ -201,6 +202,7 @@ const estatuses = computed(() => [
 ])
 
 const currentPeriod = computed(() => {
+  if (monthSel.value) return `Mes ${Number(monthSel.value)}`
   if (weekSel.value) return Number(weekSel.value)
   const now = new Date()
   const value = isoWeekNumber(now)
@@ -223,7 +225,8 @@ function applyFilter(){
   if (desdeSel.value) params.desde = desdeSel.value
   if (hastaSel.value) params.hasta = hastaSel.value
   if (yearSel.value) params.year = yearSel.value
-  if (weekSel.value) params.week = weekSel.value
+  if (monthSel.value) params.month = monthSel.value
+  else if (weekSel.value) params.week = weekSel.value
   if (showDeleted.value) params.show_deleted = 1
   if (origenEtiquetasSel.value) params.origen_etiquetas = 1
   router.get(props.urls.index, params, { preserveState: true, replace: true })
@@ -239,6 +242,7 @@ function clearFilters(){
   hastaSel.value = ''
   yearSel.value = ''
   weekSel.value = ''
+  monthSel.value = ''
   showDeleted.value = false
   origenEtiquetasSel.value = false
   router.get(props.urls.index, {}, { preserveState: true, replace: true })
@@ -293,8 +297,16 @@ const exportParams = computed(() => {
   if (yearSel.value) base.year = yearSel.value
   else delete base.year
 
-  if (weekSel.value) base.week = weekSel.value
-  else delete base.week
+  if (monthSel.value) {
+    base.month = monthSel.value
+    delete base.week
+  } else if (weekSel.value) {
+    base.week = weekSel.value
+    delete base.month
+  } else {
+    delete base.week
+    delete base.month
+  }
 
   base.format = 'xlsx'
   return base
@@ -391,6 +403,11 @@ function isoWeekNumber(dateStr){
           <select v-model="weekSel" @change="applyFilter" class="h-9 rounded-md border border-slate-300 bg-white px-2.5 text-sm text-slate-800 xl:col-span-1" aria-label="Periodo">
             <option value="">Periodos</option>
             <option v-for="w in 53" :key="w" :value="w">Periodo {{ w }}</option>
+          </select>
+
+          <select v-model="monthSel" @change="applyFilter" class="h-9 rounded-md border border-slate-300 bg-white px-2.5 text-sm text-slate-800 xl:col-span-1" aria-label="Mes">
+            <option value="">Meses</option>
+            <option v-for="m in 12" :key="m" :value="m">Mes {{ m }}</option>
           </select>
 
           <input

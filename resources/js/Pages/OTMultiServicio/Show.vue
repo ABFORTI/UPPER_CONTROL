@@ -30,6 +30,19 @@ const estatusConfig = computed(() => {
 const pendingAssignForms = ref({})
 const pendingAssignProcessing = ref({})
 
+function extractVpn(texto) {
+  if (!texto) return null
+  const match = texto.split('|').find(p => p.trim().toUpperCase().startsWith('VPN:'))
+  return match ? match.trim().replace(/^VPN:/i, '').trim() : null
+}
+
+function getVpn(servicio) {
+  return extractVpn(servicio.nota)
+    || extractVpn(servicio.descripcion_item)
+    || extractVpn(servicio.items?.[0]?.descripcion_item)
+    || null
+}
+
 function assignPendingService(servicio) {
   const serviceId = pendingAssignForms.value[servicio.id]
   if (!serviceId) return
@@ -156,8 +169,9 @@ function assignPendingService(servicio) {
                   <p class="text-emerald-50/90 text-xs">
                     #{{ index + 1 }} • {{ servicio.tipo_cobro }} • {{ servicio.cantidad }} u
                   </p>
-                  <div v-if="servicio.sku || servicio.origen_customs || servicio.pedimento" class="flex items-center gap-2 mt-0.5 flex-wrap">
+                  <div v-if="servicio.sku || servicio.origen_customs || servicio.pedimento || getVpn(servicio)" class="flex items-center gap-2 mt-0.5 flex-wrap">
                     <span v-if="servicio.sku" class="text-[10px] text-white/70 bg-white/10 px-1.5 py-0.5 rounded">SKU: {{ servicio.sku }}</span>
+                    <span v-if="getVpn(servicio)" class="text-[10px] text-white/70 bg-white/10 px-1.5 py-0.5 rounded">VPN: {{ getVpn(servicio) }}</span>
                     <span v-if="servicio.origen_customs" class="text-[10px] text-white/70 bg-white/10 px-1.5 py-0.5 rounded">Origen: {{ servicio.origen_customs }}</span>
                     <span v-if="servicio.pedimento" class="text-[10px] text-white/70 bg-white/10 px-1.5 py-0.5 rounded">Pedimento: {{ servicio.pedimento }}</span>
                   </div>
@@ -178,7 +192,12 @@ function assignPendingService(servicio) {
               </div>
               <div class="flex-1">
                 <h4 class="text-sm font-bold text-amber-900 dark:text-amber-200 mb-1">Servicio pendiente de asignación</h4>
-                <p class="text-xs text-amber-700 dark:text-amber-300 mb-3">Seleccione un tipo de servicio. Esta acción es irreversible.</p>
+                <p class="text-xs text-amber-700 dark:text-amber-300 mb-2">No se pueden registrar avances ni validar calidad hasta que se asigne un tipo de servicio. Esta acción es irreversible.</p>
+                <div class="flex flex-wrap gap-x-4 gap-y-1 mb-3 text-xs text-amber-800 dark:text-amber-300">
+                  <span v-if="servicio.sku"><strong>SKU:</strong> {{ servicio.sku }}</span>
+                  <span v-if="getVpn(servicio)"><strong>VPN:</strong> {{ getVpn(servicio) }}</span>
+                  <span v-if="servicio.pedimento"><strong>Pedimento:</strong> {{ servicio.pedimento }}</span>
+                </div>
                 <form @submit.prevent="assignPendingService(servicio)" class="flex items-end gap-3">
                   <div class="flex-1">
                     <select v-model="pendingAssignForms[servicio.id]"

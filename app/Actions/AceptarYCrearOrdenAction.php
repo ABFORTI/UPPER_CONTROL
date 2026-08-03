@@ -80,21 +80,24 @@ class AceptarYCrearOrdenAction
                         'servicio_id'                => $solServicio->servicio_id,
                         'tipo_cobro'                 => $solServicio->tipo_cobro,
                         'cantidad'                   => $solServicio->cantidad,
-                        'precio_unitario'             => $isPending ? 0 : $solServicio->precio_unitario,
+                        'precio_unitario'            => $isPending ? 0 : $solServicio->precio_unitario,
                         'subtotal'                   => $isPending ? 0 : $solServicio->subtotal,
                         'sku'                        => $solServicio->sku ?? null,
                         'origen_customs'             => $solServicio->origen ?? null,
                         'pedimento'                  => $solServicio->pedimento ?? null,
                         'marca'                      => $solicitud->marca?->nombre,
+                        'nota'                       => $solServicio->descripcion ?? null,
                         'service_assignment_status'  => $isPending ? 'pending' : 'assigned',
                         'service_locked'             => !$isPending,
                     ]);
 
                     OTServicioItem::create([
                         'ot_servicio_id'   => $otServ->id,
-                        'descripcion_item' => $isPending
-                            ? ($solicitud->descripcion ?? 'Pendiente de asignación de servicio')
-                            : ($solServicio->servicio?->nombre ?? $solicitud->descripcion ?? 'Sin descripción'),
+                        'descripcion_item' => $solServicio->descripcion
+                            ? $solServicio->descripcion
+                            : ($isPending
+                                ? ($solicitud->descripcion ?? 'Pendiente de asignación de servicio')
+                                : ($solServicio->servicio?->nombre ?? $solicitud->descripcion ?? 'Sin descripción')),
                         'planeado'         => $solServicio->cantidad,
                         'completado'       => 0,
                         'precio_unitario'  => $isPending ? 0 : $solServicio->precio_unitario,
